@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
-import { assertAllowed, assertFixedPoint, assertIdentity, assertFinalStatus, PRODUCT, BASE, PARENT } from './queue-generation.mjs'
+import { assertAllowed, assertFixedPoint, assertIdentity, assertFinalStatus, assertBaseAncestor, PRODUCT, BASE, PARENT } from './queue-generation.mjs'
 import { isCurrentValidationRun, assertMagpiePredecessor } from './heavy-queue.mjs'
 const allowed = new Set(JSON.parse(readFileSync(new URL('./queue-generated-paths.json', import.meta.url))))
 test('accepts exact source and reviewed parent, rejects dirty or wrong source', () => {
@@ -68,4 +68,21 @@ test('untracked export accepts exactly four official record files, not extra or 
   assertRecordFiles(RECORD_FILES)
   assert.throws(() => assertRecordFiles([...RECORD_FILES, 'other.json']))
   assert.throws(() => assertRecordFiles(RECORD_FILES.slice(1)))
+})
+import { assertAcceptedRecord, ACCEPTED_RECORD_HASHES } from './recall-ack-guard.mjs'
+test('existing acknowledgement requires unchanged approved bytes and successful empty verification', () => {
+  const change = { path: `${ROOT}.data.recall`, kind: 'optional-property-added', description: 'optional property added', requiresCompatibilityReview: false }
+  const review = { schemaVersion: 1, roots: [{ root: ROOT, before: BEFORE, after: AFTER, changes: [change] }] }
+  const check = { schemaVersion: 1, operation: 'check', ok: true, changes: [], roots: [], files: [] }
+  assertAcceptedRecord(review, check, ACCEPTED_RECORD_HASHES)
+  assert.throws(() => assertAcceptedRecord(review, { ...check, ok: false }, ACCEPTED_RECORD_HASHES))
+  assert.throws(() => assertAcceptedRecord(review, { ...check, changes: [change] }, ACCEPTED_RECORD_HASHES))
+  assert.throws(() => assertAcceptedRecord(review, check, { ...ACCEPTED_RECORD_HASHES, [RECORD_FILES[0]]: 'modified' }))
+  assert.throws(() => assertAcceptedRecord({ ...review, roots: [{ ...review.roots[0], after: 'different' }] }, check, ACCEPTED_RECORD_HASHES))
+})
+
+test('bounded five-commit checkout requires exact fourth ancestor', () => {
+  assertBaseAncestor(BASE)
+  assert.throws(() => assertBaseAncestor(PARENT))
+  assert.throws(() => assertBaseAncestor(''))
 })

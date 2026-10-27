@@ -1,12 +1,12 @@
-import { assertReviewedToolChanges, assertRecallClassification, assertRecordFiles, RECORD, DOC_PAIRS } from './recall-ack-guard.mjs'
+import { assertReviewedToolChanges, assertAcceptedRecord, ACCEPTED_RECORD_HASHES, DOC_PAIRS } from './recall-ack-guard.mjs'
 import assert from 'node:assert/strict'
 import { createHash } from 'node:crypto'
 import { closeSync, mkdirSync, openSync, readFileSync, writeFileSync } from 'node:fs'
 import { resolve, join } from 'node:path'
 import { spawnSync } from 'node:child_process'
 
-export const PRODUCT = '6038256916715726b7adbb0522881ea15275d42f'
-export const PARENT = '37a01405d485a8a5d509a60e36819d2b0e749285'
+export const PRODUCT = '2bdf983f05368d30534e036992d0ac07f3b75891'
+export const PARENT = '24bf1efa6e315d91bcb9abac1842ff035135df1d'
 export const BASE = '282f8d630784eab0d935ca06155d96f773983b1e'
 const generators = ['gen-cordis-catalog', 'gen-cordis-inspect-catalog', 'gen-persistence-catalog']
 const sha256 = data => createHash('sha256').update(data).digest('hex')
@@ -20,6 +20,9 @@ export function assertIdentity(head, parent, status) {
   assert.equal(head, PRODUCT)
   assert.equal(parent, PARENT)
   assert.equal(status, '', 'product checkout must start clean')
+}
+export function assertBaseAncestor(ancestor) {
+  assert.equal(ancestor, BASE, 'fourth ancestor must be the reviewed balance baseline')
 }
 export function assertFinalStatus(generated, review, acknowledged) {
   assert(generated.every(Boolean) && review && acknowledged, 'generation, persistence review or acknowledgement gate failed; inspect recorded exit statuses')
@@ -48,6 +51,8 @@ function main() {
   try {
     observed.head = git('rev-parse', 'HEAD').trim()
     observed.parent = git('rev-parse', 'HEAD^').trim()
+    observed.baseAncestor = git('rev-parse', 'HEAD~4').trim()
+    assertBaseAncestor(observed.baseAncestor)
     observed.control = process.env.GITHUB_SHA
     observed.expectedControl = process.env.EXPECTED_CONTROL_SHA
     const version = spawnSync('pnpm', ['--version'], { encoding: 'utf8', timeout: 30_000 })
@@ -56,6 +61,8 @@ function main() {
     assert.equal(observed.pnpm.version, '11.28.5')
     assertIdentity(observed.head, observed.parent, git('status', '--porcelain'))
     assert.equal(process.env.GITHUB_SHA, process.env.EXPECTED_CONTROL_SHA, 'unreviewed control SHA')
+    const acceptedHashes = () => Object.fromEntries(Object.keys(ACCEPTED_RECORD_HASHES).map(path => [path, sha256(readFileSync(join(root, path)))]))
+    assert.deepEqual(acceptedHashes(), ACCEPTED_RECORD_HASHES, 'approved record bytes must match before generation')
     const allowed = new Set(JSON.parse(readFileSync(new URL('./queue-generated-paths.json', import.meta.url), 'utf8')))
     const snapshot = () => {
       const changes = [...new Set([...git('diff', '--name-only', '-z', 'HEAD').split('\0'), ...git('ls-files', '--others', '--exclude-standard', '-z').split('\0')].filter(Boolean))].sort()
@@ -81,13 +88,11 @@ function main() {
     // No acknowledgement is fabricated here. A required decision or missing
     // acknowledgement remains nonzero and visible, even if the diff is useful.
     const review = run('persistence-review', ['--silent', 'run', 'persistence-review', '--before', join(evidence, 'base.schema.json'), '--after', 'docs/persistence-schema.json', '--json'])
-    const initialAck = run('verify-before-record', ['--silent', 'run', 'verify-persistence-changes', '--json'])
-    assert(review && !initialAck, 'review must succeed and exact unacknowledged change must remain')
-    assertRecallClassification(JSON.parse(readFileSync(join(evidence, 'persistence-review.stdout'), 'utf8')), JSON.parse(readFileSync(join(evidence, 'verify-before-record.stdout'), 'utf8')))
-    assert(generated.every(Boolean), 'fix all generator failures before recording')
-    assert(run('record-recall', ['--silent', 'run', 'persistence-changes', '--record', RECORD, '--prose', new URL('./recall-ack-prose.json', import.meta.url).pathname, '--json']), 'official acknowledgement generation failed')
-    assertRecordFiles(git('ls-files', '--others', '--exclude-standard', '-z').split('\0').filter(Boolean))
-    assert(run('record-doc-pairs', ['run', 'verify-translation-pairing', '--write', ...DOC_PAIRS]), 'paired documentation recording failed')
+    const initialAck = run('verify-existing-record', ['--silent', 'run', 'verify-persistence-changes', '--json'])
+    assert(review && initialAck, 'independent review and existing exact acknowledgement must pass')
+    assertAcceptedRecord(JSON.parse(readFileSync(join(evidence, 'persistence-review.stdout'), 'utf8')), JSON.parse(readFileSync(join(evidence, 'verify-existing-record.stdout'), 'utf8')), acceptedHashes())
+    assert(generated.every(Boolean), 'all generators must succeed')
+    assert.equal(git('ls-files', '--others', '--exclude-standard', '-z'), '', 'no new records or files authorized')
     const recorded = snapshot()
     for (const name of generators) assert(run(`final-${name}`, ['run', name]), 'post-record generator failed')
     assertFixedPoint(recorded, snapshot())
@@ -95,6 +100,7 @@ function main() {
     const acknowledged = run('verify-persistence-changes', ['--silent', 'run', 'verify-persistence-changes', '--json'])
     assert(run('verify-doc-pairs', ['run', 'verify-translation-pairing', ...DOC_PAIRS]), 'paired documentation check failed')
     snapshot()
+    assert.deepEqual(acceptedHashes(), ACCEPTED_RECORD_HASHES, 'accepted acknowledgement changed during generation')
     assertFinalStatus(generated, review, acknowledged)
   } catch (error) {
     failure = error.message
@@ -107,7 +113,7 @@ function main() {
       const paths = git('diff', '--name-only', '-z', 'HEAD').split('\0').filter(Boolean)
       const untracked = git('ls-files', '--others', '--exclude-standard', '-z').split('\0').filter(Boolean)
       assertAllowed([...paths, ...untracked], allowed)
-      if (untracked.length) assertRecordFiles(untracked)
+      assert.equal(untracked.length, 0, 'no untracked files or new acknowledgement permitted')
       const index = join(process.env.RUNNER_TEMP, 'dsh-generated-artifact.index')
       const isolatedGit = (...args) => {
         const r = spawnSync('git', args, { cwd: root, env: { ...process.env, GIT_INDEX_FILE: index }, encoding: 'utf8', timeout: 30_000, maxBuffer: 32 * 1024 * 1024 })
