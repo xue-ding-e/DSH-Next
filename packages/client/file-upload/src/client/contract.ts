@@ -16,7 +16,15 @@ export interface FileUploadProgress {
 
 /** Browser upload service addressed by one Session identity. */
 export interface FileUploadService {
-  /** Read exact bytes of a file still owned by a pending user queue occurrence, before recalling it. */
+  /**
+   * Read exact bytes owned by a pending user occurrence or its durable recall record.
+   * @param sessionId - Session that owns the pending occurrence or recall record.
+   * @param itemId - User message identity bound to the occurrence.
+   * @param attachment - Durable file reference whose identity and byte length must match.
+   * @param signal - Optional cancellation for the active download.
+   * @param recallRequestId - Optional committed recall identity used to recover a lost response.
+   * @returns The verified file bytes and stored name, using application/octet-stream.
+   */
   readQueuedFile(sessionId: SessionId, itemId: MessageId, attachment: FileAttachmentRef, signal?: AbortSignal, recallRequestId?: Branded<'session-request-id'>): Promise<File>
   /**
    * Store one file for a Session. Blob and stream bodies use

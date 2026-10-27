@@ -13,6 +13,8 @@ Desktop product events use the optional [product analytics service](../product-a
 
 `ui-conversation` owns target-neutral Conversation assembly and the shared browser shell. It consumes Session Controller `SessionEventLikeEntry` feeds, exposes React-free registries and per-Session bindings through `ctx.uiConversation`, and contributes the `useConversation`, `useInput`, and `inputActions` standard props through `ctx.uiSession`. It also owns the per-session durable image URL cache: `ctx.uiConversation.imageUrl(sessionId, attachment)` resolves one session-authorized browser URL per attachment and revokes it with the Session binding, so every Conversation target shares one `session.attachment` read. Concrete targets such as Chat are separate packages that register their own Definitions, snapshot builders, Views, and renderers.
 
+An empty, idle composer can recall the latest eligible queued user message with ArrowUp. The editor restores text and verified attachment bytes only after the Host commits the recall. A local journal retains operation identities, not message content, to recover interrupted handoffs without removing another queue entry. Existing drafts and in-flight recall operations prevent a second recall.
+
 ## Table of Contents
 
 - [Conversation assembly](#conversation-assembly)
