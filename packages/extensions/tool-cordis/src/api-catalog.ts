@@ -1182,6 +1182,12 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         returns: 'disposer removing this resolver.',
       },
       {
+        signature: 'registerRecallResolver(resolve: QueueRecallResolver): () => void',
+        description: 'Register the Session domain\'s durable recall reader, without widening file-read authority.',
+        parameters: [{ name: 'resolve', description: 'exact Session/occurrence/operation reader.' }],
+        returns: 'disposer removing this owner on plugin unload.',
+      },
+      {
         signature: '@Remote(\'upload\') async upload(agent: Agent, request: EncodedFileUploadRequest, signal: AbortSignal): Promise<FileUploadValue>',
         description: 'Persist one encoded upload and stage it under the Agent receiver selected by Typert.',
         parameters: [{ name: 'agent', description: 'receiving Agent resolved from the Remote Agent scope.' }, { name: 'request', description: 'canonical base64 bytes and optional display name.' }, { name: 'signal', description: 'caller cancellation before storage begins.' }],
@@ -1215,6 +1221,18 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         signature: 'retirePrompt(agent: Agent, requestId: string): void',
         description: 'Retire every receipt accepted by one removed queue occurrence.',
         parameters: [{ name: 'agent', description: 'receiving Agent.' }, { name: 'requestId', description: 'prompt identity carried by the queue occurrence.' }],
+      },
+      {
+        signature: 'async readQueuedFile(request: { readonly sessionId: SessionId readonly itemId: MessageId readonly attachmentId: AttachmentId readonly recallRequestId?: Branded<\'session-request-id\'> readonly signal: AbortSignal }): Promise<{ readonly file: FileAttachmentRef; readonly data: AsyncIterable<Uint8Array> }>',
+        description: 'Read a file from exactly one still-pending user occurrence, never an arbitrary reference.',
+        parameters: [{ name: 'request', description: 'Session, pending message and attachment identities plus cancellation.' }],
+        returns: 'the authoritative reference and a bounded verified byte stream.',
+      },
+      {
+        signature: 'stageRecalled(agent: Agent, attachments: readonly StagedAttachment[]): RecalledFileStaging',
+        description: 'Stage trusted attachments from an already admitted pending message. This Host-only method grants no authority to client-supplied references.',
+        parameters: [{ name: 'agent', description: 'exact ordinary Session owner of the pending message.' }, { name: 'attachments', description: 'authoritative attachments in content order.' }],
+        returns: 'fresh receipts and a rollback guard for the queue removal transaction.',
       },
     ],
   },
@@ -6994,7 +7012,19 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'QueueAction',
-    declaration: 'export type QueueAction = {\n    readonly kind: \'edit\';\n    readonly content: readonly TextBlock[];\n} | {\n    readonly kind: \'remove\';\n} | {\n    readonly kind: \'steer\';\n};',
+    declaration: 'export type QueueAction = {\n    readonly kind: \'edit\';\n    readonly content: readonly TextBlock[];\n} | {\n    readonly kind: \'remove\';\n} | {\n    readonly kind: \'steer\';\n} | {\n    readonly kind: \'recover-recall\';\n    readonly requestId: SessionRequestId;\n} | {\n    readonly kind: \'recall\';\n    readonly requestId: SessionRequestId;\n    readonly expectedContent: UserMessage[\'content\'];\n};',
+  },
+  {
+    name: 'QueueRecallAttachment',
+    declaration: 'export type QueueRecallAttachment = {\n    readonly type: \'image\';\n    readonly receiptId?: Branded<\'file-upload-receipt-id\'>;\n    readonly image: ImageAttachmentRef;\n} | {\n    readonly type: \'file\';\n    readonly receiptId: Branded<\'file-upload-receipt-id\'>;\n    readonly file: FileAttachmentRef;\n};',
+  },
+  {
+    name: 'QueueRecallResolver',
+    declaration: 'export type QueueRecallResolver = (agent: Agent, itemId: MessageId, requestId: Branded<\'session-request-id\'>) => UserMessage | undefined;',
+  },
+  {
+    name: 'QueueRecallValue',
+    declaration: 'export interface QueueRecallValue {\n    readonly content: UserMessage[\'content\'];\n    readonly attachments: readonly QueueRecallAttachment[];\n}',
   },
   {
     name: 'ReadFileLine',
@@ -7015,6 +7045,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'ReasoningEffortId',
     declaration: 'export type ReasoningEffortId = Branded<\'ReasoningEffortId\'>;',
+  },
+  {
+    name: 'RecalledFileStaging',
+    declaration: 'export interface RecalledFileStaging extends PromptFileBinding {\n    readonly receiptIds: readonly FileUploadReceiptId[];\n}',
   },
   {
     name: 'RecommendationDetails',
@@ -7922,7 +7956,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'SessionUpdateQueueValue',
-    declaration: 'export interface SessionUpdateQueueValue {\n    readonly accepted: true;\n}',
+    declaration: 'export interface SessionUpdateQueueValue {\n    readonly accepted: true;\n    readonly recalled?: QueueRecallValue;\n}',
   },
   {
     name: 'SessionWireEvent',

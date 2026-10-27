@@ -323,6 +323,13 @@ Host service owning upload storage and receipts keyed by each receiving Agent's 
 registerAgentResolver(resolve: AgentResolver): () => void
 
 /**
+ * Register the Session domain's durable recall reader, without widening file-read authority.
+ * @param resolve - exact Session/occurrence/operation reader.
+ * @returns disposer removing this owner on plugin unload.
+ */
+registerRecallResolver(resolve: QueueRecallResolver): () => void
+
+/**
  * Persist one encoded upload and stage it under the Agent receiver selected by Typert.
  * @param agent - receiving Agent resolved from the Remote Agent scope.
  * @param request - canonical base64 bytes and optional display name.
@@ -376,9 +383,25 @@ bindPrompt( agent: Agent, receiptIds: readonly FileUploadReceiptId[], requestId:
  * @param requestId - prompt identity carried by the queue occurrence.
  */
 retirePrompt(agent: Agent, requestId: string): void
+
+/**
+ * Read a file from exactly one still-pending user occurrence, never an arbitrary reference.
+ * @param request - Session, pending message and attachment identities plus cancellation.
+ * @returns the authoritative reference and a bounded verified byte stream.
+ */
+async readQueuedFile(request: { readonly sessionId: SessionId readonly itemId: MessageId readonly attachmentId: AttachmentId readonly recallRequestId?: Branded<'session-request-id'> readonly signal: AbortSignal }): Promise<{ readonly file: FileAttachmentRef; readonly data: AsyncIterable<Uint8Array> }>
+
+/**
+ * Stage trusted attachments from an already admitted pending message.
+ * This Host-only method grants no authority to client-supplied references.
+ * @param agent - exact ordinary Session owner of the pending message.
+ * @param attachments - authoritative attachments in content order.
+ * @returns fresh receipts and a rollback guard for the queue removal transaction.
+ */
+stageRecalled(agent: Agent, attachments: readonly StagedAttachment[]): RecalledFileStaging
 ```
 
-Types: [Agent](core.zh.md) · [SessionId](core.zh.md)
+Types: [Agent](core.zh.md) · [Branded](core.zh.md) · [MessageId](llm-streaming.zh.md) · [SessionId](core.zh.md)
 
 Source: [`packages/client/file-upload/src/index.ts`](../../packages/client/file-upload/src/index.ts)
 <!-- END GENERATED cordis-surface -->

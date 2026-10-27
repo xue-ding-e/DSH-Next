@@ -673,7 +673,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'ISession',
-    declaration: 'export interface ISession {\n    readonly sessionId: SessionId;\n    readonly projections: ProjectionsFace;\n    beginSubmission(input: BeginSubmissionInput): SubmissionHandle;\n    prompt(content: PromptContentPart[], mode: \'queue\' | \'steer\', signal?: AbortSignal, requestId?: SessionRequestId): Promise<RemoteResult<{\n        accepted: true;\n    }>>;\n    readAttachment(attachmentId: AttachmentIdType): Promise<RemoteResult<{\n        attachment: ImageAttachmentRef;\n        data: Uint8Array;\n    }>>;\n    updateQueue(itemId: MessageId, action: QueueAction): Promise<RemoteResult<{\n        accepted: true;\n    }>>;\n    cancel(): Promise<RemoteResult<{\n        accepted: true;\n    }>>;\n    rename(title: string): Promise<RemoteResult<{\n        title: string;\n        seq: SessionSeq;\n    }>>;\n    loadOlder(): Promise<void>;\n    loadThrough(seq: SessionSeq): Promise<void>;\n    command(line: string): Promise<RemoteResult<{\n        matched: boolean;\n    }>>;\n}',
+    declaration: 'export interface ISession {\n    readonly sessionId: SessionId;\n    readonly projections: ProjectionsFace;\n    beginSubmission(input: BeginSubmissionInput): SubmissionHandle;\n    prompt(content: PromptContentPart[], mode: \'queue\' | \'steer\', signal?: AbortSignal, requestId?: SessionRequestId): Promise<RemoteResult<{\n        accepted: true;\n    }>>;\n    readAttachment(attachmentId: AttachmentIdType): Promise<RemoteResult<{\n        attachment: ImageAttachmentRef;\n        data: Uint8Array;\n    }>>;\n    updateQueue(itemId: MessageId, action: QueueAction): Promise<RemoteResult<SessionUpdateQueueValue>>;\n    cancel(): Promise<RemoteResult<{\n        accepted: true;\n    }>>;\n    rename(title: string): Promise<RemoteResult<{\n        title: string;\n        seq: SessionSeq;\n    }>>;\n    loadOlder(): Promise<void>;\n    loadThrough(seq: SessionSeq): Promise<void>;\n    command(line: string): Promise<RemoteResult<{\n        matched: boolean;\n    }>>;\n}',
   },
   {
     name: 'ISessions',
@@ -837,7 +837,15 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'QueueAction',
-    declaration: 'export type QueueAction = {\n    readonly kind: \'edit\';\n    readonly content: readonly TextBlock[];\n} | {\n    readonly kind: \'remove\';\n} | {\n    readonly kind: \'steer\';\n};',
+    declaration: 'export type QueueAction = {\n    readonly kind: \'edit\';\n    readonly content: readonly TextBlock[];\n} | {\n    readonly kind: \'remove\';\n} | {\n    readonly kind: \'steer\';\n} | {\n    readonly kind: \'recover-recall\';\n    readonly requestId: SessionRequestId;\n} | {\n    readonly kind: \'recall\';\n    readonly requestId: SessionRequestId;\n    readonly expectedContent: UserMessage[\'content\'];\n};',
+  },
+  {
+    name: 'QueueRecallAttachment',
+    declaration: 'export type QueueRecallAttachment = {\n    readonly type: \'image\';\n    readonly receiptId?: Branded<\'file-upload-receipt-id\'>;\n    readonly image: ImageAttachmentRef;\n} | {\n    readonly type: \'file\';\n    readonly receiptId: Branded<\'file-upload-receipt-id\'>;\n    readonly file: FileAttachmentRef;\n};',
+  },
+  {
+    name: 'QueueRecallValue',
+    declaration: 'export interface QueueRecallValue {\n    readonly content: UserMessage[\'content\'];\n    readonly attachments: readonly QueueRecallAttachment[];\n}',
   },
   {
     name: 'RegisterFactory',
@@ -974,6 +982,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'SessionTarget',
     declaration: 'export type SessionTarget = SessionId | SubagentAddress;',
+  },
+  {
+    name: 'SessionUpdateQueueValue',
+    declaration: 'export interface SessionUpdateQueueValue {\n    readonly accepted: true;\n    readonly recalled?: QueueRecallValue;\n}',
   },
   {
     name: 'SlotComponent',
