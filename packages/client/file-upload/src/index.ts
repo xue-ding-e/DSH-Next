@@ -268,8 +268,8 @@ export class FileUploads extends TypertRemoteService {
   }
 
   /**
-   * Read a file from exactly one still-pending user occurrence, never an arbitrary reference.
-   * @param request - Session, pending message and attachment identities plus cancellation.
+   * Read a file from one pending user occurrence or its committed recall record, never an arbitrary reference.
+   * @param request - Session, message, attachment and optional committed recall identities plus cancellation.
    * @returns the authoritative reference and a bounded verified byte stream.
    */
   async readQueuedFile(request: {
