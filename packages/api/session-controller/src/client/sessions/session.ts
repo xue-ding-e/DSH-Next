@@ -13,6 +13,7 @@ import type { SessionJournalChange } from '../transport.ts'
 import type {
   PromptContentPart,
   QueueAction,
+  SessionUpdateQueueValue,
   SessionAddress,
   SessionAssistantStreamBaseline,
   SessionProjectionBaseline,
@@ -333,7 +334,7 @@ export class Session implements SessionFace {
   }
 
   /** Apply one operation to a still-pending queue occurrence. */
-  async updateQueue(itemId: MessageId, action: QueueAction): Promise<RemoteResult<{ accepted: true }>> {
+  async updateQueue(itemId: MessageId, action: QueueAction): Promise<RemoteResult<SessionUpdateQueueValue>> {
     return this.remote.session.updateQueue({ sessionId: this.sessionId, itemId, action })
   }
 

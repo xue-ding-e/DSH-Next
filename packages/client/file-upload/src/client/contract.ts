@@ -1,4 +1,6 @@
-import type { ImageMediaType } from '@deepseek-ai/dsh-attachment/types'
+import type { FileAttachmentRef, ImageMediaType } from '@deepseek-ai/dsh-attachment/types'
+import type { Branded } from '@deepseek-ai/dsh-brand'
+import type { MessageId } from '@deepseek-ai/dsh-llm/brand'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type { RemoteResult } from '@deepseek-ai/dsh-typert-protocol'
 import type { FileUploadValue, ImageUploadValue } from '../types.ts'
@@ -14,6 +16,8 @@ export interface FileUploadProgress {
 
 /** Browser upload service addressed by one Session identity. */
 export interface FileUploadService {
+  /** Read exact bytes of a file still owned by a pending user queue occurrence, before recalling it. */
+  readQueuedFile(sessionId: SessionId, itemId: MessageId, attachment: FileAttachmentRef, signal?: AbortSignal, recallRequestId?: Branded<'session-request-id'>): Promise<File>
   /**
    * Store one file for a Session. Blob and stream bodies use
    * the background carrier; exact bytes use Remote.

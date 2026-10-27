@@ -57,6 +57,11 @@ export interface SessionInputDeps {
    * order (the empty-draft accelerated-Enter gesture); absent = unsupported.
    */
   steerQueue?: (() => void) | undefined
+  /** Session-owned recall, including a retained request identity after uncertain transport failures. */
+  canRecallQueue?: () => boolean
+  recallQueue?: (stillAccepts: () => boolean, signal: AbortSignal) => Promise<{ readonly text: string; readonly attachmentIds: readonly DraftAttachmentId[]; commit(): void } | undefined>
+  recallFailed?: () => string
+  retainRecall?: () => (() => void)
   /** The plain-message sink (send choreography / materialize fork — the hub owns it). */
   defaultSink(
     text: string,
@@ -135,7 +140,7 @@ export class SessionInputShell implements SessionInput {
     insertQuote: text => this.insertQuote(text),
     captureInsertion: () => ({ ...this.caretSpan(), draftRev: this.rev }),
     insertText: (text, span) => {
-      if (this.snapshot.phase === 'adjudicating' || this.snapshot.phase === 'submitting' || this.disposed) return false
+      if (this.recall !== undefined || this.snapshot.phase === 'adjudicating' || this.snapshot.phase === 'submitting' || this.disposed) return false
       if (span.draftRev !== this.rev) return false
       return this.draftEditor.insertAsyncText(span, text)
     },
@@ -159,6 +164,7 @@ export class SessionInputShell implements SessionInput {
   private draftSnapshotCache: { revision: number; value: DraftSnapshot } | undefined
   private attachmentIds: readonly DraftAttachmentId[] = []
   private disposed = false
+  private recall: AbortController | undefined
   /** Conversation store writer for the current semantic document. */
   private persistDraft: ((draft: DraftSnapshot) => void) | undefined
   /** A restored draft's command token waiting for the trigger pipeline, with the revision its restore produced. */
@@ -231,6 +237,12 @@ export class SessionInputShell implements SessionInput {
    * @param text - plain text or the complete semantic document.
    */
   setDraft(text: DraftInput): void {
+    if (this.recall !== undefined) return
+    this.importDraft(text)
+  }
+
+  /** Import a draft while its caller owns the mutation lock. */
+  private importDraft(text: DraftInput): void {
     const draft = resolveDraftInput(text)
     this.cancelCommandRestore()
     if (draft.references.length === 0 && (draft.quotes?.length ?? 0) === 0) this.draftEditor.setDraft(draft.text)
@@ -242,7 +254,7 @@ export class SessionInputShell implements SessionInput {
 
   /** @param text - selected transcript text. @returns whether the editable draft accepted the quote. */
   insertQuote(text: string): boolean {
-    if (this.disposed || this.snapshot.phase !== 'plain' || this.deps.quoteInsertionAllowed?.() === false || text.trim() === '') return false
+    if (this.disposed || this.recall !== undefined || this.snapshot.phase !== 'plain' || this.deps.quoteInsertionAllowed?.() === false || text.trim() === '') return false
     const inserted = this.draftEditor.insertQuote(text.replace(/\r\n?/gu, '\n'), { remove: this.deps.quoteRemoveLabel?.() ?? '' })
     if (inserted) this.focus()
     return inserted
@@ -329,13 +341,13 @@ export class SessionInputShell implements SessionInput {
 
   private draftInitializationBlocked(): boolean {
     const { phase } = this.core.state
-    return this.disposed || phase === 'adjudicating' || phase === 'submitting'
+    return this.disposed || this.recall !== undefined || phase === 'adjudicating' || phase === 'submitting'
       || this.detachedDrafts.size > 0 || this.attachmentFlights.size > 0
   }
 
   /** Append ordered attachment ids unless an admission transaction is locked. */
   addAttachments(ids: readonly DraftAttachmentId[]): boolean {
-    if (this.snapshot.phase === 'adjudicating' || this.snapshot.phase === 'submitting') return false
+    if (this.recall !== undefined || this.snapshot.phase === 'adjudicating' || this.snapshot.phase === 'submitting') return false
     if (ids.length === 0) return true
     this.attachmentIds = [...this.attachmentIds, ...ids]
     this.publish()
@@ -349,7 +361,7 @@ export class SessionInputShell implements SessionInput {
    * @returns false when admission is locked or the editor refuses the insertion.
    */
   addFiles(references: readonly ReferenceInsert[], ids: readonly DraftAttachmentId[]): boolean {
-    if (this.snapshot.phase === 'adjudicating' || this.snapshot.phase === 'submitting') return false
+    if (this.recall !== undefined || this.snapshot.phase === 'adjudicating' || this.snapshot.phase === 'submitting') return false
     if (!this.draftEditor.insertFileReferences(references)) return false
     this.attachmentIds = [...this.attachmentIds, ...ids]
     this.publish()
@@ -362,7 +374,7 @@ export class SessionInputShell implements SessionInput {
    * would otherwise vanish from the rail yet still ride the in-flight send.
    */
   removeAttachment(id: DraftAttachmentId): boolean {
-    if (this.snapshot.phase === 'adjudicating' || this.snapshot.phase === 'submitting') return false
+    if (this.recall !== undefined || this.snapshot.phase === 'adjudicating' || this.snapshot.phase === 'submitting') return false
     const next = this.attachmentIds.filter(candidate => candidate !== id)
     if (next.length === this.attachmentIds.length) return false
     this.attachmentIds = next
@@ -402,6 +414,7 @@ export class SessionInputShell implements SessionInput {
    * @param text - pasted plain text.
    */
   paste(text: string): void {
+    if (this.recall !== undefined) return
     this.draftEditor.paste(text)
   }
 
@@ -412,7 +425,7 @@ export class SessionInputShell implements SessionInput {
    * dismisses and the menu tracks frozen.
    */
   submit(mode: InputSubmitMode = 'queue', source?: 'click' | 'enter'): void {
-    if (this.disposed) return
+    if (this.disposed || this.recall !== undefined) return
     const timestamp = Date.now()
     let state: MessageSubmissionState | undefined
     if (this.snapshot.phase === 'plain' && (this.snapshot.draft.trim() !== '' || this.attachmentIds.length > 0)) {
@@ -477,7 +490,60 @@ export class SessionInputShell implements SessionInput {
    * empty-draft no-op.
    */
   steerQueue(): void {
+    if (this.recall !== undefined) return
     this.deps.steerQueue?.()
+  }
+
+  /** Recall only into a literally empty, idle draft; the original Session shell owns settlement. */
+  recallQueue(): boolean {
+    if (this.draftInitializationBlocked() || this.snapshot.phase !== 'plain'
+      || this.snapshot.draft !== '' || this.attachmentIds.length !== 0
+      || (this.deps.inputTriggers?.()?.launcher.getSnapshot() ?? null) !== null
+      || this.deps.canRecallQueue?.() !== true || this.deps.recallQueue === undefined) return false
+    const recall = this.deps.recallQueue
+    const release = this.deps.retainRecall?.()
+    const controller = new AbortController()
+    this.recall = controller
+    void Promise.resolve().then(async () => {
+      this.publish()
+      const draft = await recall(() => !this.disposed && this.recall === controller, controller.signal)
+      if (this.disposed || draft === undefined) return
+      const before = this.editor.getEditorState()
+      const attachments = this.attachmentIds
+      this.attachmentIds = draft.attachmentIds
+      try {
+        // Keep the lock through editor notifications: reentrant input cannot
+        // overwrite this draft or start another recall before commit.
+        this.importDraft(draft.text)
+        this.publish()
+        draft.commit()
+      } catch (error) {
+        this.attachmentIds = attachments
+        try {
+          if (before.isEmpty()) this.draftEditor.setDraft('')
+          else this.editor.setEditorState(before)
+        } finally {
+          this.draftEditor.refreshProjection()
+          this.publish()
+        }
+        throw error
+      }
+    }).catch(() => {
+      if (!this.disposed) this.notify('error', this.deps.recallFailed?.() ?? 'Could not recall queued message')
+    }).finally(() => {
+      try {
+        if (this.recall !== controller) return
+        this.recall = undefined
+        if (!this.disposed) {
+          this.publish()
+        }
+      } finally { release?.() }
+    }).catch((_error: unknown) => {
+      // A broken editor/store observer can also reject the notice or cleanup;
+      // the Session reference is already released, and no rejection escapes.
+      console.error('Queue recall notification failed')
+    })
+    return true
   }
 
   /**
@@ -539,7 +605,7 @@ export class SessionInputShell implements SessionInput {
    */
   private applyClaim(claim: CommandClaim, span: TokenSpan, mergeHistory: boolean): boolean {
     const phase = this.core.state.phase
-    if (phase !== 'plain' && phase !== 'claimed') return false
+    if (this.recall !== undefined || (phase !== 'plain' && phase !== 'claimed')) return false
     if (span.draftRev !== this.rev) return false
     // Leading-trigger contract: only whitespace may precede the span; the
     // whitespace prefix is dropped so the chip takes the leading seat.
@@ -561,7 +627,7 @@ export class SessionInputShell implements SessionInput {
    */
   insertReference(ref: ReferenceInsert, span: TokenSpan): boolean {
     const phase = this.core.state.phase
-    if (phase !== 'plain' && phase !== 'claimed') return false
+    if (this.recall !== undefined || (phase !== 'plain' && phase !== 'claimed')) return false
     if (span.draftRev !== this.rev) return false
     const tail = this.projection.detectText.slice(span.end, span.end + 1)
     return this.draftEditor.insertReference(span, ref, tail)
@@ -575,6 +641,7 @@ export class SessionInputShell implements SessionInput {
    * @returns whether the token was consumed.
    */
   consumeToken(guard: ConsumeTokenRequest['guard']): boolean {
+    if (this.recall !== undefined) return false
     if (guard.kind === 'span') {
       if (guard.span.draftRev !== this.rev || guard.span.start === guard.span.end) return false
       return this.draftEditor.replaceText(guard.span, '')
@@ -599,6 +666,7 @@ export class SessionInputShell implements SessionInput {
    */
   insertText(text: string, span: TokenSpan, keepCompleting = false): boolean {
     void keepCompleting
+    if (this.recall !== undefined) return false
     if (span.draftRev !== this.rev) return false
     return this.draftEditor.replaceText(span, text)
   }
@@ -641,6 +709,7 @@ export class SessionInputShell implements SessionInput {
       flight.controller.abort()
     }
     this.disposed = true
+    this.recall?.abort()
     this.cancelCommandRestore()
     this.dispatchRun(({ type: 'release' }))
     this.unsubscribeInbox?.()
@@ -940,7 +1009,7 @@ export class SessionInputShell implements SessionInput {
       draft: this.projection.clipboardText,
       attachmentIds: this.attachmentIds,
       draftRev: this.rev,
-      phase: core.phase,
+      phase: this.recall !== undefined ? 'submitting' : core.phase,
       ...(core.claim !== undefined ? { claim: core.claim } : {}),
       occurrences: this.projection.occurrences,
       queue: this.deps.inbox?.getSnapshot()?.['next-turn'] ?? EMPTY_QUEUE,
