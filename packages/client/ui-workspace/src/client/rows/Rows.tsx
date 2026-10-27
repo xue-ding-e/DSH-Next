@@ -586,7 +586,8 @@ export function SearchResultItem({
  * appears beside the row's own state dot. An archived row keeps the cell blank:
  * neither marker renders there, and its live status stays on the hover card.
  * The row accepts Tab focus and opens with unmodified Enter or Space; descendant controls
- * handle their own activation without opening the row.
+ * handle their own activation without opening the row. Context-menu requests on nonblank
+ * rows open the same actions as the ellipsis without selecting the Session.
  * @param props.node - derived session node.
  * @param props.currentId - selected session id (row highlight).
  * @param props.now - epoch ms for relative-time formatting.
@@ -647,6 +648,7 @@ export function SessionNodeItem({
   // The menu's open state, bound into the row entries' `useMenuOpenState` hook.
   const menuOpenState = useMemo((): MenuOpenState => [menuOpen, setMenuOpen], [menuOpen])
   const rowRef = useRef<HTMLDivElement>(null)
+  const menuTriggerRef = useRef<HTMLButtonElement>(null)
   const titleRef = useRef<HTMLSpanElement>(null)
   // On macOS the click that activates the window is not delivered, but the
   // next click arrives with detail 2 and fires dblclick, so rename requires a
@@ -674,6 +676,14 @@ export function SessionNodeItem({
       aria-description={row.archived ? t('toast.archivedNotOpenable') : undefined}
       tabIndex={0}
       onClick={() => { onOpen(node.id) }}
+      onContextMenu={row.blank ? undefined : (event) => {
+        // Portaled menu entries bubble through React, but are not part of this row.
+        if (!(event.target instanceof Node) || !event.currentTarget.contains(event.target)) return
+        event.preventDefault()
+        event.stopPropagation()
+        menuTriggerRef.current?.focus()
+        setMenuOpen(true)
+      }}
       onKeyDown={(event) => {
         if (event.target !== event.currentTarget || (event.key !== 'Enter' && event.key !== ' ')) return
         if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return
@@ -766,6 +776,7 @@ export function SessionNodeItem({
               <button
                 type="button"
                 className={css.iconButton}
+                ref={menuTriggerRef}
                 aria-label={t('actions.session.aria', { name: title })}
                 onClick={() => { setMenuOpen(v => !v) }}
               >
