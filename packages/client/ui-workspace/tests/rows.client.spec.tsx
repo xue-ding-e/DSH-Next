@@ -1016,6 +1016,61 @@ describe('workspace browser rows', () => {
     expect(onOpen).not.toHaveBeenCalled()
   })
 
+  it.each([false, true])('right-click opens the target row menu without selecting it (archived=%s)', (archived) => {
+    const onOpen = vi.fn()
+    const onEntry = vi.fn()
+    const renderSlot: RowRenderSlot = (name: RowSlotName, owner: object, opts?: object) => {
+      if (name !== 'sidebar.workspaces.session.menu.item') return null
+      const { sessionId } = owner as SessionRowOwnerProps
+      const hookContext = opts !== undefined && 'hookContext' in opts ? opts.hookContext : undefined
+      const [, setMenuOpen] = hookContext as MenuOpenState
+      return <MenuItemButton onSelect={() => { onEntry(sessionId); setMenuOpen(false) }}>Export</MenuItemButton>
+    }
+    const node: SessionNode = {
+      id: sid('target'), title: 'Target', blank: false, running: false,
+      runningSubagentCount: 0, completed: false, updatedAt: 0, pinned: false, archived,
+    }
+    render(<SessionNodeItem node={node} currentId={sid('other')} now={0} onOpen={onOpen} renderSlot={renderSlot} t={t} />)
+    const row = screen.getByRole('treeitem')
+    const title = screen.getByText('Target')
+    const trigger = screen.getByRole('button', { name: '会话“Target”的操作' })
+    expect(fireEvent.contextMenu(title)).toBe(false)
+    expect(screen.getByRole('menu')).toBeTruthy()
+    expect(row.getAttribute('aria-selected')).toBe('false')
+    expect(document.activeElement).toBe(trigger)
+    expect(onOpen).not.toHaveBeenCalled()
+    // A repeated context request keeps the same menu open, including on its trigger.
+    fireEvent.contextMenu(trigger)
+    expect(screen.getAllByRole('menu')).toHaveLength(1)
+    fireEvent.keyDown(trigger, { key: 'ArrowDown' })
+    const entry = screen.getByRole('menuitem', { name: 'Export' })
+    expect(document.activeElement).toBe(entry)
+    // Portaled menu content is not part of the physical row's context target.
+    expect(fireEvent.contextMenu(entry)).toBe(true)
+    fireEvent.click(entry)
+    expect(onEntry).toHaveBeenCalledWith(node.id)
+    expect(screen.queryByRole('menu')).toBeNull()
+    fireEvent.contextMenu(row)
+    fireEvent.keyDown(document, { key: 'Escape' })
+    expect(screen.queryByRole('menu')).toBeNull()
+    fireEvent.contextMenu(row)
+    fireEvent.pointerDown(document.body)
+    expect(screen.queryByRole('menu')).toBeNull()
+    expect(onOpen).not.toHaveBeenCalled()
+  })
+
+  it('leaves the native context menu available on blank session rows', () => {
+    const onOpen = vi.fn()
+    const node: SessionNode = {
+      id: sid('blank'), title: '', blank: true, running: false,
+      runningSubagentCount: 0, completed: false, updatedAt: 0, pinned: false, archived: false,
+    }
+    render(<SessionNodeItem node={node} currentId={undefined} now={0} onOpen={onOpen} t={t} />)
+    expect(fireEvent.contextMenu(screen.getByRole('treeitem'))).toBe(true)
+    expect(screen.queryByRole('menu')).toBeNull()
+    expect(onOpen).not.toHaveBeenCalled()
+  })
+
   it('renders the row action list inside the actions area after the menu trigger', () => {
     const onOpen = vi.fn()
     const onQuick = vi.fn()
