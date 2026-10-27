@@ -1224,8 +1224,8 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
       },
       {
         signature: 'async readQueuedFile(request: { readonly sessionId: SessionId readonly itemId: MessageId readonly attachmentId: AttachmentId readonly recallRequestId?: Branded<\'session-request-id\'> readonly signal: AbortSignal }): Promise<{ readonly file: FileAttachmentRef; readonly data: AsyncIterable<Uint8Array> }>',
-        description: 'Read a file from exactly one still-pending user occurrence, never an arbitrary reference.',
-        parameters: [{ name: 'request', description: 'Session, pending message and attachment identities plus cancellation.' }],
+        description: 'Read a file from one pending user occurrence or its committed recall record, never an arbitrary reference.',
+        parameters: [{ name: 'request', description: 'Session, message, attachment and optional committed recall identities plus cancellation.' }],
         returns: 'the authoritative reference and a bounded verified byte stream.',
       },
       {
