@@ -689,6 +689,48 @@ describe('workspace browser rows', () => {
     expect(props.onCreate).toHaveBeenCalledOnce()
   })
 
+  it('workspace right-click and keyboard menu open the clicked folder without toggling', () => {
+    const openFolder = vi.fn()
+    const onToggle = vi.fn()
+    const group: GroupNode = {
+      key: 'folder', workspaceId: wid('folder'), cwd: '/projects/folder', createdAt: 0, label: 'Folder',
+      sessionCount: 0, expanded: false, containsCurrent: false, sessions: [],
+    }
+    render(<ProjectRowItem group={group} onToggle={onToggle} onCreate={vi.fn()} t={t}
+      actions={{ rename: vi.fn(), delete: vi.fn(), openFolder }} />)
+    const row = screen.getByRole('treeitem')
+    const event = createEvent.contextMenu(row)
+    fireEvent(row, event)
+    expect(event.defaultPrevented).toBe(true)
+    expect(onToggle).not.toHaveBeenCalled()
+    fireEvent.contextMenu(row)
+    expect(screen.getAllByRole('menu')).toHaveLength(1)
+    fireEvent.click(screen.getByRole('menuitem', { name: '打开工作区文件夹' }))
+    expect(openFolder).toHaveBeenCalledOnce()
+    expect(screen.queryByRole('menu')).toBeNull()
+    fireEvent.keyDown(row, { key: 'F10', shiftKey: true })
+    expect(screen.getByRole('menu')).toBeTruthy()
+    fireEvent.keyDown(document, { key: 'Escape' })
+    expect(screen.queryByRole('menu')).toBeNull()
+    fireEvent.keyDown(row, { key: 'ContextMenu' })
+    fireEvent.pointerDown(document.body)
+    expect(screen.queryByRole('menu')).toBeNull()
+    fireEvent.keyDown(row, { key: 'Enter' })
+    expect(onToggle).toHaveBeenCalledOnce()
+  })
+
+  it('does not offer native folder opening when the remote endpoint is denied', () => {
+    const group: GroupNode = {
+      key: 'folder', workspaceId: wid('folder'), cwd: '/projects/folder', createdAt: 0, label: 'Folder',
+      sessionCount: 0, expanded: false, containsCurrent: false, sessions: [],
+    }
+    render(<ProjectRowItem group={group} onToggle={vi.fn()} onCreate={vi.fn()} t={t}
+      useRemoteAccess={() => false} actions={{ rename: vi.fn(), delete: vi.fn(), openFolder: vi.fn() }} />)
+    fireEvent.contextMenu(screen.getByRole('treeitem'))
+    expect(screen.queryByRole('menuitem', { name: '打开工作区文件夹' })).toBeNull()
+    expect(screen.getByRole('menuitem', { name: '重命名' })).toBeTruthy()
+  })
+
   it('ungrouped bucket asks the global resource whether it may start a Session', () => {
     const group: GroupNode = {
       key: 'ungrouped', workspaceId: undefined, cwd: undefined, createdAt: undefined, label: '',

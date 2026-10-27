@@ -3,7 +3,7 @@
  * all data and callbacks arrive via props. Hover swaps (folder->chevron,
  * time->ellipsis, action buttons) are CSS-only, and a session row's clipped
  * title marquees programmatically while the row is hovered. Workspace row
- * menus are visual-only except Rename/Delete. A Session row's "..." menu and
+ * menus offer native folder opening, Rename, and Delete. A Session row's "..." menu and
  * its hover buttons are the `sidebar.workspaces.session.menu.item` and
  * `sidebar.workspaces.session.row.action` lists, rendered through the
  * browser's `renderSlot` with the menu's open state as the occurrence's hook
@@ -212,7 +212,7 @@ type ProjectRowItemProps = {
   onToggle: () => void
   onCreate: () => void
   /** Real-Workspace actions; absent for the ungrouped bucket (no menu shown). */
-  actions?: { rename: () => void; delete: () => void } | undefined
+  actions?: { rename: () => void; delete: () => void; openFolder?: () => void } | undefined
   /** Present only for real Workspace rows in the grouped view. */
   drag?: WorkspaceRowDragProps | undefined
   /** Host account home; POSIX home-rooted hover paths display as `~`. */
@@ -223,6 +223,7 @@ type ProjectRowItemProps = {
 /** Which of one header row's actions the caller's access snapshot allows. */
 interface ProjectRowAccess {
   readonly create: boolean
+  readonly openFolder: boolean
   readonly rename: boolean
   readonly delete: boolean
   readonly reorder: boolean
@@ -255,14 +256,17 @@ export function ProjectRowItem(props: ProjectRowItemProps) {
 /** The ungrouped bucket's header: no Workspace resource, so starting a Session there asks the global resource. */
 function UngroupedProjectRow(props: ProjectRowItemProps) {
   const create = props.useRemoteAccess('session/create')
-  return <ProjectRow {...props} access={{ create, rename: false, delete: false, reorder: false }} />
+  return <ProjectRow {...props} access={{ create, openFolder: false, rename: false, delete: false, reorder: false }} />
 }
 
 /** A real Workspace's header: every action asks that Workspace's resource. */
 function WorkspaceProjectRow({ workspaceId, ...props }: ProjectRowItemProps & { workspaceId: WorkspaceId }) {
   const { useWorkspaceAccess } = props
+  const canOpen = props.useRemoteAccess('session/openWorkspacePath')
+  const canCheckOpen = props.useRemoteAccess('session/canOpenWorkspacePath')
   const access: ProjectRowAccess = {
     create: useWorkspaceAccess(workspaceId, 'session/create'),
+    openFolder: canOpen && canCheckOpen,
     rename: useWorkspaceAccess(workspaceId, 'workspace/rename'),
     delete: useWorkspaceAccess(workspaceId, 'workspace/delete'),
     reorder: useWorkspaceAccess(workspaceId, 'workspace/insertBefore'),
@@ -280,7 +284,9 @@ function ProjectRow({
   const active = containsCurrentDescendant || (group.expanded && group.containsCurrent)
   const [menuOpen, setMenuOpen] = useState(false)
   const dragPreview = useRowDragPreview(css.dragPreview as string)
+  const menuTriggerRef = useRef<HTMLButtonElement>(null)
   const workspaceMenuItems = [
+    ...access.openFolder && actions?.openFolder !== undefined ? [{ id: 'openFolder', label: t('open.workspaceFolder'), icon: <IconFolderOpenRegular /> }] : [],
     ...access.rename ? [{ id: 'rename', label: t('rename'), icon: <IconEditOutlineRegular /> }] : [],
     ...access.delete ? [{ id: 'delete', label: t('delete.workspace'), icon: <IconTrashOutlineRegular />, danger: true }] : [],
   ]
@@ -290,7 +296,30 @@ function ProjectRow({
       data-row-key={`workspace:${group.key}`}
       role="treeitem"
       aria-expanded={row.expanded}
+      tabIndex={0}
       onClick={onToggle}
+      onContextMenu={actions === undefined || workspaceMenuItems.length === 0 ? undefined : (event) => {
+        // Ignore React events bubbling from the portaled menu.
+        if (!(event.target instanceof Node) || !event.currentTarget.contains(event.target)) return
+        event.preventDefault()
+        event.stopPropagation()
+        menuTriggerRef.current?.focus()
+        setMenuOpen(true)
+      }}
+      onKeyDown={(event) => {
+        if (event.target !== event.currentTarget) return
+        if (actions !== undefined && workspaceMenuItems.length > 0
+          && (event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10'))) {
+          event.preventDefault()
+          event.stopPropagation()
+          menuTriggerRef.current?.focus()
+          setMenuOpen(true)
+        } else if ((event.key === 'Enter' || event.key === ' ')
+          && !event.altKey && !event.ctrlKey && !event.metaKey && !event.shiftKey) {
+          event.preventDefault()
+          onToggle()
+        }
+      }}
       draggable={drag !== undefined}
       onDragStart={drag === undefined
         ? undefined
@@ -321,9 +350,10 @@ function ProjectRow({
               setMenuOpen(false)
               // Unknown ids leave before the dispatch: a future menu row must
               // not inherit the destructive branch as an else fallback.
-              /* v8 ignore next -- Menu can emit only the rename and delete rows supplied above. */
-              if (id !== 'rename' && id !== 'delete') return
-              if (id === 'rename') actions.rename()
+              /* v8 ignore next -- Menu emits only the supplied action ids. */
+              if (id !== 'openFolder' && id !== 'rename' && id !== 'delete') return
+              if (id === 'openFolder') actions.openFolder?.()
+              else if (id === 'rename') actions.rename()
               else actions.delete()
             }}
             portal
@@ -332,6 +362,9 @@ function ProjectRow({
               <button
                 type="button"
                 className={css.iconButton}
+                ref={menuTriggerRef}
+                aria-haspopup="menu"
+                aria-expanded={menuOpen}
                 aria-label={t('actions.workspace.aria', { name: label })}
                 onClick={(e) => { e.stopPropagation(); setMenuOpen(v => !v) }}
               >
