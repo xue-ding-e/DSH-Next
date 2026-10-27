@@ -2,6 +2,9 @@
 
 import { modelAvailable } from './catalog.ts'
 import { randomUUID } from 'node:crypto'
+import { QueueRecallController } from './queue-recall.ts'
+import { queueRecallProjection, type QueueRecallState } from './queue-recall-projection.ts'
+import type { ProjectionHandle } from '@deepseek-ai/dsh-session-projection'
 import type { Context } from '@deepseek-ai/cordis'
 import { brandString } from '@deepseek-ai/dsh-brand'
 import type { Agent, ModelSelection as AgentModelSelection } from '@deepseek-ai/dsh-agent'
@@ -84,6 +87,10 @@ function latestCompletedPrefixBoundary(events: readonly SessionEvent[]): Session
 
 /** Implements Session business commands delegated by the Session Controller Remote service. */
 export class SessionCommandController {
+  private recallProjection!: ProjectionHandle<QueueRecallState>
+
+  private readonly queueRecall = new QueueRecallController()
+
   /**
    * @param ctx - Host context carrying Agent, model, attachment, title, and Workspace services.
    * @param agents - sole owner of create, resume, and Agent composition.
@@ -94,6 +101,11 @@ export class SessionCommandController {
     private readonly agents: ApiSessionAgentController,
     private readonly defaultCwd: string,
   ) {}
+
+  /** Register the Host-only recovery fold before exposing queue recall operations. */
+  async initialize(): Promise<void> {
+    this.recallProjection = await this.ctx.sessionProjections.register(queueRecallProjection)
+  }
 
   /**
    * Create one ordinary Session for a new conversation, reusing the named
@@ -444,6 +456,10 @@ export class SessionCommandController {
         throw apiSessionSubagentOwnershipError(request.sessionId)
       }
     }
+    if (request.action.kind === 'recover-recall') {
+      return this.queueRecall.recover(agent, request.itemId, request.action.requestId, this.recallProjection, this.ctx.fileUploads)
+    }
+    if (request.action.kind === 'recall') return this.queueRecall.recall(agent, request.itemId, request.action, this.recallProjection, this.ctx.fileUploads)
     const nextTurn = agent.inbox.nextTurn.find(message => message.id === request.itemId)
     const nextStep = agent.inbox.nextStep.find(message => message.id === request.itemId)
     const located = nextTurn === undefined
@@ -480,6 +496,18 @@ export class SessionCommandController {
         assertNever(request.action, 'queue action')
     }
     return { accepted: true }
+  }
+
+  /**
+   * Resolve only a committed own-Session handoff for the authenticated file streaming route.
+   * @param agent - exact resumed Session owner.
+   * @param itemId - original pending occurrence identity.
+   * @param requestId - durable recall operation identity.
+   * @returns authoritative content only when every identity matches.
+   */
+  recalledMessage(agent: Agent, itemId: SessionUpdateQueueRequest['itemId'], requestId: SessionRequestId): UserMessage | undefined {
+    return this.recallProjection.stateOf(agent.session).recalls.find(value =>
+      value.requestId === requestId && value.message.id === itemId)?.message
   }
 
   /**
