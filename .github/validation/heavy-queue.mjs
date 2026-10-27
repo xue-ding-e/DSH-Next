@@ -76,7 +76,7 @@ export function isCurrentValidationRun(repo, run, id, sha) {
   return repo === 'xue-ding-e/DSH-Next' && String(run.id) === id
     && run.event === 'workflow_dispatch'
     && run.path === '.github/workflows/next-context-menu-validation.yml'
-    && run.head_branch === 'validation/workspace-open-folder' && run.head_sha === sha
+    && run.head_branch === 'validation/queue-recall-generation-20261027' && run.head_sha === sha
 }
 
 async function main() {
@@ -100,10 +100,9 @@ async function main() {
   try {
     assert.match(process.env.EXPECTED_PRODUCT_SHA ?? '', /^[0-9a-f]{40}$/)
     assert.match(process.env.EXPECTED_CONTROL_SHA ?? '', /^[0-9a-f]{40}$/)
-    assert.match(process.env.EXPECTED_AUTOMATION_SHA ?? '', /^[0-9a-f]{40}$/)
-    assert.equal(process.env.GITHUB_SHA, process.env.EXPECTED_PRODUCT_SHA)
+    assert.equal(process.env.GITHUB_SHA, process.env.EXPECTED_CONTROL_SHA)
     const main = await request('repos/xue-ding-e/DSH-Next/git/ref/heads/main')
-    assert.equal(main.object.sha, process.env.EXPECTED_CONTROL_SHA, 'main must remain at reviewed C until W passes')
+    assert.equal(main.object.sha, '27b18a0026c569e2072350c552a952483f756436', 'main moved; requires fresh review')
     for (const [repo, id, branch] of items) {
       assert.match(id ?? '', /^[1-9][0-9]+$/, `a reviewed predecessor run ID is required for ${repo}`)
       const run = await request(`repos/${repo}/actions/runs/${id}`)
@@ -125,7 +124,7 @@ async function main() {
         const runs = await request(`repos/${repo}/actions/runs?status=${status}&per_page=100`)
         assert.equal(runs.workflow_runs.length, runs.total_count, 'incomplete active-run inventory requires manual review')
         for (const queued of runs.workflow_runs) {
-          if (isCurrentValidationRun(repo, queued, process.env.GITHUB_RUN_ID, process.env.EXPECTED_PRODUCT_SHA)) continue
+          if (isCurrentValidationRun(repo, queued, process.env.GITHUB_RUN_ID, process.env.EXPECTED_CONTROL_SHA)) continue
           assert(repo === 'xue-ding-e/XenTerm-Next' && queued.id === STALE_RUN_ID && status === 'in_progress',
             `${repo} run ${queued.id} is still ${status}; do not start DSH`)
           const run = await request(`repos/${repo}/actions/runs/${STALE_RUN_ID}`)
