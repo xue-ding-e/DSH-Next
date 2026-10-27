@@ -1,4 +1,3 @@
-
 // Validation-only case appended to the existing Host-face test file; product source stays pinned.
 it('DSH-Next right-click reuses session actions without opening the target', async () => {
   const scaffold = await launchWebScaffold({ extraInstallAnchors: [join(FIXTURE, 'package.json')] })

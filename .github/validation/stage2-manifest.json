@@ -1,0 +1,419 @@
+{
+  "final": "2483c515be0e1425806870ce0046c84c1973c849",
+  "base": "282f8d630784eab0d935ca06155d96f773983b1e",
+  "chain": [
+    {
+      "sha": "2483c515be0e1425806870ce0046c84c1973c849",
+      "parent": "282f8d630784eab0d935ca06155d96f773983b1e"
+    }
+  ],
+  "files": [
+    {
+      "path": "docs/architecture.i18n.yaml",
+      "mode": "100644",
+      "blob": "7964febc619881f1713847a16d280be3dbc0173d"
+    },
+    {
+      "path": "docs/architecture.md",
+      "mode": "100644",
+      "blob": "335bca90402cce65aa1696e032f959aa42a18fea"
+    },
+    {
+      "path": "docs/architecture.zh.md",
+      "mode": "100644",
+      "blob": "b3dec6ea2dd9f461ca665b2dc4d738abfe8fee4b"
+    },
+    {
+      "path": "docs/persistence-catalog.i18n.yaml",
+      "mode": "100644",
+      "blob": "d5fc8bcca9aa259f21f80dd747c9b467057bd4b7"
+    },
+    {
+      "path": "docs/persistence-catalog.md",
+      "mode": "100644",
+      "blob": "f9682aa1b94d59c35d95ee577f0abb7b0e634b39"
+    },
+    {
+      "path": "docs/persistence-catalog.zh.md",
+      "mode": "100644",
+      "blob": "7a693355a9efdb771a52b0e6f41888fc91f19c11"
+    },
+    {
+      "path": "docs/persistence-changes/2026-10-27-queued-message-recall.i18n.yaml",
+      "mode": "100644",
+      "blob": "eca5483676b6198d759bf107e6a8d987436f4934"
+    },
+    {
+      "path": "docs/persistence-changes/2026-10-27-queued-message-recall.md",
+      "mode": "100644",
+      "blob": "7a9ea1a603986ca0c12432564093730a9a68d450"
+    },
+    {
+      "path": "docs/persistence-changes/2026-10-27-queued-message-recall.schema.json",
+      "mode": "100644",
+      "blob": "1d9b07dc6f69a2a1efb9dba0fea7cc732fcf49c0"
+    },
+    {
+      "path": "docs/persistence-changes/2026-10-27-queued-message-recall.zh.md",
+      "mode": "100644",
+      "blob": "af33d3e34a87b8004da96b4618cb56b4851233b4"
+    },
+    {
+      "path": "docs/persistence-schema.json",
+      "mode": "100644",
+      "blob": "ac6f69aea2e6f07a78188a7d2ef6589a3b9f5be4"
+    },
+    {
+      "path": "docs/subsystems/attachment.md",
+      "mode": "100644",
+      "blob": "66868bd19792304ee82117b23ee3433a8171a8a4"
+    },
+    {
+      "path": "docs/subsystems/attachment.zh.md",
+      "mode": "100644",
+      "blob": "8a7a995ab17032eebba2f8203d3f25387d0ad53b"
+    },
+    {
+      "path": "packages/api/session-controller/README.i18n.yaml",
+      "mode": "100644",
+      "blob": "2106cd45cfd2eb52395fd65563153b42ec0164dd"
+    },
+    {
+      "path": "packages/api/session-controller/README.md",
+      "mode": "100644",
+      "blob": "90fd10d60e2a4db56a80d8c8481bb47d7d08d485"
+    },
+    {
+      "path": "packages/api/session-controller/README.zh.md",
+      "mode": "100644",
+      "blob": "7e4b2adc2600021e81c63d98dab3c4d61f0a88c5"
+    },
+    {
+      "path": "packages/api/session-controller/package.json",
+      "mode": "100644",
+      "blob": "f8f577710b527bfda596efa6eb1b3c2ac411e568"
+    },
+    {
+      "path": "packages/api/session-controller/src/client/contract/session.ts",
+      "mode": "100644",
+      "blob": "d5ca8a561b2ac156ec3a8ee2486c3b74766c0551"
+    },
+    {
+      "path": "packages/api/session-controller/src/client/sessions/session.ts",
+      "mode": "100644",
+      "blob": "4c1e231c0426b9d20100ff539fc99e074b7d695f"
+    },
+    {
+      "path": "packages/api/session-controller/src/commands.ts",
+      "mode": "100644",
+      "blob": "20a93c4952ccda886ab386f4c5d969f23e0378c6"
+    },
+    {
+      "path": "packages/api/session-controller/src/index.ts",
+      "mode": "100644",
+      "blob": "e44e956d5483c15f80691b8611bebe8021a4b0e7"
+    },
+    {
+      "path": "packages/api/session-controller/src/queue-recall-projection.ts",
+      "mode": "100644",
+      "blob": "8549389549f94c22cafe411f0e9bca20e40a5b87"
+    },
+    {
+      "path": "packages/api/session-controller/src/queue-recall.ts",
+      "mode": "100644",
+      "blob": "b89dca9c8063660b59a3c754f9418b4761ed54d4"
+    },
+    {
+      "path": "packages/api/session-controller/src/types.ts",
+      "mode": "100644",
+      "blob": "9bc10a9fdd0eff43078f0e16113db9acc745e323"
+    },
+    {
+      "path": "packages/api/session-controller/tests/commands-queue-attachment.host.spec.ts",
+      "mode": "100644",
+      "blob": "58f72b15dc721acec89234ec9fed11c2a3a2adc5"
+    },
+    {
+      "path": "packages/api/session-controller/tests/controller.host.spec.ts",
+      "mode": "100644",
+      "blob": "524c5eadc43839d9f5e0ce7aad265e1e2d2c7881"
+    },
+    {
+      "path": "packages/api/session-controller/tests/list-scheduling.host.spec.ts",
+      "mode": "100644",
+      "blob": "cc1357e613e1a349a42e4a2a0e4d0fdf92778c24"
+    },
+    {
+      "path": "packages/api/session-controller/tests/queue-recall-jsonl.host.spec.ts",
+      "mode": "100644",
+      "blob": "c3e61f7966b91449394006f0b57640c28705e532"
+    },
+    {
+      "path": "packages/api/session-controller/tests/queue-recall-projection.host.spec.ts",
+      "mode": "100644",
+      "blob": "7f4c91017a6d62a3b2028e46c85428b198eb77a6"
+    },
+    {
+      "path": "packages/api/session-controller/tests/queue-recall-replay.host.spec.ts",
+      "mode": "100644",
+      "blob": "a3e9374f876bf3838663788e74729da4e67db095"
+    },
+    {
+      "path": "packages/api/session-controller/tests/queue-recall-transaction.host.spec.ts",
+      "mode": "100644",
+      "blob": "abc51eb657c2f42c9667a33f84480229409cdca3"
+    },
+    {
+      "path": "packages/api/session-controller/tests/test-remote.ts",
+      "mode": "100644",
+      "blob": "52fa527e6c43d2b08ed55c7b5e2e77154cf1a212"
+    },
+    {
+      "path": "packages/api/session-controller/tsconfig.host.json",
+      "mode": "100644",
+      "blob": "27753f2910d58bafacd5c7fd379a13adcc071802"
+    },
+    {
+      "path": "packages/client/file-upload/README.i18n.yaml",
+      "mode": "100644",
+      "blob": "465d1c69e808346f4abf1bf881fe3a0b678eca96"
+    },
+    {
+      "path": "packages/client/file-upload/README.md",
+      "mode": "100644",
+      "blob": "d2835e8c611555228008534c513adcde6fc81999"
+    },
+    {
+      "path": "packages/client/file-upload/README.zh.md",
+      "mode": "100644",
+      "blob": "25cfcaa066ece4010eed53613a2dabe48b344ea1"
+    },
+    {
+      "path": "packages/client/file-upload/package.json",
+      "mode": "100644",
+      "blob": "4655cb7c0ab76b476483167f743610ca5d4df6db"
+    },
+    {
+      "path": "packages/client/file-upload/src/client/contract.ts",
+      "mode": "100644",
+      "blob": "f30f2451f0a5e174d4cfb30449d37d9df8fa232b"
+    },
+    {
+      "path": "packages/client/file-upload/src/client/runtime.ts",
+      "mode": "100644",
+      "blob": "bd1ae140646c28393d3e69007380a25ca8217c17"
+    },
+    {
+      "path": "packages/client/file-upload/src/index.ts",
+      "mode": "100644",
+      "blob": "3e80d8fcfcfe8d39bafeff6c26f480c4403f3fc1"
+    },
+    {
+      "path": "packages/client/file-upload/src/protocol.ts",
+      "mode": "100644",
+      "blob": "bae775e1791580b9548bf2c146092129be9a02dc"
+    },
+    {
+      "path": "packages/client/file-upload/src/queued-file-route.ts",
+      "mode": "100644",
+      "blob": "6faa5a5101432f304bed67e6b5b3e9b54a1325d4"
+    },
+    {
+      "path": "packages/client/file-upload/tests/queue-recall-files.host.spec.ts",
+      "mode": "100644",
+      "blob": "7d5c07e2363db09e22fff374f3c5f552fe565294"
+    },
+    {
+      "path": "packages/client/file-upload/tests/queued-file-route.host.spec.ts",
+      "mode": "100644",
+      "blob": "b4f336b15f8eaf2aab6bec46bd3062b2bf189ce7"
+    },
+    {
+      "path": "packages/client/file-upload/tests/queued-file.client.spec.ts",
+      "mode": "100644",
+      "blob": "ea265111223831276355e30d761dccc5f52f85ca"
+    },
+    {
+      "path": "packages/client/file-upload/tsconfig.client.json",
+      "mode": "100644",
+      "blob": "90c7502ab543c780f6dfb7620d1d74189bb4a4db"
+    },
+    {
+      "path": "packages/client/file-upload/tsconfig.host.json",
+      "mode": "100644",
+      "blob": "2be2868d62db8f917d9d7cd3d59e7aa0a972aa28"
+    },
+    {
+      "path": "packages/client/ui-conversation/README.i18n.yaml",
+      "mode": "100644",
+      "blob": "866a0e88e94858dbf70fff2bbefc98fac30bec0f"
+    },
+    {
+      "path": "packages/client/ui-conversation/README.md",
+      "mode": "100644",
+      "blob": "a450be5bec9b04515312d1d0b3bb9660b1f9f36b"
+    },
+    {
+      "path": "packages/client/ui-conversation/README.zh.md",
+      "mode": "100644",
+      "blob": "9b966a8790175f8cf5a3ccdd493aeba4e084fd69"
+    },
+    {
+      "path": "packages/client/ui-conversation/src/client/contract/draft-editor.ts",
+      "mode": "100644",
+      "blob": "cf0a6408f93b9ca5d29e52aa4d42a42e191396bf"
+    },
+    {
+      "path": "packages/client/ui-conversation/src/client/input/editor/keymap.ts",
+      "mode": "100644",
+      "blob": "bd7f6164af83dd256081f3f4cb71c633198d183e"
+    },
+    {
+      "path": "packages/client/ui-conversation/src/client/input/editor/view-binding.ts",
+      "mode": "100644",
+      "blob": "780df2f3f5f0487022abcc7aefa956e83df25ab6"
+    },
+    {
+      "path": "packages/client/ui-conversation/src/client/input/facade.ts",
+      "mode": "100644",
+      "blob": "9989acc6a660f9f2518683d3332e54fa1d33b478"
+    },
+    {
+      "path": "packages/client/ui-conversation/src/client/input/hub.ts",
+      "mode": "100644",
+      "blob": "2c708c8f2ef4cad7f7656eadf6e72d01f8e65f93"
+    },
+    {
+      "path": "packages/client/ui-conversation/src/client/locales.ts",
+      "mode": "100644",
+      "blob": "8fe032b369a9699858dee76b103be0ad57ae09ff"
+    },
+    {
+      "path": "packages/client/ui-conversation/src/client/queue/QueueDock.tsx",
+      "mode": "100644",
+      "blob": "444afabbcae5805f2d0ae6d6f24ff05f52d76bcd"
+    },
+    {
+      "path": "packages/client/ui-conversation/src/client/queue/recall-journal.ts",
+      "mode": "100644",
+      "blob": "2ad2f32078408f377ee865ca7ad1b4044e943ad8"
+    },
+    {
+      "path": "packages/client/ui-conversation/src/client/queue/recall.ts",
+      "mode": "100644",
+      "blob": "7d0a1fedad1c5993a1a97b13251b825727d8452b"
+    },
+    {
+      "path": "packages/client/ui-conversation/src/client/service.ts",
+      "mode": "100644",
+      "blob": "1e4e591bf48e6ec56d93f75316dd0f9f2d89f1ec"
+    },
+    {
+      "path": "packages/client/ui-conversation/tests/keymap-routing.client.spec.tsx",
+      "mode": "100644",
+      "blob": "c9835e55a13635a8791721d0bffc51554908e556"
+    },
+    {
+      "path": "packages/client/ui-conversation/tests/queue-recall-recovery.client.spec.ts",
+      "mode": "100644",
+      "blob": "f72544fd9268869877a4712e3cb14d864cabcda1"
+    },
+    {
+      "path": "packages/client/ui-conversation/tests/service-orchestration.client.spec.ts",
+      "mode": "100644",
+      "blob": "b8cfeef0907414a7688f0b45e6e6cb2c36ce6405"
+    },
+    {
+      "path": "packages/core/agent-loop/src/inbox.ts",
+      "mode": "100644",
+      "blob": "a9330144f732ad50ab6dd18b4e9b468fed8cae0f"
+    },
+    {
+      "path": "packages/core/agent-loop/tests/inbox.spec.ts",
+      "mode": "100644",
+      "blob": "83086cc95f93bd3a5dc3baf6ec8b1c8e722a6e58"
+    },
+    {
+      "path": "packages/core/agent/src/runtime-types.ts",
+      "mode": "100644",
+      "blob": "c7e7e3ce1489b61204c36988021e294f0b3341db"
+    },
+    {
+      "path": "packages/core/agent/src/types.ts",
+      "mode": "100644",
+      "blob": "5f0287f99697034d60b8ce3b87b93713d8d70cd5"
+    },
+    {
+      "path": "packages/experimental/client-ui-cot-translation/tests/activation.host.spec.ts",
+      "mode": "100644",
+      "blob": "45c17feb18f12b32856cb4db145701c681e8e9a2"
+    },
+    {
+      "path": "packages/extensions/cordis-client-runner/src/client/api-catalog.ts",
+      "mode": "100644",
+      "blob": "d4449001bd6b30d3f1cf824164562216e25633ab"
+    },
+    {
+      "path": "packages/extensions/tool-cordis/src/api-catalog.ts",
+      "mode": "100644",
+      "blob": "30d2884e550f183acdd4994e41376203b667b58e"
+    },
+    {
+      "path": "packages/test-support/agent-loop-testkit/src/inbox.ts",
+      "mode": "100644",
+      "blob": "95c569bd5a1948af20a8b49d4605ebd1c27a42c4"
+    },
+    {
+      "path": "packages/test-support/client-runtime/src/index.ts",
+      "mode": "100644",
+      "blob": "99fc0b67a335b351f022ca85641d2598ab28aa1e"
+    },
+    {
+      "path": "pnpm-lock.yaml",
+      "mode": "100644",
+      "blob": "5698f63cd921f6163e1910b8a0ddd148fbfcf385"
+    },
+    {
+      "path": "scripts/gen-cordis-catalog.ts",
+      "mode": "100644",
+      "blob": "60bcfae2ce723c83019494ae942647fc4b6222d9"
+    }
+  ],
+  "tests": [
+    "packages/api/session-controller/tests/queue-recall-projection.host.spec.ts",
+    "packages/api/session-controller/tests/queue-recall-replay.host.spec.ts",
+    "packages/api/session-controller/tests/queue-recall-transaction.host.spec.ts",
+    "packages/api/session-controller/tests/queue-recall-jsonl.host.spec.ts",
+    "packages/api/session-controller/tests/commands-queue-attachment.host.spec.ts",
+    "packages/api/session-controller/tests/control-queue.host.spec.ts",
+    "packages/api/session-controller/tests/controller.host.spec.ts",
+    "packages/api/session-controller/tests/projection-discovery.host.spec.ts",
+    "packages/client/file-upload/tests/queue-recall-files.host.spec.ts",
+    "packages/client/file-upload/tests/queued-file-route.host.spec.ts",
+    "packages/client/file-upload/tests/file-upload-http.host.spec.ts",
+    "packages/client/file-upload/tests/queued-file.client.spec.ts",
+    "packages/client/file-upload/tests/file-upload.client.spec.ts",
+    "packages/client/ui-conversation/tests/queue-recall-recovery.client.spec.ts",
+    "packages/client/ui-conversation/tests/keymap-routing.client.spec.tsx",
+    "packages/client/ui-conversation/tests/service-orchestration.client.spec.ts",
+    "packages/client/ui-conversation/tests/queue-dock.client.spec.tsx",
+    "packages/core/agent-loop/tests/inbox.spec.ts",
+    "packages/core/agent-loop/tests/resume.spec.ts",
+    "packages/session/session-persistence-jsonl/tests/jsonl.spec.ts",
+    "packages/session/session-persistence-jsonl/tests/generation.spec.ts",
+    "packages/session/session-persistence-jsonl/tests/fork-delivery.spec.ts",
+    "packages/client/ui-workspace/tests/rows.client.spec.tsx",
+    "packages/client/ui-workspace/tests/open-workspace-folder.client.spec.ts",
+    "packages/client/ui-workspace/tests/workspace-browser.client.spec.tsx",
+    "packages/client/ui-workspace/tests/apply.client.spec.ts",
+    "packages/client/ui-workspace/tests/access-assembly.client.spec.tsx",
+    "packages/client/ui-settings-account/tests/account-refresh.client.spec.ts",
+    "packages/client/ui-settings-account/tests/account.client.spec.tsx",
+    "packages/client/ui-primitives/tests/menu-anchor-width.client.spec.tsx",
+    "packages/client/ui-primitives/tests/menu-group.client.spec.tsx",
+    "packages/client/ui-primitives/tests/menu-surface.client.spec.tsx",
+    "packages/client/ui-primitives/tests/menu-top-clearance.client.spec.tsx"
+  ],
+  "reviewNote": "Known source chain and provisional blob manifest from 2bdf; replace final chain and exact range blobs only after final generator artifact review. This template MUST fail until pinned.",
+  "tree": "c1e04f395e7bb39b6e9a957fe96d5d1418fc7c3a"
+}

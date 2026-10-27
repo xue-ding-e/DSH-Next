@@ -71,12 +71,26 @@ export function assertMagpiePredecessor(run, expectedSha) {
   // A terminal failure releases resources; it is never reported as a passing product validation.
 }
 
+/** Release the CC slot only after the exact reviewed push attempt is terminal. */
+export function assertCcPredecessor(run) {
+  assert.equal(run.id, 40602600351)
+  assert.equal(run.repository.full_name, 'xue-ding-e/CC-Switch-Next')
+  assert.equal(run.head_sha, 'b5e6702a6be29f3413a689f94d718bca4df8e782')
+  assert.equal(run.head_branch, 'main')
+  assert.equal(run.path, '.github/workflows/cloud-validation.yml')
+  assert.equal(run.workflow_id, 386700965)
+  assert.equal(run.event, 'push')
+  assert.equal(run.run_attempt, 1)
+  assert.equal(run.status, 'completed')
+  assert(['success', 'failure', 'cancelled', 'timed_out', 'action_required', 'neutral', 'skipped', 'stale', 'startup_failure'].includes(run.conclusion))
+}
+
 /** Permit only the current reviewed validation itself; other DSH activity also blocks heavy work. */
 export function isCurrentValidationRun(repo, run, id, sha) {
   return repo === 'xue-ding-e/DSH-Next' && String(run.id) === id
     && run.event === 'workflow_dispatch'
     && run.path === '.github/workflows/next-context-menu-validation.yml'
-    && run.head_branch === 'validation/workspace-open-folder' && run.head_sha === sha
+    && run.head_branch === 'validation/queue-recall-locked-validation-20261027' && run.head_sha === sha
 }
 
 async function main() {
@@ -84,6 +98,7 @@ async function main() {
   mkdirSync(evidenceRoot, { recursive: true })
   const evidence = { checkedAt: new Date().toISOString(), predecessors: [], staleMetadata: [], success: false }
   const items = [
+    ['xue-ding-e/CC-Switch-Next', '40602600351', 'main'],
     ['xue-ding-e/XenTerm', process.env.FLUTTER_VALIDATION_RUN_ID, undefined],
     ['xue-ding-e/AI-Toolbox-Next', '40481574537', 'fix/codex-fetched-model-picker-20261027'],
     ['xue-ding-e/Magpie-Next', process.env.MAGPIE_RUN_ID, 'security/compress1187-gzip-contract'],
@@ -100,10 +115,9 @@ async function main() {
   try {
     assert.match(process.env.EXPECTED_PRODUCT_SHA ?? '', /^[0-9a-f]{40}$/)
     assert.match(process.env.EXPECTED_CONTROL_SHA ?? '', /^[0-9a-f]{40}$/)
-    assert.match(process.env.EXPECTED_AUTOMATION_SHA ?? '', /^[0-9a-f]{40}$/)
-    assert.equal(process.env.GITHUB_SHA, process.env.EXPECTED_PRODUCT_SHA)
+    assert.equal(process.env.GITHUB_SHA, process.env.EXPECTED_CONTROL_SHA)
     const main = await request('repos/xue-ding-e/DSH-Next/git/ref/heads/main')
-    assert.equal(main.object.sha, process.env.EXPECTED_CONTROL_SHA, 'main must remain at reviewed C until W passes')
+    assert.equal(main.object.sha, '27b18a0026c569e2072350c552a952483f756436', 'main moved; requires fresh review')
     for (const [repo, id, branch] of items) {
       assert.match(id ?? '', /^[1-9][0-9]+$/, `a reviewed predecessor run ID is required for ${repo}`)
       const run = await request(`repos/${repo}/actions/runs/${id}`)
@@ -112,6 +126,7 @@ async function main() {
       assert.equal(run.status, 'completed', `${repo} run ${id} has not reached a terminal state`)
       assert.notEqual(run.conclusion, null)
       if (branch) assert.equal(run.head_branch, branch)
+      if (repo === 'xue-ding-e/CC-Switch-Next') assertCcPredecessor(run)
       if (repo === 'xue-ding-e/XenTerm') assertFlutterPredecessor(run, process.env.FLUTTER_EXPECTED_SHA)
       if (repo === 'xue-ding-e/AI-Toolbox-Next') assertAiPredecessor(run)
       if (repo === 'xue-ding-e/Magpie-Next') assertMagpiePredecessor(run, process.env.MAGPIE_EXPECTED_SHA)
@@ -120,12 +135,12 @@ async function main() {
     }
     // This is a fail-closed preflight, not a cross-repository mutex. The dispatcher
     // must retain the agreed queue order and avoid launching competing heavy jobs.
-    for (const repo of ['xue-ding-e/XenTerm', 'xue-ding-e/XenTerm-Next', 'xue-ding-e/AI-Toolbox-Next', 'xue-ding-e/Magpie-Next', 'xue-ding-e/DSH-Next']) {
+    for (const repo of ['xue-ding-e/CC-Switch-Next', 'xue-ding-e/XenTerm', 'xue-ding-e/XenTerm-Next', 'xue-ding-e/AI-Toolbox-Next', 'xue-ding-e/Magpie-Next', 'xue-ding-e/DSH-Next']) {
       for (const status of ['queued', 'in_progress', 'waiting', 'requested', 'pending']) {
         const runs = await request(`repos/${repo}/actions/runs?status=${status}&per_page=100`)
         assert.equal(runs.workflow_runs.length, runs.total_count, 'incomplete active-run inventory requires manual review')
         for (const queued of runs.workflow_runs) {
-          if (isCurrentValidationRun(repo, queued, process.env.GITHUB_RUN_ID, process.env.EXPECTED_PRODUCT_SHA)) continue
+          if (isCurrentValidationRun(repo, queued, process.env.GITHUB_RUN_ID, process.env.EXPECTED_CONTROL_SHA)) continue
           assert(repo === 'xue-ding-e/XenTerm-Next' && queued.id === STALE_RUN_ID && status === 'in_progress',
             `${repo} run ${queued.id} is still ${status}; do not start DSH`)
           const run = await request(`repos/${repo}/actions/runs/${STALE_RUN_ID}`)
