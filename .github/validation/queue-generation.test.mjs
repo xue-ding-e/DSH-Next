@@ -1,14 +1,14 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
-import { assertAllowed, assertFixedPoint, assertIdentity, assertFinalStatus, PRODUCT, BASE } from './queue-generation.mjs'
+import { assertAllowed, assertFixedPoint, assertIdentity, assertFinalStatus, PRODUCT, BASE, PARENT } from './queue-generation.mjs'
 import { isCurrentValidationRun, assertMagpiePredecessor } from './heavy-queue.mjs'
 const allowed = new Set(JSON.parse(readFileSync(new URL('./queue-generated-paths.json', import.meta.url))))
-test('accepts exact source and balance parent, rejects dirty or wrong source', () => {
-  assertIdentity(PRODUCT, BASE, '')
+test('accepts exact source and reviewed parent, rejects dirty or wrong source', () => {
+  assertIdentity(PRODUCT, PARENT, '')
   assert.throws(() => assertIdentity(BASE, BASE, ''))
-  assert.throws(() => assertIdentity(PRODUCT, PRODUCT, ''))
-  assert.throws(() => assertIdentity(PRODUCT, BASE, ' M pnpm-lock.yaml'))
+  assert.throws(() => assertIdentity(PRODUCT, BASE, ''))
+  assert.throws(() => assertIdentity(PRODUCT, PARENT, ' M pnpm-lock.yaml'))
 })
 test('generated paths are exact and cannot authorize source, lock, workflow or arbitrary files', () => {
   assertAllowed(['docs/persistence-schema.json', 'packages/extensions/tool-cordis/src/api-catalog.ts'], allowed)
@@ -43,4 +43,29 @@ test('missing acknowledgement or failed review remains failure after successful 
   assert.throws(() => assertFinalStatus([true, true, true], true, false))
   assert.throws(() => assertFinalStatus([true, true, true], false, true))
   assertFinalStatus([true, true, true], true, true)
+})
+
+import { assertReviewedToolChanges, assertRecallClassification, assertRecordFiles, LINK_ADDITIONS, ROOT, BEFORE, AFTER, RECORD_FILES } from './recall-ack-guard.mjs'
+test('only exact four ownership links may change in generator scripts, never Typert or persistence tooling', () => {
+  const before = 'original\n'
+  const after = before + LINK_ADDITIONS.join('\n') + '\n'
+  assertReviewedToolChanges(['scripts/gen-cordis-catalog.ts'], before, after)
+  assert.throws(() => assertReviewedToolChanges(['scripts/persistence-schema.ts'], before, after))
+  assert.throws(() => assertReviewedToolChanges(['scripts/gen-cordis-catalog.ts', 'packages/typert/generator/src/index.ts'], before, after))
+  assert.throws(() => assertReviewedToolChanges(['scripts/gen-cordis-catalog.ts'], before, after + 'extra\n'))
+})
+test('only independently reviewed optional recall transition can be acknowledged', () => {
+  const change = { path: `${ROOT}.data.recall`, kind: 'optional-property-added', description: 'optional property added', requiresCompatibilityReview: false }
+  const review = { schemaVersion: 1, roots: [{ root: ROOT, before: BEFORE, after: AFTER, changes: [change] }] }
+  const check = { ok: false, code: 'unacknowledged-changes', changes: [{ root: ROOT, ...change }], roots: [{ root: ROOT, kind: 'event', before: BEFORE, after: AFTER }], files: [] }
+  assertRecallClassification(review, check)
+  assert.throws(() => assertRecallClassification({ ...review, roots: [...review.roots, ...review.roots] }, check))
+  assert.throws(() => assertRecallClassification({ ...review, roots: [{ ...review.roots[0], after: 'different' }] }, check))
+  assert.throws(() => assertRecallClassification({ ...review, roots: [{ ...review.roots[0], changes: [{ ...change, requiresCompatibilityReview: true }] }] }, check))
+  assert.throws(() => assertRecallClassification(review, { ...check, code: 'unexpected' }))
+})
+test('untracked export accepts exactly four official record files, not extra or partial output', () => {
+  assertRecordFiles(RECORD_FILES)
+  assert.throws(() => assertRecordFiles([...RECORD_FILES, 'other.json']))
+  assert.throws(() => assertRecordFiles(RECORD_FILES.slice(1)))
 })

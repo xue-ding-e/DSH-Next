@@ -1,4 +1,5 @@
 [
+  "docs/architecture.i18n.yaml",
   "docs/cordis-api/context.md",
   "docs/cordis-api/events.md",
   "docs/cordis-api/fiber.md",
@@ -11,6 +12,10 @@
   "docs/persistence-catalog.i18n.yaml",
   "docs/persistence-catalog.md",
   "docs/persistence-catalog.zh.md",
+  "docs/persistence-changes/2026-10-27-queued-message-recall.i18n.yaml",
+  "docs/persistence-changes/2026-10-27-queued-message-recall.md",
+  "docs/persistence-changes/2026-10-27-queued-message-recall.schema.json",
+  "docs/persistence-changes/2026-10-27-queued-message-recall.zh.md",
   "docs/persistence-schema.json",
   "docs/subsystems/README.md",
   "docs/subsystems/README.zh.md",
@@ -146,6 +151,9 @@
   "docs/subsystems/workspace.zh.md",
   "docs/subsystems/worktrees.md",
   "docs/subsystems/worktrees.zh.md",
+  "packages/api/session-controller/README.i18n.yaml",
+  "packages/client/file-upload/README.i18n.yaml",
+  "packages/client/ui-conversation/README.i18n.yaml",
   "packages/core/session/src/known-event-types.ts",
   "packages/extensions/cordis-client-runner/src/client/api-catalog.ts",
   "packages/extensions/tool-cordis/src/api-catalog.ts"

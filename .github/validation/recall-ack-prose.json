@@ -1,0 +1,12 @@
+{
+  "en": {
+    "summary": "Adds optional recall request identity and removed user content to the existing agent/inbox/spliced event for interrupted queue-to-composer handoff recovery.",
+    "compatibility": "Existing events without recall remain valid and the recovery projection ignores them. Existing readers apply the unchanged canceled splice and do not use the optional metadata, so removal is retained and content is not requeued. New recovery is restricted to committed own-Session operations, excluding inherited fork events. Older clients do not gain recall recovery support; this is not a general downgrade guarantee.",
+    "verification": "Source inspection of both inbox readers and the recovery projection; 90 bounded adapted tests passed locally, including JSON Session replay and response-loss recovery. CI run 40591419528 generated the schema and classified this sole change as optional-property-added with requiresCompatibilityReview false; 620 types unchanged. Full locked-toolchain behavior, disk persistence, SDK and native UI validation remain pending."
+  },
+  "zh": {
+    "summary": "在现有 agent/inbox/spliced 事件中增加可选的撤回请求身份和被移除用户内容，用于恢复中断的队列到输入框交付。",
+    "compatibility": "不含 recall 的已有事件仍然有效，恢复投影忽略这些事件。已有读取方按未改变的 canceled splice 执行移除，不使用可选元数据，因此保留移除结果且不会重新入队。新的恢复只处理本 Session 所有的已提交操作，排除分叉继承事件。旧客户端不会获得撤回恢复能力；这并非通用降级保证。",
+    "verification": "已检查双向 inbox 读取和恢复投影源码；本地 90 项有界适配测试通过，包括 JSON Session 回放及响应丢失恢复。CI 运行 40591419528 生成了 schema，将唯一变化判定为 optional-property-added、requiresCompatibilityReview false；620 个类型未变。完整锁定工具链行为、磁盘持久化、SDK 和原生 UI 验证仍待完成。"
+  }
+}

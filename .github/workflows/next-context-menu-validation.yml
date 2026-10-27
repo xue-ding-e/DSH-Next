@@ -30,7 +30,7 @@ concurrency:
   cancel-in-progress: false
 env:
   EXPECTED_CONTROL_SHA: ${{ inputs.expected_control_sha }}
-  EXPECTED_PRODUCT_SHA: 37a01405d485a8a5d509a60e36819d2b0e749285
+  EXPECTED_PRODUCT_SHA: 6038256916715726b7adbb0522881ea15275d42f
   DSH_TELEMETRY_DISABLED: '1'
   DSH_GATE_CONCURRENCY: '2'
   DSH_OXLINT_THREADS: '2'
@@ -72,16 +72,16 @@ jobs:
         timeout-minutes: 5
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
-          ref: 37a01405d485a8a5d509a60e36819d2b0e749285
+          ref: 6038256916715726b7adbb0522881ea15275d42f
           path: product
-          fetch-depth: 2
+          fetch-depth: 3
           persist-credentials: false
       - name: Verify identity before dependency scripts
         timeout-minutes: 2
         run: |
           test "$GITHUB_SHA" = "$EXPECTED_CONTROL_SHA"
           test "$(git -C product rev-parse HEAD)" = "$EXPECTED_PRODUCT_SHA"
-          test "$(git -C product rev-parse HEAD^)" = 282f8d630784eab0d935ca06155d96f773983b1e
+          test "$(git -C product rev-parse HEAD^)" = 37a01405d485a8a5d509a60e36819d2b0e749285
           test -z "$(git -C product status --porcelain)"
           echo "PNPM_CONFIG_STORE_DIR=$RUNNER_TEMP/pnpm-store" >> "$GITHUB_ENV"
       - name: Set up locked package manager without install

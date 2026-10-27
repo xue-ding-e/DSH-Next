@@ -1,10 +1,12 @@
+import { assertReviewedToolChanges, assertRecallClassification, assertRecordFiles, RECORD, DOC_PAIRS } from './recall-ack-guard.mjs'
 import assert from 'node:assert/strict'
 import { createHash } from 'node:crypto'
 import { closeSync, mkdirSync, openSync, readFileSync, writeFileSync } from 'node:fs'
 import { resolve, join } from 'node:path'
 import { spawnSync } from 'node:child_process'
 
-export const PRODUCT = '37a01405d485a8a5d509a60e36819d2b0e749285'
+export const PRODUCT = '6038256916715726b7adbb0522881ea15275d42f'
+export const PARENT = '37a01405d485a8a5d509a60e36819d2b0e749285'
 export const BASE = '282f8d630784eab0d935ca06155d96f773983b1e'
 const generators = ['gen-cordis-catalog', 'gen-cordis-inspect-catalog', 'gen-persistence-catalog']
 const sha256 = data => createHash('sha256').update(data).digest('hex')
@@ -16,7 +18,7 @@ export function assertFixedPoint(first, second) {
 }
 export function assertIdentity(head, parent, status) {
   assert.equal(head, PRODUCT)
-  assert.equal(parent, BASE)
+  assert.equal(parent, PARENT)
   assert.equal(status, '', 'product checkout must start clean')
 }
 export function assertFinalStatus(generated, review, acknowledged) {
@@ -60,9 +62,8 @@ function main() {
       assertAllowed(changes, allowed)
       return changes.map(path => ({ path, sha256: sha256(readFileSync(join(root, path))) }))
     }
-    // Baseline type declarations and generator implementation must be the same
-    // tool family; this source candidate changes no generator code.
-    assert.equal(git('diff', '--name-only', BASE, PRODUCT, '--', 'scripts'), '')
+    const changedTools = git('diff', '--name-only', BASE, PRODUCT, '--', 'scripts', 'packages/typert').trim().split('\n').filter(Boolean)
+    assertReviewedToolChanges(changedTools, git('show', `${BASE}:scripts/gen-cordis-catalog.ts`), git('show', `${PRODUCT}:scripts/gen-cordis-catalog.ts`))
     writeFileSync(join(evidence, 'base.schema.json'), git('show', `${BASE}:docs/persistence-schema.json`))
     const generated = generators.map(name => run(`first-${name}`, ['run', name]))
     const first = snapshot()
@@ -80,7 +81,19 @@ function main() {
     // No acknowledgement is fabricated here. A required decision or missing
     // acknowledgement remains nonzero and visible, even if the diff is useful.
     const review = run('persistence-review', ['--silent', 'run', 'persistence-review', '--before', join(evidence, 'base.schema.json'), '--after', 'docs/persistence-schema.json', '--json'])
+    const initialAck = run('verify-before-record', ['--silent', 'run', 'verify-persistence-changes', '--json'])
+    assert(review && !initialAck, 'review must succeed and exact unacknowledged change must remain')
+    assertRecallClassification(JSON.parse(readFileSync(join(evidence, 'persistence-review.stdout'), 'utf8')), JSON.parse(readFileSync(join(evidence, 'verify-before-record.stdout'), 'utf8')))
+    assert(generated.every(Boolean), 'fix all generator failures before recording')
+    assert(run('record-recall', ['--silent', 'run', 'persistence-changes', '--record', RECORD, '--prose', new URL('./recall-ack-prose.json', import.meta.url).pathname, '--json']), 'official acknowledgement generation failed')
+    assertRecordFiles(git('ls-files', '--others', '--exclude-standard', '-z').split('\0').filter(Boolean))
+    assert(run('record-doc-pairs', ['run', 'verify-translation-pairing', '--write', ...DOC_PAIRS]), 'paired documentation recording failed')
+    const recorded = snapshot()
+    for (const name of generators) assert(run(`final-${name}`, ['run', name]), 'post-record generator failed')
+    assertFixedPoint(recorded, snapshot())
+    for (const name of generators) assert(run(`final-check-${name}`, ['run', name, '--check']), 'final freshness failed')
     const acknowledged = run('verify-persistence-changes', ['--silent', 'run', 'verify-persistence-changes', '--json'])
+    assert(run('verify-doc-pairs', ['run', 'verify-translation-pairing', ...DOC_PAIRS]), 'paired documentation check failed')
     snapshot()
     assertFinalStatus(generated, review, acknowledged)
   } catch (error) {
@@ -94,11 +107,20 @@ function main() {
       const paths = git('diff', '--name-only', '-z', 'HEAD').split('\0').filter(Boolean)
       const untracked = git('ls-files', '--others', '--exclude-standard', '-z').split('\0').filter(Boolean)
       assertAllowed([...paths, ...untracked], allowed)
-      assert.equal(untracked.length, 0, 'new generator output needs explicit artifact review; no incomplete patch')
-      writeFileSync(join(evidence, 'generated.patch'), git('diff', '--binary', 'HEAD'))
-      writeFileSync(join(evidence, 'generated-files.json'), JSON.stringify(paths.map(path => ({ path, sha256: sha256(readFileSync(join(root, path))) })), null, 2) + '\n')
+      if (untracked.length) assertRecordFiles(untracked)
+      const index = join(process.env.RUNNER_TEMP, 'dsh-generated-artifact.index')
+      const isolatedGit = (...args) => {
+        const r = spawnSync('git', args, { cwd: root, env: { ...process.env, GIT_INDEX_FILE: index }, encoding: 'utf8', timeout: 30_000, maxBuffer: 32 * 1024 * 1024 })
+        assert.equal(r.status, 0, 'isolated artifact index failed')
+        return r.stdout
+      }
+      isolatedGit('read-tree', 'HEAD')
+      const exported = [...paths, ...untracked]
+      if (exported.length) isolatedGit('add', '--', ...exported)
+      writeFileSync(join(evidence, 'generated.patch'), isolatedGit('diff', '--cached', '--binary', 'HEAD'))
+      writeFileSync(join(evidence, 'generated-files.json'), JSON.stringify([...paths, ...untracked].map(path => ({ path, sha256: sha256(readFileSync(join(root, path))) })), null, 2) + '\n')
     } catch (error) { failure = `${failure ?? ''}\nArtifact guard: ${error.message}`; process.exitCode = 1 }
-    writeFileSync(join(evidence, 'generation-result.json'), JSON.stringify({ product: PRODUCT, base: BASE, control: process.env.GITHUB_SHA, node: process.version, packageManager: JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')).packageManager, observed, lockSha256: sha256(readFileSync(join(root, 'pnpm-lock.yaml'))), results, failure, complete: false, scope: 'unvalidated generated diff only; no product acceptance or persistence acknowledgement' }, null, 2) + '\n')
+    writeFileSync(join(evidence, 'generation-result.json'), JSON.stringify({ product: PRODUCT, base: BASE, control: process.env.GITHUB_SHA, node: process.version, packageManager: JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')).packageManager, observed, lockSha256: sha256(readFileSync(join(root, 'pnpm-lock.yaml'))), results, failure, complete: false, scope: 'unvalidated generated diff only; official scoped acknowledgement is reviewable, not product acceptance' }, null, 2) + '\n')
   }
 }
 if (import.meta.main) main()
