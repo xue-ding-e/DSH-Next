@@ -730,3 +730,26 @@ it.each(['desktopOnboardingVisible', 'onboarding'] as const)('defers bonus displ
   await vi.waitFor(() => { expect(operations.bonusNoticeShown).toHaveBeenCalledExactlyOnceWith(notice.orderId) })
   expect(screen.getByText(notice.message)).toBeTruthy()
 })
+
+
+it.each([en, zh])('offers a localized manual balance refresh and an actionable read failure', async (copy) => {
+  const operations = mount({ status: 'credential-stored', attempt: null }, copy, { balance: { status: 'failed' } })
+  expect(screen.getByText(copy.balanceRefreshFailed).getAttribute('role')).toBe('status')
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: copy.refreshBalance })) })
+  expect(operations.refreshAccount).toHaveBeenCalledOnce()
+})
+
+it('disables manual refresh while the shared account read is pending', () => {
+  const operations = operationsOf({ status: 'credential-stored', attempt: null })
+  const snapshot = { ...operations.hooks.account.getSnapshot(), refreshing: true }
+  render(<AccountSection {...({} as GlobalStandardProps)} {...operations}
+    useAccount={selector => selector(snapshot)}
+    useTheme={selector => selector(operations.hooks.theme.getSnapshot())}
+    close={() => {}} t={key => en[key as AccountKey]} />)
+  const button = screen.getByRole('button', { name: en.refreshingBalance })
+  expect(button.hasAttribute('disabled')).toBe(true)
+  expect(button.getAttribute('aria-busy')).toBe('true')
+  fireEvent.click(button)
+  fireEvent.click(button)
+  expect(operations.refreshAccount).not.toHaveBeenCalled()
+})

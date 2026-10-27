@@ -24,6 +24,8 @@ export interface AccountSnapshot {
   details: Partial<AccountDetails> | undefined
   /** Shared picture load; absent until a profile supplies a picture or after sign-out. */
   avatar: AccountAvatarSnapshot | undefined
+  /** Whether the shared profile and balance read is in flight. */
+  refreshing?: boolean
   /** Whether the state stream failed. */
   failed: boolean
   /** Explicitly opened account dialog outside onboarding. */
@@ -90,8 +92,8 @@ export interface AccountSectionInjected {
 export type AccountSectionProps =
   PropsRuntime<'settings.section'> & PropsLocale<'settings.account'> & InjectFace<AccountSectionInjected>
 /** @param props - localized actions, account subscription, and the shared Platform page channel. @returns account settings UI. */
-export function AccountSection({ t, useAccount, useTheme, start, cancel, openPlatformPage, avatarFailed }: AccountSectionProps) {
-  const { view: state, details, avatar, failed: streamFailed } = useAccount(value => value)
+export function AccountSection({ t, useAccount, useTheme, start, cancel, openPlatformPage, avatarFailed, refreshAccount }: AccountSectionProps) {
+  const { view: state, details, avatar, failed: streamFailed, refreshing = false } = useAccount(value => value)
   const colorScheme = useTheme(snapshot => snapshot.active.colorScheme)
   // The shared host owns the native view; this page holds only its own request,
   // and only while it is the latest owner.
@@ -214,12 +216,16 @@ export function AccountSection({ t, useAccount, useTheme, start, cancel, openPla
         <div className={css.row}>
           <span className={css.secondary}>{t('more')}</span>
           <div className={css.links}>
+            {signedIn && <Button variant="outline" disabled={refreshing} aria-busy={refreshing}
+              onClick={() => { void refreshAccount() }}>{t(refreshing ? 'refreshingBalance' : 'refreshBalance')}</Button>}
             {platformLink(t('usage'), css.linkButton)}
             <a className={`${css.linkButton} ${css.primary}`} href={state?.links.topUpUrl} aria-disabled={state === undefined}
               target="_blank" rel="noreferrer"
               onClick={(event) => { if (openPlatformPage !== undefined && signedIn) { event.preventDefault(); showPage(openPlatformPage, 'top-up') } }}>{t('topUp')}</a>
           </div>
         </div>
+        {signedIn && !refreshing && details?.balance?.status === 'failed'
+          && <p className={css.secondary} role="status">{t('balanceRefreshFailed')}</p>}
       </div>
     </section>
   )

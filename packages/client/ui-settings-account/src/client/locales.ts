@@ -3,6 +3,9 @@ import { onboardingZh, onboardingEn, onboardingJa, onboardingEs, onboardingFr, o
 
 /** English account dictionary. */
 export const en = {
+  refreshBalance: 'Refresh balance',
+  refreshingBalance: 'Refreshing balance…',
+  balanceRefreshFailed: 'Could not refresh the balance. Try refreshing again or view it on Platform.',
   modelSignInRequired: 'Model unavailable. Please sign in and try again.',
   sessionExpired: 'You have signed out of your account, please log in again.',
   ...onboardingEn,
@@ -39,6 +42,9 @@ export const en = {
 export type AccountKey = keyof typeof en
 /** Chinese account settings copy. */
 export const zh: Record<AccountKey, string> = {
+  refreshBalance: '刷新余额',
+  refreshingBalance: '正在刷新余额…',
+  balanceRefreshFailed: '余额刷新失败，请重试或前往开放平台查看。',
   modelSignInRequired: '当前模型暂不可用，请登录后再试',
   sessionExpired: '登录信息已失效，请重新登录',
   ...onboardingZh,
@@ -74,6 +80,9 @@ export const zh: Record<AccountKey, string> = {
 
 /** Japanese copy, checked against the English keys. */
 export const ja = {
+  refreshBalance: '残高を更新',
+  refreshingBalance: '残高を更新中…',
+  balanceRefreshFailed: '残高を更新できませんでした。再試行するか、プラットフォームで確認してください。',
   ...onboardingJa,
   'modelSignInRequired': 'モデルを利用できません。ログインしてから再試行してください。',
   'sessionExpired': 'アカウントからログアウトしました。もう一度ログインしてください。',
@@ -134,6 +143,9 @@ export const ja = {
 
 /** Spanish dictionary, checked against the English keys. */
 export const es = {
+  refreshBalance: 'Actualizar saldo',
+  refreshingBalance: 'Actualizando saldo…',
+  balanceRefreshFailed: 'No se pudo actualizar el saldo. Inténtalo de nuevo o consúltalo en la plataforma.',
   modelSignInRequired: 'Modelo no disponible. Por favor inicia sesión y vuelve a intentarlo.',
   sessionExpired: 'Has cerrado sesión en tu cuenta, inicia sesión nuevamente.',
   ...onboardingEs,
@@ -169,6 +181,9 @@ export const es = {
 
 /** French dictionary, checked against the English keys. */
 export const fr = {
+  refreshBalance: 'Actualiser le solde',
+  refreshingBalance: 'Actualisation du solde…',
+  balanceRefreshFailed: 'Impossible d’actualiser le solde. Réessayez ou consultez la plateforme.',
   modelSignInRequired: 'Modèle indisponible. Veuillez vous connecter et réessayer.',
   sessionExpired: 'Vous vous êtes déconnecté de votre compte, veuillez vous reconnecter.',
   ...onboardingFr,
@@ -204,6 +219,9 @@ export const fr = {
 
 /** German dictionary, checked against the English keys. */
 export const de = {
+  refreshBalance: 'Guthaben aktualisieren',
+  refreshingBalance: 'Guthaben wird aktualisiert…',
+  balanceRefreshFailed: 'Das Guthaben konnte nicht aktualisiert werden. Erneut versuchen oder auf der Plattform nachsehen.',
   modelSignInRequired: 'Modell nicht verfügbar. Bitte melden Sie sich an und versuchen Sie es erneut.',
   sessionExpired: 'Sie haben sich von Ihrem Konto abgemeldet. Bitte melden Sie sich erneut an.',
   ...onboardingDe,
@@ -239,6 +257,9 @@ export const de = {
 
 /** Russian dictionary, checked against the English keys. */
 export const ru = {
+  refreshBalance: 'Обновить баланс',
+  refreshingBalance: 'Обновление баланса…',
+  balanceRefreshFailed: 'Не удалось обновить баланс. Повторите попытку или проверьте его на платформе.',
   modelSignInRequired: 'Модель недоступна. Пожалуйста, войдите в систему и повторите попытку.',
   sessionExpired: 'Вы вышли из своей учетной записи, пожалуйста, войдите снова.',
   ...onboardingRu,
@@ -274,6 +295,9 @@ export const ru = {
 
 /** Portuguese dictionary, checked against the English keys. */
 export const pt = {
+  refreshBalance: 'Atualizar saldo',
+  refreshingBalance: 'Atualizando saldo…',
+  balanceRefreshFailed: 'Não foi possível atualizar o saldo. Tente novamente ou consulte a plataforma.',
   modelSignInRequired: 'Modelo indisponível. Faça login e tente novamente.',
   sessionExpired: 'Você saiu da sua conta, faça login novamente.',
   ...onboardingPt,

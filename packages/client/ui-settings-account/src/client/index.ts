@@ -111,8 +111,11 @@ export function apply(ctx: Context): void {
         if (!result.ok) throw new Error('account balance failed')
         return result.value
       }),
-    ]).then(() => undefined)
+    ]).then(() => {
+      if (generation === revision) publish({ ...snapshot, refreshing: false })
+    })
     refreshing = request
+    publish({ ...snapshot, refreshing: true })
     void request.finally(() => { if (refreshing === request) refreshing = undefined })
     return request
   }
@@ -137,7 +140,7 @@ export function apply(ctx: Context): void {
       avatar.reset()
       browser.dispose()
       const { loginFailed: _loginFailed, ...current } = snapshot
-      publish({ ...current, view: undefined, details: undefined, avatar: undefined, failed: false, loginVisible: false })
+      publish({ ...current, view: undefined, details: undefined, avatar: undefined, failed: false, refreshing: false, loginVisible: false })
       notices.end()
       return stream.dispose()
     }
@@ -151,7 +154,7 @@ export function apply(ctx: Context): void {
         const initialize = frame.value.status === 'credential-stored' && frame.value.attempt?.phase === 'succeeded'
           && snapshot.view?.attempt?.phase !== 'succeeded'
         const { notices: previousNotices, ...previous } = snapshot
-        publish({ ...previous, view: frame.value, details: undefined, avatar: undefined, failed: false,
+        publish({ ...previous, view: frame.value, details: undefined, avatar: undefined, failed: false, refreshing: false,
           ...(frame.value.status === 'credential-stored' && previousNotices ? { notices: previousNotices } : {}) })
         browser.update(frame.value)
         frame.accept()
