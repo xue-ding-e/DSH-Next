@@ -1,6 +1,12 @@
-# DeepSeek Harness
+# DSH-Next
 
 English | [中文](README.zh.md)
+
+DSH-Next is an independent community-maintained source repository based on [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness). It is not an official DeepSeek release and is not affiliated with or endorsed by DeepSeek.
+
+`main` has independent linear history; `upstream-main` preserves the complete official `master` history without changes. The initial source snapshot is [22ddee3](https://github.com/deepseek-ai/deepseek-harness/commit/22ddee3792402c3e70ec5f86a63c3e3e895a2f60). The original [MIT license](LICENSE), [third-party notices](THIRD_PARTY_NOTICES.md), and author attribution are preserved.
+
+Release automation is not configured. Upstream GitHub Actions workflows are preserved in `.github/upstream-workflows/` with `.disabled` suffixes, and repository Actions is disabled. This repository has no published DSH-Next packages or binaries; the npm command below installs upstream software, not DSH-Next.
 
 DeepSeek Harness (`dsh`) is an open-source agent harness developed by [DeepSeek AI](https://deepseek.com).
 
@@ -31,8 +37,8 @@ The command starts the Web UI at `http://127.0.0.1:3080` by default and opens it
 To run from a repository checkout:
 
 ```sh
-git clone https://github.com/deepseek-ai/deepseek-harness.git
-cd deepseek-harness
+git clone https://github.com/xue-ding-e/DSH-Next.git
+cd DSH-Next
 pnpm install
 pnpm run build
 pnpm dsh web
