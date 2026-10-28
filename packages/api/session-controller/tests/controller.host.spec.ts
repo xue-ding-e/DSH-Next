@@ -47,6 +47,7 @@ describe('SessionController facade', () => {
     }) as never)
     let uploadResolver: ((sessionId: SessionId) => Promise<Agent>) | undefined
     ctx.provide('fileUploads', {
+      registerRecallResolver: () => () => {},
       registerAgentResolver: (resolve: (sessionId: SessionId) => Promise<Agent>) => {
         uploadResolver = resolve
         return () => {}

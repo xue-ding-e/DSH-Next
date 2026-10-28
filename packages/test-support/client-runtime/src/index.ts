@@ -125,6 +125,8 @@ export interface FeatureHandle {
 
 /** Mutable fail-loud file-upload stub installed by {@link SlotTestRuntime}. */
 export interface TestFileUpload {
+  /** Test-supplied queued-file read; the default rejects every call. */
+  readQueuedFile: (sessionId: SessionId, ...args: unknown[]) => Promise<File>
   /** Test-supplied upload behavior; the default rejects every call. */
   upload: (sessionId: SessionId, ...args: unknown[]) => Promise<unknown>
   /** Test-supplied image upload behavior; the default rejects every call. */
@@ -260,6 +262,7 @@ export class SlotTestRuntime {
     this.remote = new TestRemote(ctx)
     this.workspaces = new TestWorkspaces(this.stabilizer)
     this.fileUpload = {
+      readQueuedFile: () => Promise.reject(new Error('client test runtime: queued file read is not stubbed')),
       upload: () => Promise.reject(new Error('client test runtime: file upload is not stubbed')),
       uploadImage: () => Promise.reject(new Error('client test runtime: image upload is not stubbed')),
     }

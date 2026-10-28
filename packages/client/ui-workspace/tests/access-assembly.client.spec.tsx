@@ -54,7 +54,13 @@ async function bench(access: ClientAccessState, options: { ungroupedSession?: Se
   runtime.ctx.provide('uiConversation', {})
   runtime.ctx.provide('layout', { selectPanel: vi.fn(), beginNavigation: () => new AbortController().signal })
   runtime.releaseWorkspaceSource()
-  runtime.remote.provideNamespaces({ directoryPicker: {} })
+  runtime.remote.provideNamespaces({
+    directoryPicker: {},
+    session: {
+      canOpenWorkspacePath: async () => ({ ok: true, value: true }),
+      openWorkspacePath: async () => ({ ok: true, value: { opened: true } }),
+    },
+  })
   const locale = new LocaleRuntime(runtime.ctx)
   runtime.ctx.provide('locale', locale)
   runtime.slots.installLocale(locale)

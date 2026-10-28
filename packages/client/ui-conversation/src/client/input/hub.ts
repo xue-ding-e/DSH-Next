@@ -28,6 +28,13 @@ import { SessionInputShell } from './facade.ts'
 import { reportMessageSubmission } from './submission-analytics.ts'
 import { readConversationDraft } from '../stores.ts'
 
+declare module '@deepseek-ai/dsh-api-session-controller/client' {
+  interface SessionReferenceSourceMap {
+    /** Exact Session generation retained until a queue-recall draft is restored. */
+    conversationRecall: unknown
+  }
+}
+
 /** Structural command face for per-session popup resolution. */
 interface CommandFace {
   popupFor(actx: Context): PopupDismissFace
@@ -42,6 +49,11 @@ interface InputTriggerServiceFace {
 /** Attachment-send face resolved lazily to keep hub/service construction acyclic. */
 interface ConversationAttachmentFace {
   readonly blocks: ComposerBlocks
+  canRecallQueue(session: SessionFace): boolean
+  hasPendingRecall(session: SessionFace): boolean
+  recallQueue(session: SessionFace, stillAccepts: () => boolean, signal?: AbortSignal): Promise<{
+    readonly text: string; readonly attachmentIds: readonly DraftAttachmentId[]; commit(): void
+  } | undefined>
   sendSession(
     session: SessionFace,
     text: string,
@@ -133,6 +145,13 @@ export class InputHub implements SessionInputResolver {
           && this.conversation().blocks.storeFor(session.sessionId).getSnapshot() === undefined
       },
       steerQueue: () => { void this.steerQueue(session, shell) },
+      canRecallQueue: () => this.conversation().canRecallQueue(session),
+      recallQueue: (stillAccepts, signal) => this.conversation().recallQueue(session, stillAccepts, signal),
+      recallFailed: () => this.t('queue.recallFailed'),
+      retainRecall: () => {
+        const reference = this.sessions().retain(session.sessionId, { source: 'conversationRecall' })
+        return () => { reference.release() }
+      },
       commandAttachments: {
         serialize: async (ids) => {
           const result = await this.conversation().serializeDraftAttachments(ids)
@@ -180,6 +199,14 @@ export class InputHub implements SessionInputResolver {
       }, 'conversation.input: reference catalogs')
     })
     shell.setDraft(readConversationDraft(binding.sessionId))
+    const conversation = this.rootCtx.get('conversation') as ConversationAttachmentFace | undefined
+    if (conversation !== undefined) {
+      try {
+        if (conversation.hasPendingRecall(session)) shell.notify('info', this.t('queue.recallRecovery'))
+      } catch (_error: unknown) {
+        shell.notify('error', this.t('queue.recallFailed'))
+      }
+    }
     return shell
   }
 

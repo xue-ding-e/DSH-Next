@@ -18,6 +18,7 @@
     { "path": "../../util/crypto" },
     { "path": "../../attachment/attachment" },
     { "path": "../../core/session" },
+    { "path": "../../llm/llm" },
     { "path": "../../typert/protocol" }
   ]
 }
