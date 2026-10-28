@@ -12,7 +12,7 @@ import type { MessageId } from '@deepseek-ai/dsh-llm/brand'
 import type { SessionId, SessionSeq } from '@deepseek-ai/dsh-session/types'
 import type { RemoteResult } from '@deepseek-ai/dsh-typert-protocol'
 import type { ObservableSnapshot } from '@deepseek-ai/dsh-client-store'
-import type { PromptContentPart, QueueAction, SessionRequestId } from '../../types.ts'
+import type { PromptContentPart, QueueAction, SessionRequestId, SessionUpdateQueueValue } from '../../types.ts'
 import type { PendingSubmissionAttachment, SessionSnapshot } from './snapshot.ts'
 
 /**
@@ -104,7 +104,7 @@ export interface ISession {
    * @param action - requested queue operation.
    * @returns acceptance, or a business/transport error.
    */
-  updateQueue(itemId: MessageId, action: QueueAction): Promise<RemoteResult<{ accepted: true }>>
+  updateQueue(itemId: MessageId, action: QueueAction): Promise<RemoteResult<SessionUpdateQueueValue>>
   /**
    * Cancel the running turn. Pending queued work remains and resumes in FIFO
    * order after the Host reaches cancellation quiescence.

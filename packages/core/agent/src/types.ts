@@ -4,6 +4,7 @@
  * @module @deepseek-ai/dsh-agent/types
  */
 
+import type { Branded } from '@deepseek-ai/dsh-brand'
 import type { ReasoningEffortId } from '@deepseek-ai/dsh-llm/brand'
 import type { UserMessage } from '@deepseek-ai/dsh-llm/types'
 // Type-only: the Workspace registry's archive-admission family map this registry merges `turn` into.
@@ -113,6 +114,8 @@ declare module '@deepseek-ai/dsh-session/types' {
       removedCount?: number
       inserted: UserMessage[]
       outcome?: 'canceled'
+      /** Atomic recoverable handoff of one pending user message to its caller. */
+      recall?: { requestId: Branded<'session-request-id'>; message: UserMessage }
     }
     /**
      * Complete model selection that applies from the next model step until a

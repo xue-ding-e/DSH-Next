@@ -9,7 +9,7 @@ import {
   IconTrashOutlineRegular, Tooltip,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { InboxState } from '@deepseek-ai/dsh-agent/types'
-import type { QueueAction } from '@deepseek-ai/dsh-api-session-controller/types'
+import type { QueueMutationAction } from '../service.ts'
 import type { MessageId } from '@deepseek-ai/dsh-llm/brand'
 import type { UserTextFacts } from '../index.ts'
 import { NS } from '../locales.ts'
@@ -28,7 +28,7 @@ function textOf(content: InboxState['next-turn'][number]['content']): string | n
 
 /** Queue operations injected by the session-scoped registration. */
 export interface QueueDockInjected {
-  updateQueue: (itemId: MessageId, action: QueueAction) => Promise<void>
+  updateQueue: (itemId: MessageId, action: QueueMutationAction) => Promise<void>
   notify: (level: 'info' | 'error', text: string) => void
   /** Resolve one durable queued image into a session-scoped browser URL. */
   loadImage: (attachment: ImageAttachmentRef) => Promise<string>
@@ -141,7 +141,7 @@ export function QueueDock({ useSession, useProjection, updateQueue, notify, load
 
   const applyAction = async (
     itemId: MessageId,
-    action: QueueAction,
+    action: QueueMutationAction,
     failure: string,
   ): Promise<boolean> => {
     setBusy(itemId)

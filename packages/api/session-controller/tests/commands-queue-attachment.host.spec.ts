@@ -2,6 +2,9 @@ import TypertRegistry from '@deepseek-ai/dsh-typert-registry'
 import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
 import { RemoteError } from '@deepseek-ai/dsh-typert-protocol'
 import { Context } from '@deepseek-ai/cordis'
+import { brandString } from '@deepseek-ai/dsh-brand'
+import type { SessionRequestId } from '../src/types.ts'
+import type { FileUploadReceiptId, StagedAttachment } from '@deepseek-ai/dsh-client-file-upload/types'
 import AgentRegistry from '@deepseek-ai/dsh-agent'
 import type { Agent, Inbox } from '@deepseek-ai/dsh-agent'
 import { AttachmentError, AttachmentId } from '@deepseek-ai/dsh-attachment'
@@ -318,6 +321,12 @@ describe('Session queue commands', () => {
       await expectFailure(Promise.resolve().then(() => controller.updateQueue({
         sessionId: agent.id, itemId: queued.id, action: { kind: 'remove' },
       })), 'session/agent-busy')
+      for (const action of [
+        { kind: 'recall' as const, requestId: brandString<SessionRequestId>('blocked-child'), expectedContent: queued.content },
+        { kind: 'recover-recall' as const, requestId: brandString<SessionRequestId>('blocked-child') },
+      ]) {
+        await expectFailure(controller.updateQueue({ sessionId: agent.id, itemId: queued.id, action }), 'session/agent-busy')
+      }
       expect(inbox.nextTurn).toEqual([queued])
       await ctx.fiber.dispose()
     }
@@ -596,5 +605,129 @@ describe('Session attachment authorization', () => {
       sessionId: SessionId('unreadable'), attachmentId: AttachmentId('att'),
     }), 'gateway/internal')
     await ctx.fiber.dispose()
+  })
+})
+
+
+describe('Session queue recall', () => {
+  async function recallHarness() {
+    const harness = await commandHarness()
+    await harness.controller.initialize()
+    const recall = harness.inbox.recall.bind(harness.inbox)
+    harness.inbox.recall = (itemId, requestId) => {
+      const message = harness.inbox.nextTurn.find(value => value.id === itemId)
+      const removed = recall(itemId, requestId)
+      if (removed && message !== undefined) harness.agent.session.append('agent/inbox/spliced', {
+        target: 'next-turn', start: 0, removedCount: 1, inserted: [], outcome: 'canceled',
+        recall: { requestId, message },
+      })
+      return removed
+    }
+    const commit = vi.fn()
+    const dispose = vi.fn()
+    const stageRecalled = vi.fn((_: Agent, attachments: readonly StagedAttachment[]) => ({
+      receiptIds: attachments.map((_, index) => brandString<FileUploadReceiptId>(`recalled-${index}`)),
+      commit,
+      [Symbol.dispose]: dispose,
+    }))
+    const retirePrompt = vi.fn()
+    harness.ctx.provide('fileUploads', { stageRecalled, retirePrompt } as never)
+    return { ...harness, commit, dispose, stageRecalled, retirePrompt }
+  }
+
+  const requestId = brandString<SessionRequestId>('recall-1')
+  function queued(text = 'queued') {
+    return createUserMessage({ content: [{ type: 'text' as const, text }], source: { kind: 'user' as const } })
+  }
+
+  it('recalls full ordered content with fresh receipts, preserving other queue items and retry identity', async () => {
+    const { ctx, controller, agent, inbox, stageRecalled, commit, retirePrompt } = await recallHarness()
+    try {
+      const before = queued('before')
+      const after = queued('after')
+      const message = createUserMessage({
+        content: [
+          { type: 'text', text: 'first' },
+          { type: 'image', attachment: { attachmentId: AttachmentId('image'), mediaType: 'image/png', bytes: 3, width: 1, height: 1 } },
+          { type: 'text', text: 'second' },
+          { type: 'file', attachment: { attachmentId: AttachmentId('file'), name: 'notes.txt', bytes: 7 } },
+        ],
+        source: { kind: 'user', rpcId: brandString<SessionRequestId>('original') },
+      })
+      inbox.append('next-turn', before); inbox.append('next-turn', message); inbox.append('next-turn', after)
+      const request = { sessionId: agent.id, itemId: message.id,
+        action: { kind: 'recall' as const, requestId, expectedContent: message.content } }
+      const result = await controller.updateQueue(request)
+      expect(result.recalled?.content).toEqual(message.content)
+      expect(result.recalled?.attachments).toEqual([
+        { type: 'image', receiptId: 'recalled-0', image: { attachmentId: 'image', mediaType: 'image/png', bytes: 3, width: 1, height: 1 } },
+        { type: 'file', receiptId: 'recalled-1', file: { attachmentId: 'file', name: 'notes.txt', bytes: 7 } },
+      ])
+      expect(inbox.nextTurn).toEqual([before, after])
+      expect(stageRecalled).toHaveBeenCalledTimes(1)
+      expect(commit).toHaveBeenCalledTimes(1)
+      expect(retirePrompt).toHaveBeenCalledWith(agent, 'original')
+      expect(await controller.updateQueue(request)).toEqual(result)
+      expect(stageRecalled).toHaveBeenCalledTimes(1)
+      await expect(controller.updateQueue({ ...request, itemId: after.id })).rejects.toMatchObject({ code: 'gateway/bad-request' })
+      expect(inbox.nextTurn).toEqual([before, after])
+    } finally { await ctx.fiber.dispose() }
+  })
+
+  it('rejects stale content, running/next-step occurrences, foreign sessions and non-user sources without staging', async () => {
+    const { ctx, controller, agent, inbox, stageRecalled } = await recallHarness()
+    try {
+      const message = queued()
+      const step = queued('step')
+      const plugin = createUserMessage({ content: [{ type: 'text', text: 'context' }], source: { kind: 'test' } })
+      inbox.append('next-turn', message); inbox.append('next-step', step); inbox.append('next-turn', plugin)
+      for (const [sessionId, itemId, content] of [
+        [agent.id, message.id, queued('stale').content], [agent.id, step.id, step.content],
+        [agent.id, plugin.id, plugin.content], [SessionId('foreign'), message.id, message.content],
+        [agent.id, MessageId('already-claimed'), message.content],
+      ] as const) {
+        await expect(controller.updateQueue({ sessionId, itemId,
+          action: { kind: 'recall', requestId, expectedContent: content } })).rejects.toBeDefined()
+      }
+      expect(stageRecalled).not.toHaveBeenCalled()
+      expect(inbox.nextTurn).toEqual([message, plugin])
+      expect(inbox.nextStep).toEqual([step])
+    } finally { await ctx.fiber.dispose() }
+  })
+
+  it('rolls back staged receipts on precommit failure and succeeds on a same-ID retry', async () => {
+    const { ctx, controller, agent, inbox, commit, dispose } = await recallHarness()
+    try {
+      const message = createUserMessage({ source: { kind: 'user' }, content: [{ type: 'file',
+        attachment: { attachmentId: AttachmentId('rollback-file'), name: 'note.txt', bytes: 3 } }] })
+      inbox.append('next-turn', message)
+      const remove = vi.spyOn(inbox, 'recall').mockImplementationOnce(() => { throw new Error('storage failed') })
+      const request = { sessionId: agent.id, itemId: message.id,
+        action: { kind: 'recall' as const, requestId, expectedContent: message.content } }
+      await expect(controller.updateQueue(request)).rejects.toThrow('storage failed')
+      expect(commit).not.toHaveBeenCalled(); expect(dispose).toHaveBeenCalledTimes(1)
+      expect(inbox.nextTurn).toEqual([message])
+      remove.mockRestore()
+      expect((await controller.updateQueue(request)).recalled?.content).toEqual(message.content)
+    } finally { await ctx.fiber.dispose() }
+  })
+
+  it('retains committed recall when a synchronous discard observer throws', async () => {
+    const { ctx, controller, agent, inbox, commit } = await recallHarness()
+    try {
+      const message = queued(); inbox.append('next-turn', message)
+      const original = inbox.recall.bind(inbox)
+      const remove = vi.spyOn(inbox, 'recall').mockImplementation((id, recallId) => {
+        original(id, recallId)
+        throw new Error('observer failed')
+      })
+      const request = { sessionId: agent.id, itemId: message.id,
+        action: { kind: 'recall' as const, requestId, expectedContent: message.content } }
+      const result = await controller.updateQueue(request)
+      expect(result.recalled?.content).toEqual(message.content)
+      expect(commit).not.toHaveBeenCalled()
+      expect(await controller.updateQueue(request)).toEqual(result)
+      expect(remove).toHaveBeenCalledTimes(1)
+    } finally { await ctx.fiber.dispose() }
   })
 })
