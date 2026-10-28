@@ -1,10 +1,10 @@
-name: Next documentation freshness diagnostic-only
+name: Next bounded documentation generation-only
 
 on:
   workflow_dispatch:
     inputs:
       expected_control_sha:
-        description: Reviewed full SHA of this read-only diagnostic control commit
+        description: Reviewed full SHA of this bounded generation-only control commit
         type: string
         required: true
       flutter_validation_run_id:
@@ -64,7 +64,7 @@ jobs:
           package-manager-cache: false
       - name: Validate control gates without installing dependencies
         timeout-minutes: 2
-        run: node --test control/.github/validation/stage2.test.mjs control/.github/validation/readonly-freshness.test.mjs
+        run: node --test control/.github/validation/stage2.test.mjs control/.github/validation/documentation-generation.test.mjs
       - name: Require terminal predecessors before allocation
         timeout-minutes: 5
         env:
@@ -105,15 +105,15 @@ jobs:
         working-directory: product
         timeout-minutes: 25
         run: pnpm install --frozen-lockfile --ignore-scripts
-      - name: Collect read-only freshness diagnostics without generating files
+      - name: Generate only reviewed documentation outputs for independent review
         timeout-minutes: 270
-        run: node control/.github/validation/readonly-freshness.mjs product
+        run: node control/.github/validation/documentation-generation.mjs product
       - name: Upload only generated review evidence, never installation packages
         if: always()
         timeout-minutes: 5
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
-          name: readonly-freshness-diagnostic-${{ github.run_id }}
+          name: bounded-documentation-generation-${{ github.run_id }}
           path: ${{ runner.temp }}/dsh-next-evidence/
           if-no-files-found: warn
           retention-days: 7
