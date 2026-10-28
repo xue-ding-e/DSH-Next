@@ -7,7 +7,7 @@ import { expect, it, onTestFinished } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import Loader from '@deepseek-ai/cordis-plugin-loader'
 import Include from '@deepseek-ai/cordis-plugin-include'
-import SessionStore, { Session, SessionId } from '@deepseek-ai/dsh-session'
+import SessionStore, { Session, SessionId, type SessionEvent } from '@deepseek-ai/dsh-session'
 import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
 import * as JsonlSessionPersistence from '@deepseek-ai/dsh-session-persistence-jsonl'
 import LocalAttachmentStore from '@deepseek-ai/dsh-attachment-local'
@@ -70,10 +70,11 @@ async function persist(ctx: Context, session: Session): Promise<void> {
   }
 }
 
-async function restore(ctx: Context, id: SessionId): Promise<Session> {
+async function restore(ctx: Context, id: SessionId, expectedEvents: readonly SessionEvent[]): Promise<Session> {
   const reader = await ctx.sessionPersistence.open(id, 'read')
   try {
     const stored = await reader.read()
+    expect(stored.events).toEqual(expectedEvents)
     return Session.fromRestore(id, stored.events, reader.header, reader.inheritedEventCount, stored.eventState)
   } finally {
     await reader.close()
@@ -123,9 +124,16 @@ it('recovers full queue recall identity and file bytes from JSONL in a fresh Loa
 
   const second = await boot(root, contexts)
   expect(second).not.toBe(first)
-  const restored = await restore(second, session.id)
+  const resumeStarted = Date.now()
+  const restored = await restore(second, session.id, session.snapshotEvents())
+  const resumeFinished = Date.now()
   expect(restored).not.toBe(session)
-  expect(restored.snapshotEvents()).toEqual(session.snapshotEvents())
+  // A cold Session appends one ordinary resume marker; persisted events remain exact.
+  expect(restored.snapshotEvents()).toEqual([...session.snapshotEvents(), {
+    type: 'session/end-seed', data: {}, seq: session.snapshotEvents().length, time: expect.any(Number),
+  }])
+  expect(restored.snapshotEvents().at(-1)!.time).toBeGreaterThanOrEqual(resumeStarted)
+  expect(restored.snapshotEvents().at(-1)!.time).toBeLessThanOrEqual(resumeFinished)
   const recalls = await second.sessionProjections.register(queueRecallProjection)
   expect(recalls.stateOf(restored).recalls).toEqual([{ requestId, message }])
   const replayed = await recallAgent(restored)
@@ -143,7 +151,7 @@ it('recovers full queue recall identity and file bytes from JSONL in a fresh Loa
   for await (const chunk of second.attachments.readFileStream(recoveredFile.attachment)) chunks.push(chunk)
   expect(Buffer.concat(chunks)).toEqual(Buffer.from(bytes))
   expect(recoveredFile.attachment).toEqual(file)
-  const restoredFork = await restore(second, fork.id)
+  const restoredFork = await restore(second, fork.id, fork.snapshotEvents())
   expect(restoredFork.inheritedEventCount).toBe(fork.inheritedEventCount)
   expect(restoredFork.inheritedEventCount).toBeGreaterThan(0)
   expect(recalls.stateOf(restoredFork).recalls).toEqual([])
