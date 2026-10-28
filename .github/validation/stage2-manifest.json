@@ -1,9 +1,9 @@
 {
-  "final": "7918b98cadc16ff30fb40fb9f972df819c81bb0c",
+  "final": "f51366d141f4fd6929479526e704ee0668512765",
   "base": "282f8d630784eab0d935ca06155d96f773983b1e",
   "chain": [
     {
-      "sha": "7918b98cadc16ff30fb40fb9f972df819c81bb0c",
+      "sha": "f51366d141f4fd6929479526e704ee0668512765",
       "parent": "282f8d630784eab0d935ca06155d96f773983b1e"
     }
   ],
@@ -151,7 +151,7 @@
     {
       "path": "packages/api/session-controller/tests/queue-recall-jsonl.host.spec.ts",
       "mode": "100644",
-      "blob": "0b203d4f2bcfe8c7f24e1d2663c097bf23159d4c"
+      "blob": "4b6b83134d7f1f6163ab36f0b18b50d020a1e545"
     },
     {
       "path": "packages/api/session-controller/tests/queue-recall-projection.host.spec.ts",
@@ -331,7 +331,7 @@
     {
       "path": "packages/client/ui-workspace/tests/access-assembly.client.spec.tsx",
       "mode": "100644",
-      "blob": "58d7cead5c497de61a6d45903c827f4e3f7cd65f"
+      "blob": "ba409f2df93f642b8a5927f647e91b1ea954b33f"
     },
     {
       "path": "packages/core/agent-loop/src/inbox.ts",
@@ -425,5 +425,5 @@
     "packages/client/ui-primitives/tests/menu-top-clearance.client.spec.tsx"
   ],
   "reviewNote": "Reviewed final queue feature with fixture fixes; exact single-parent chain and full range blobs pinned after independent review. Runtime application validation remains required.",
-  "tree": "17399f4e5a11f92f5cf8b83975df4bd521d76222"
+  "tree": "fa727cb5752d5c95030c481370ed39e64037bad6"
 }
