@@ -8,6 +8,7 @@ import type { ProjectionHandle } from '@deepseek-ai/dsh-session-projection'
 import type { QueueRecallState } from './queue-recall-projection.ts'
 import type { QueueRecallValue, SessionRequestId, SessionUpdateQueueRequest, SessionUpdateQueueValue } from './types.ts'
 
+/** Transfers pending user input to a draft and recovers committed handoffs by request identity. */
 export class QueueRecallController {
   // Live receipts are cached; the atomic Inbox handoff remains recoverable from the Session log.
   private readonly recalled = new WeakMap<Session, Map<SessionRequestId, {
@@ -39,7 +40,18 @@ export class QueueRecallController {
     return this.recall(agent, itemId, { kind: 'recall', requestId, expectedContent: message.content }, projection, fileUploads)
   }
 
-  /** Recall never awaits between its authoritative CAS check and durable removal. */
+  /**
+   * Recall never awaits between its authoritative CAS check and durable removal.
+   * Callers must enforce continuation ownership before invoking this method.
+   * @param agent - Session owner whose next-turn inbox and recovery records are used.
+   * @param itemId - exact pending or previously recalled user-message occurrence.
+   * @param action - stable request identity and expected content for comparison and retry.
+   * @param projection - registered reader of committed, own-Session recall records.
+   * @param fileUploads - owner of staged attachment receipts and retired prompt receipts.
+   * @returns accepted handoff with authoritative content and attachment receipts, or child inline images.
+   * @throws If the occurrence is unavailable, request identity or content differs, attachment preparation fails,
+   * or content cannot be restored. Uncommitted staged receipts are disposed; committed handoffs remain recoverable.
+   */
   recall(
     agent: Agent,
     itemId: SessionUpdateQueueRequest['itemId'],

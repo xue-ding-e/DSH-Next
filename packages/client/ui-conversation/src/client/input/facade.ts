@@ -494,7 +494,10 @@ export class SessionInputShell implements SessionInput {
     this.deps.steerQueue?.()
   }
 
-  /** Recall only into a literally empty, idle draft; the original Session shell owns settlement. */
+  /**
+   * Recall only into a literally empty, idle draft; the original Session shell owns settlement.
+   * @returns whether asynchronous recall was started, not whether the Host handoff or local restoration succeeded.
+   */
   recallQueue(): boolean {
     if (this.draftInitializationBlocked() || this.snapshot.phase !== 'plain'
       || this.snapshot.draft !== '' || this.attachmentIds.length !== 0

@@ -25,7 +25,11 @@ export class QueueRecall<T> {
     private readonly release: (prepared: T) => void,
     private readonly requestId: () => SessionRequestId) {}
 
-  /** Whether a pending row or an unresolved prior request can be recalled. */
+  /**
+   * Whether a pending row or an unresolved prior request can be recalled.
+   * @param session - exact Session to inspect without changing queue or recovery state.
+   * @returns false while recall is running; otherwise true for eligible input, saved recovery, or unreadable storage.
+   */
   available(session: SessionFace): boolean {
     if (this.running.has(session.sessionId)) return false
     if (this.pending.has(session.sessionId) || this.latest(session) !== undefined) return true
@@ -36,12 +40,26 @@ export class QueueRecall<T> {
     }
   }
 
-  /** Whether this Session owns an unfinished operation independently of currently queued rows. */
+  /**
+   * Whether this Session owns an unfinished operation independently of currently queued rows.
+   * @param session - exact Session whose in-memory or browser-local recovery identity is inspected.
+   * @returns whether an unfinished request is retained.
+   * @throws If browser recovery storage is unreadable or malformed.
+   */
   recoverable(session: SessionFace): boolean {
     return this.pending.has(session.sessionId) || this.journal.read(session.sessionId) !== undefined
   }
 
-  /** Prepare first, then CAS-remove exactly one row; transport failures retain the same retry identity. */
+  /**
+   * Prepare first, then CAS-remove exactly one row; transport failures retain the same retry identity.
+   * @param session - original Session used for preparation, queue mutation, and recovery.
+   * @param stillAccepts - caller-owned check that the original draft can still receive the result.
+   * @param signal - optional cancellation signal passed to preparation and checked before mutation.
+   * @returns prepared data and the authoritative handoff, or undefined when busy, empty, or no longer accepted.
+   * The caller invokes commit only after adopting the draft; commit clears the recovery identity and can throw
+   * on storage failure. Cancellation after a Host request does not undo a committed handoff.
+   * @throws On preparation, storage, transport, or Host rejection; uncertain outcomes retain their retry identity.
+   */
   async recall(session: SessionFace, stillAccepts: () => boolean, signal?: AbortSignal): Promise<{ prepared: T; recalled: Recalled; commit(): void } | undefined> {
     if (this.running.has(session.sessionId)) return undefined
     this.running.add(session.sessionId)

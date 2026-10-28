@@ -319,6 +319,14 @@ interface Inbox {
   remove(messageId: MessageId): boolean
 
   /**
+   * Remove one pending next-turn user message with an atomic durable recovery record.
+   * @param messageId - exact pending occurrence, never a running or next-step message.
+   * @param requestId - caller identity retained for recovery after an uncertain response.
+   * @returns whether this occurrence was still eligible for recall.
+   */
+  recall(messageId: MessageId, requestId: Branded<'session-request-id'>): boolean
+
+  /**
    * Apply standard splice semantics and durably record the normalized result.
    * @param target - pending list to mutate.
    * @param start - splice position.

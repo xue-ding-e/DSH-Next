@@ -9,4 +9,5 @@ export const FILE_UPLOAD_ROUTE = FILE_UPLOAD_PATH.slice(1)
 
 /** Authenticated pending-occurrence file read used before queue recall commits. */
 export const QUEUED_FILE_PATH = '/api/session/readQueuedFile'
+/** Browser-relative form of {@link QUEUED_FILE_PATH}. */
 export const QUEUED_FILE_ROUTE = QUEUED_FILE_PATH.slice(1)

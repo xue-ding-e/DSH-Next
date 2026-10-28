@@ -3,6 +3,7 @@ import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type { MessageId } from '@deepseek-ai/dsh-llm/brand'
 import type { SessionRequestId } from '@deepseek-ai/dsh-api-session-controller/types'
 
+/** Session-local occurrence and request identifiers; excludes message text and attachment bytes. */
 export interface RecallIdentity {
   readonly itemId: MessageId
   readonly requestId: SessionRequestId
@@ -10,7 +11,12 @@ export interface RecallIdentity {
 
 /** One Conversation-owned view of durable browser recall identities. */
 export class RecallJournal {
-  /** Read an unfinished request without silently discarding malformed or unavailable storage. */
+  /**
+   * Read an unfinished request without silently discarding malformed or unavailable storage.
+   * @param sessionId - Session whose browser-local recovery identities are searched.
+   * @returns the first identity in sorted storage-key order, or undefined when no stored value remains.
+   * @throws If storage access fails or the selected stored identity is malformed.
+   */
   read(sessionId: SessionId): RecallIdentity | undefined {
     const prefix = this.prefix(sessionId)
     const keys: string[] = []
@@ -32,12 +38,22 @@ export class RecallJournal {
     return { itemId: value.itemId as MessageId, requestId: value.requestId as SessionRequestId }
   }
 
-  /** Persist before the Host can remove anything; storage failure aborts the recall. */
+  /**
+   * Persist before the Host can remove anything; storage failure aborts the recall.
+   * @param sessionId - Session that owns the unfinished request.
+   * @param identity - occurrence and stable request identifiers to persist.
+   * @throws If browser storage cannot persist the identity.
+   */
   write(sessionId: SessionId, identity: RecallIdentity): void {
     localStorage.setItem(`${this.prefix(sessionId)}${encodeURIComponent(identity.requestId)}`, JSON.stringify({ version: 1, ...identity }))
   }
 
-  /** Clear only after local restoration or a definitive not-recalled response. */
+  /**
+   * Clear only after local restoration or a definitive not-recalled response.
+   * @param sessionId - Session that owns the unfinished request.
+   * @param identity - request identity whose storage entry is removed.
+   * @throws If browser storage cannot remove the entry; callers retain recovery state.
+   */
   clear(sessionId: SessionId, identity: RecallIdentity): void {
     localStorage.removeItem(`${this.prefix(sessionId)}${encodeURIComponent(identity.requestId)}`)
   }

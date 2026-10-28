@@ -554,12 +554,21 @@ export class ConversationController extends Service implements IConversation {
     for (const attachment of attachments) this.releaseDraftAttachment(attachment.id)
   }
 
-  /** Whether this exact Session has a pending or uncertain recall to resume. */
+  /**
+   * Whether this exact Session has a pending or uncertain recall to resume.
+   * @param session - original Session whose queue and recall state are inspected.
+   * @returns whether recall can be attempted; unreadable recovery storage also permits an attempt to report failure.
+   */
   canRecallQueue(session: SessionFace): boolean {
     return this.recalls.available(session)
   }
 
-  /** Whether the original Session should display unfinished-recall recovery guidance. */
+  /**
+   * Whether the original Session should display unfinished-recall recovery guidance.
+   * @param session - original Session whose retained recall identity is inspected.
+   * @returns whether an unfinished recall exists independently of current queue rows.
+   * @throws If browser recovery storage is unreadable or malformed.
+   */
   hasPendingRecall(session: SessionFace): boolean {
     return this.recalls.recoverable(session)
   }
@@ -596,7 +605,15 @@ export class ConversationController extends Service implements IConversation {
     }
   }
 
-  /** Transfer one acknowledged queue occurrence into already-prepared local attachment ownership. */
+  /**
+   * Transfer one acknowledged queue occurrence into already-prepared local attachment ownership.
+   * @param session - original Session whose queued input is recalled or recovered.
+   * @param stillAccepts - check that the original draft can still receive the handoff.
+   * @param signal - optional preparation cancellation signal, checked before queue mutation.
+   * @returns restored text, owned attachment identifiers, and a commit callback; undefined when no handoff is ready.
+   * Call commit after adopting the draft to clear its recovery identity; storage failure rejects that settlement.
+   * @throws On preparation, storage, transport, or Host rejection; uncertain handoffs remain recoverable.
+   */
   async recallQueue(session: SessionFace, stillAccepts: () => boolean, signal?: AbortSignal): Promise<{
     readonly text: string; readonly attachmentIds: readonly DraftAttachmentId[]; commit(): void
   } | undefined> {

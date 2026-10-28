@@ -4,6 +4,7 @@ import type { ProjectionDefinition } from '@deepseek-ai/dsh-session-projection'
 import type { UserMessage } from '@deepseek-ai/dsh-session'
 import type { SessionRequestId } from './types.ts'
 
+/** Recovery records folded from this Session’s own committed recall events, excluding inherited events. */
 export interface QueueRecallState {
   readonly ownStart: number
   readonly recalls: readonly { readonly requestId: SessionRequestId; readonly message: UserMessage }[]
