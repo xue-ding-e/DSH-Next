@@ -25,6 +25,9 @@ async function mockPlatform() {
   let state: string | undefined
   let redirectUri: string | undefined
   let avatarRequests = 0
+  let balanceRequests = 0
+  const heldBalances = new Set<() => void>()
+  let nextBalance: { balance: string; failed: boolean; received(): void; released: Promise<void> } | undefined
   const server: Server = createServer((req, res) => {
     const url = new URL(req.url ?? '/', 'http://127.0.0.1')
     const reply = (payload: unknown): void => {
@@ -80,7 +83,18 @@ async function mockPlatform() {
       return
     }
     if (url.pathname === '/api/v0/users/get_user_summary') {
-      reply({ normal_wallets: [{ currency: 'CNY', balance: '1.00' }], bonus_wallets: [] })
+      balanceRequests++
+      const pending = nextBalance
+      nextBalance = undefined
+      if (pending === undefined) {
+        reply({ normal_wallets: [{ currency: 'CNY', balance: '1.00' }], bonus_wallets: [] })
+      } else {
+        pending.received()
+        void pending.released.then(() => {
+          if (pending.failed) res.writeHead(503).end()
+          else reply({ normal_wallets: [{ currency: 'CNY', balance: pending.balance }], bonus_wallets: [] })
+        })
+      }
       return
     }
     if (url.pathname === '/api/v0/users/get_unnotified_bonuses') { reply([]); return }
@@ -92,7 +106,20 @@ async function mockPlatform() {
   const origin = `http://127.0.0.1:${String(address.port)}`
   return {
     origin, inits, pages, avatarRequests: () => avatarRequests,
-    close: () => new Promise<void>((resolve) => { server.close(() => { resolve() }); server.closeAllConnections() }),
+    balanceRequests: () => balanceRequests,
+    holdNextBalance: (balance: string, failed = false) => {
+      if (nextBalance !== undefined) throw new Error('account login: unconsumed balance response')
+      const received = Promise.withResolvers<void>()
+      const released = Promise.withResolvers<void>()
+      const release = (): void => { released.resolve(); heldBalances.delete(release) }
+      heldBalances.add(release)
+      nextBalance = { balance, failed, received: () => received.resolve(), released: released.promise }
+      return { received: received.promise, release }
+    },
+    close: () => {
+      for (const release of heldBalances) release()
+      return new Promise<void>((resolve) => { server.close(() => { resolve() }); server.closeAllConnections() })
+    },
   }
 }
 
@@ -118,7 +145,7 @@ describe.skipIf(MODE === 'record')('web e2e: DeepSeek account sign-in in a plain
     if (root !== undefined) await rm(root, { recursive: true, force: true })
   })
 
-  it('signs in through a themed tab and recovers both avatars on a later Settings entry', async () => {
+  it('signs in, recovers avatars, and refreshes balance through the Account section', async () => {
     const context = await browser.newContext({ viewport: { width: 1440, height: 960 }, locale: 'en-US', colorScheme: 'dark' })
     onTestFinished(() => context.close())
     const page = await context.newPage()
@@ -199,6 +226,43 @@ describe.skipIf(MODE === 'record')('web e2e: DeepSeek account sign-in in a plain
     await expect.poll(() => account.locator('img').count()).toBe(1)
     await capture('Settings entry after rendered failure')
     await compareOrRefreshGolden(AVATAR_EXPECTED, states.join('\n'), MODE)
+
+    // All account requests terminate at the loopback Platform double; the browser
+    // still drives the shipped AccountSection, account service, and Host provider.
+    const refresh = account.getByRole('button', { name: 'Refresh balance', exact: true })
+    await expect.poll(() => refresh.isEnabled()).toBe(true)
+    for (const [balance, failed] of [['2.00', false], ['0.00', true], ['3.00', false]] as const) {
+      const baseline = platform.balanceRequests()
+      const pending = platform.holdNextBalance(balance, failed)
+      try {
+        await refresh.click()
+        await pending.received
+        const loading = account.getByRole('button', { name: 'Refreshing balance…', exact: true })
+        await expect.poll(() => loading.isDisabled()).toBe(true)
+        expect(await loading.getAttribute('aria-busy')).toBe('true')
+        // Native click() respects the disabled control without Playwright waiting
+        // for it to become enabled and unintentionally issuing another refresh.
+        await loading.evaluate(element => {
+          if (!(element instanceof HTMLButtonElement)) throw new Error('Refresh control is not a button')
+          element.click()
+          element.click()
+        })
+        expect(platform.balanceRequests()).toBe(baseline + 1)
+        pending.release()
+        await expect.poll(() => refresh.isEnabled()).toBe(true)
+        const failure = account.getByText('Could not refresh the balance. Try refreshing again or view it on Platform.', { exact: true })
+        if (failed) {
+          await failure.waitFor()
+          expect(await account.getByText('¥0.00', { exact: true }).count()).toBe(0)
+        } else {
+          await account.getByText(`¥${balance}`, { exact: true }).waitFor()
+          expect(await failure.count()).toBe(0)
+        }
+        expect(platform.balanceRequests()).toBe(baseline + 1)
+      } finally {
+        pending.release()
+      }
+    }
     expect(console.pageErrors).toEqual([])
     await context.close()
   }, 90_000)
