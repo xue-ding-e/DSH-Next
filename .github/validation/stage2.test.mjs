@@ -26,17 +26,54 @@ test('only exact current control job can pass queue self-exemption', () => {
  assert(!isCurrentValidationRun('xue-ding-e/DSH-Next',{...r,head_branch:'validation/queue-recall-generation-20261027'},'1',sha))
 })
 
-test('final manifest binds one reviewed logical queue commit and all 33 real file paths', () => {
+test('final manifest binds one reviewed logical queue commit and all 34 real file paths', () => {
  assertPinned(m)
- assert.equal(m.final, 'f2d23c26a5f021e8fad711b5cf534be516b2e17a')
+ assert.equal(m.final, 'fd3e299df3c254fde54a4dc446563f1883913eeb')
  assert.equal(m.base, '282f8d630784eab0d935ca06155d96f773983b1e')
  assert.equal(m.chain.length, 1)
  assert.equal(m.files.length, 76)
  const helper = 'packages/api/session-controller/tests/queue-recall-agent.ts'
  assert(m.files.some(file => file.path === helper))
  assert(!m.tests.includes(helper))
- assert.equal(m.tests.length, 33)
- assert.equal(new Set(m.tests).size, 33)
+ assert.deepEqual(m.tests.slice(0, 33), [
+  "packages/api/session-controller/tests/queue-recall-projection.host.spec.ts",
+  "packages/api/session-controller/tests/queue-recall-replay.host.spec.ts",
+  "packages/api/session-controller/tests/queue-recall-transaction.host.spec.ts",
+  "packages/api/session-controller/tests/queue-recall-jsonl.host.spec.ts",
+  "packages/api/session-controller/tests/commands-queue-attachment.host.spec.ts",
+  "packages/api/session-controller/tests/control-queue.host.spec.ts",
+  "packages/api/session-controller/tests/controller.host.spec.ts",
+  "packages/api/session-controller/tests/projection-discovery.host.spec.ts",
+  "packages/client/file-upload/tests/queue-recall-files.host.spec.ts",
+  "packages/client/file-upload/tests/queued-file-route.host.spec.ts",
+  "packages/client/file-upload/tests/file-upload-http.host.spec.ts",
+  "packages/client/file-upload/tests/queued-file.client.spec.ts",
+  "packages/client/file-upload/tests/file-upload.client.spec.ts",
+  "packages/client/ui-conversation/tests/queue-recall-recovery.client.spec.ts",
+  "packages/client/ui-conversation/tests/keymap-routing.client.spec.tsx",
+  "packages/client/ui-conversation/tests/service-orchestration.client.spec.ts",
+  "packages/client/ui-conversation/tests/queue-dock.client.spec.tsx",
+  "packages/core/agent-loop/tests/inbox.spec.ts",
+  "packages/core/agent-loop/tests/resume.spec.ts",
+  "packages/session/session-persistence-jsonl/tests/jsonl.spec.ts",
+  "packages/session/session-persistence-jsonl/tests/generation.spec.ts",
+  "packages/session/session-persistence-jsonl/tests/fork-delivery.spec.ts",
+  "packages/client/ui-workspace/tests/rows.client.spec.tsx",
+  "packages/client/ui-workspace/tests/open-workspace-folder.client.spec.ts",
+  "packages/client/ui-workspace/tests/workspace-browser.client.spec.tsx",
+  "packages/client/ui-workspace/tests/apply.client.spec.ts",
+  "packages/client/ui-workspace/tests/access-assembly.client.spec.tsx",
+  "packages/client/ui-settings-account/tests/account-refresh.client.spec.ts",
+  "packages/client/ui-settings-account/tests/account.client.spec.tsx",
+  "packages/client/ui-primitives/tests/menu-anchor-width.client.spec.tsx",
+  "packages/client/ui-primitives/tests/menu-group.client.spec.tsx",
+  "packages/client/ui-primitives/tests/menu-surface.client.spec.tsx",
+  "packages/client/ui-primitives/tests/menu-top-clearance.client.spec.tsx"
+])
+ assert.equal(m.tests[33], 'scripts/locale-dictionary-parity.spec.ts')
+ assert.equal(m.tests.filter(path => path.startsWith('packages/')).length, 33)
+ assert.equal(m.tests.length, 34)
+ assert.equal(new Set(m.tests).size, 34)
  assert(m.tests.includes('packages/api/session-controller/tests/queue-recall-jsonl.host.spec.ts'))
 })
 test('CC predecessor fails closed on active, unknown and altered identity', () => {

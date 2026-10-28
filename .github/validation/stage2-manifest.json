@@ -1,9 +1,9 @@
 {
-  "final": "f2d23c26a5f021e8fad711b5cf534be516b2e17a",
+  "final": "fd3e299df3c254fde54a4dc446563f1883913eeb",
   "base": "282f8d630784eab0d935ca06155d96f773983b1e",
   "chain": [
     {
-      "sha": "f2d23c26a5f021e8fad711b5cf534be516b2e17a",
+      "sha": "fd3e299df3c254fde54a4dc446563f1883913eeb",
       "parent": "282f8d630784eab0d935ca06155d96f773983b1e"
     }
   ],
@@ -291,7 +291,7 @@
     {
       "path": "packages/client/ui-conversation/src/client/locales.ts",
       "mode": "100644",
-      "blob": "8fe032b369a9699858dee76b103be0ad57ae09ff"
+      "blob": "d0b25042cd5a7dfcfdbf8ac212a785b5a1c7b87e"
     },
     {
       "path": "packages/client/ui-conversation/src/client/queue/QueueDock.tsx",
@@ -422,8 +422,9 @@
     "packages/client/ui-primitives/tests/menu-anchor-width.client.spec.tsx",
     "packages/client/ui-primitives/tests/menu-group.client.spec.tsx",
     "packages/client/ui-primitives/tests/menu-surface.client.spec.tsx",
-    "packages/client/ui-primitives/tests/menu-top-clearance.client.spec.tsx"
+    "packages/client/ui-primitives/tests/menu-top-clearance.client.spec.tsx",
+    "scripts/locale-dictionary-parity.spec.ts"
   ],
   "reviewNote": "Reviewed final queue feature with fixture fixes; exact single-parent chain and full range blobs pinned after independent review. Runtime application validation remains required.",
-  "tree": "8a7372fe16d04a5e7f1f9915b4196c82468f09a1"
+  "tree": "8cf1ba5187a1cff4eb3c6be8de06b1153d918db6"
 }
