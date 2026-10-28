@@ -1,9 +1,9 @@
 {
-  "final": "2483c515be0e1425806870ce0046c84c1973c849",
+  "final": "7918b98cadc16ff30fb40fb9f972df819c81bb0c",
   "base": "282f8d630784eab0d935ca06155d96f773983b1e",
   "chain": [
     {
-      "sha": "2483c515be0e1425806870ce0046c84c1973c849",
+      "sha": "7918b98cadc16ff30fb40fb9f972df819c81bb0c",
       "parent": "282f8d630784eab0d935ca06155d96f773983b1e"
     }
   ],
@@ -144,9 +144,14 @@
       "blob": "cc1357e613e1a349a42e4a2a0e4d0fdf92778c24"
     },
     {
+      "path": "packages/api/session-controller/tests/queue-recall-agent.ts",
+      "mode": "100644",
+      "blob": "eb35183917f9dd73f6ea1d21f38c50d7d9af7567"
+    },
+    {
       "path": "packages/api/session-controller/tests/queue-recall-jsonl.host.spec.ts",
       "mode": "100644",
-      "blob": "c3e61f7966b91449394006f0b57640c28705e532"
+      "blob": "0b203d4f2bcfe8c7f24e1d2663c097bf23159d4c"
     },
     {
       "path": "packages/api/session-controller/tests/queue-recall-projection.host.spec.ts",
@@ -156,12 +161,12 @@
     {
       "path": "packages/api/session-controller/tests/queue-recall-replay.host.spec.ts",
       "mode": "100644",
-      "blob": "a3e9374f876bf3838663788e74729da4e67db095"
+      "blob": "18a791549f823ca49acb5ea38254cc86fdfde3dd"
     },
     {
       "path": "packages/api/session-controller/tests/queue-recall-transaction.host.spec.ts",
       "mode": "100644",
-      "blob": "abc51eb657c2f42c9667a33f84480229409cdca3"
+      "blob": "5724de69b2a372cd8dca32d50d50c5619db320ab"
     },
     {
       "path": "packages/api/session-controller/tests/test-remote.ts",
@@ -221,7 +226,7 @@
     {
       "path": "packages/client/file-upload/tests/queue-recall-files.host.spec.ts",
       "mode": "100644",
-      "blob": "7d5c07e2363db09e22fff374f3c5f552fe565294"
+      "blob": "13c8a5527a8ab59f131b594c7580c4e273458fe3"
     },
     {
       "path": "packages/client/file-upload/tests/queued-file-route.host.spec.ts",
@@ -321,7 +326,12 @@
     {
       "path": "packages/client/ui-conversation/tests/service-orchestration.client.spec.ts",
       "mode": "100644",
-      "blob": "b8cfeef0907414a7688f0b45e6e6cb2c36ce6405"
+      "blob": "8ed829c402dbadd3711f29bd08ddd740fa4c26bd"
+    },
+    {
+      "path": "packages/client/ui-workspace/tests/access-assembly.client.spec.tsx",
+      "mode": "100644",
+      "blob": "58d7cead5c497de61a6d45903c827f4e3f7cd65f"
     },
     {
       "path": "packages/core/agent-loop/src/inbox.ts",
@@ -414,6 +424,6 @@
     "packages/client/ui-primitives/tests/menu-surface.client.spec.tsx",
     "packages/client/ui-primitives/tests/menu-top-clearance.client.spec.tsx"
   ],
-  "reviewNote": "Known source chain and provisional blob manifest from 2bdf; replace final chain and exact range blobs only after final generator artifact review. This template MUST fail until pinned.",
-  "tree": "c1e04f395e7bb39b6e9a957fe96d5d1418fc7c3a"
+  "reviewNote": "Reviewed final queue feature with fixture fixes; exact single-parent chain and full range blobs pinned after independent review. Runtime application validation remains required.",
+  "tree": "17399f4e5a11f92f5cf8b83975df4bd521d76222"
 }
