@@ -28,7 +28,7 @@ test('only exact current control job can pass queue self-exemption', () => {
 
 test('final manifest binds one reviewed logical queue commit and all 33 real file paths', () => {
  assertPinned(m)
- assert.equal(m.final, 'f51366d141f4fd6929479526e704ee0668512765')
+ assert.equal(m.final, 'f2d23c26a5f021e8fad711b5cf534be516b2e17a')
  assert.equal(m.base, '282f8d630784eab0d935ca06155d96f773983b1e')
  assert.equal(m.chain.length, 1)
  assert.equal(m.files.length, 76)
