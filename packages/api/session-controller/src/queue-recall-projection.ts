@@ -10,7 +10,7 @@ export interface QueueRecallState {
 }
 
 /** Rebuild retry authority from committed own-Session events, never a fork's inherited operations. */
-export const queueRecallProjection = {
+export const queueRecallProjection: ProjectionDefinition<'queueRecallRecovery', QueueRecallState> = {
   key: 'queueRecallRecovery',
   stateSchema: z.object({
     ownStart: z.number().int().nonnegative(),
@@ -28,4 +28,4 @@ export const queueRecallProjection = {
     return { ...state, recalls: [...state.recalls, recall] }
   },
   stateVersion: 1,
-} satisfies ProjectionDefinition<'queueRecallRecovery', QueueRecallState>
+}
