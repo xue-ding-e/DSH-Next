@@ -6,7 +6,7 @@
  */
 import { describe, expect, it, onTestFinished, vi } from 'vitest'
 import { fireEvent } from '@testing-library/react'
-import { $createParagraphNode, $createTextNode, $getRoot, createEditor } from 'lexical'
+import { $createParagraphNode, $createTextNode, $getRoot, createEditor, KEY_ARROW_UP_COMMAND } from 'lexical'
 import { registerPlainText } from '@lexical/plain-text'
 import { registerComposerKeymap } from '../src/client/input/editor/keymap.ts'
 
@@ -141,4 +141,21 @@ describe('keymap keydown routing', () => {
     fireEvent.keyDown(root, { key: 'Tab', keyCode: 9, shiftKey: true })
     expect(arbitrate).toHaveBeenLastCalledWith('tabBack', false)
   })
+})
+
+
+describe('pending queue Up recall routing', () => {
+  it.each([{}, { repeat: true }, { isComposing: true }, { ctrlKey: true }, { metaKey: true }, { altKey: true }, { shiftKey: true }])(
+    'recalls only an unmodified non-repeated Up %j', (flags) => {
+      const editor = createEditor({ namespace: 'queue-recall', onError: error => { throw error } })
+      const recallQueue = vi.fn(() => true)
+      onTestFinished(registerComposerKeymap(editor, {
+        arbitrate: () => 'pass', recallQueue, space: () => false, dismissPopup: () => {},
+        canSubmit: () => true, submit: () => {}, intakeFiles: () => {}, pasteText: () => {},
+      }))
+      editor.update(() => { $getRoot().append($createParagraphNode()); $getRoot().selectEnd() }, { discrete: true })
+      editor.dispatchCommand(KEY_ARROW_UP_COMMAND, new KeyboardEvent('keydown', { key: 'ArrowUp', ...flags }))
+      expect(recallQueue).toHaveBeenCalledTimes(Object.keys(flags).length === 0 ? 1 : 0)
+    },
+  )
 })

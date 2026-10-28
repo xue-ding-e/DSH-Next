@@ -65,7 +65,7 @@ async function fixture(origin?: 'subagent') {
     currentSelection: () => ({ provider: 'unused', model: 'unused' }),
     saveSelection: async () => {},
   } as never)
-  ctx.provide('fileUploads', { registerAgentResolver: () => () => {} } as never)
+  ctx.provide('fileUploads', { registerAgentResolver: () => () => {}, registerRecallResolver: () => () => {} } as never)
   const sessions = await createSessionTestController(ctx, {
     nativeOpen: false, cwd: root, defaultModelSelection: () => ({ provider: 'unused', model: 'unused' }),
   })

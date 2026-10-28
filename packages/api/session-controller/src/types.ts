@@ -3,11 +3,11 @@
 import type {} from '@deepseek-ai/dsh-agent/types'
 import type { NativeFileApplication } from '@deepseek-ai/dsh-native-command/types'
 import type {
-  AttachmentIdType, ImageAttachmentLimits, ImageAttachmentRef, ImageMediaType,
+  AttachmentIdType, FileAttachmentRef, ImageAttachmentLimits, ImageAttachmentRef, ImageMediaType,
 } from '@deepseek-ai/dsh-attachment'
 import type { Branded } from '@deepseek-ai/dsh-brand'
 import type { LlmAttemptId, MessageId } from '@deepseek-ai/dsh-llm/brand'
-import type { TextBlock } from '@deepseek-ai/dsh-llm'
+import type { TextBlock, UserMessage } from '@deepseek-ai/dsh-llm'
 import type { SessionId, SessionSeqCursor } from '@deepseek-ai/dsh-session/types'
 import type { SessionProjectionMap, SessionProjectionSummaryExcluded, SessionProjectionSummaryValues } from '@deepseek-ai/dsh-session-projection/types'
 import type { Principal } from '@deepseek-ai/dsh-typert-protocol'
@@ -144,6 +144,14 @@ export type QueueAction =
   }
   | { readonly kind: 'remove' }
   | { readonly kind: 'steer' }
+  | { readonly kind: 'recover-recall'; readonly requestId: SessionRequestId }
+  | {
+    readonly kind: 'recall'
+    /** Stable identity reused when the caller cannot observe the first response. */
+    readonly requestId: SessionRequestId
+    /** Compare-and-swap guard against an intervening edit of this occurrence. */
+    readonly expectedContent: UserMessage['content']
+  }
 
 /** One Session list entry. */
 export interface SessionSummary {
@@ -346,9 +354,21 @@ export interface SessionUpdateQueueRequest {
   readonly action: QueueAction
 }
 
+/** Attachments in content order; ordinary Sessions have receipts, continuable children reuse inline image bytes. */
+export type QueueRecallAttachment =
+  | { readonly type: 'image'; readonly receiptId?: Branded<'file-upload-receipt-id'>; readonly image: ImageAttachmentRef }
+  | { readonly type: 'file'; readonly receiptId: Branded<'file-upload-receipt-id'>; readonly file: FileAttachmentRef }
+
+/** Authoritative draft returned after one pending user occurrence is recalled. */
+export interface QueueRecallValue {
+  readonly content: UserMessage['content']
+  readonly attachments: readonly QueueRecallAttachment[]
+}
+
 /** Receipt after one pending queue mutation commits. */
 export interface SessionUpdateQueueValue {
   readonly accepted: true
+  readonly recalled?: QueueRecallValue
 }
 
 /** Active-turn cancellation request. */

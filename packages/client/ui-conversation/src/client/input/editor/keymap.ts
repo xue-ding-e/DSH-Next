@@ -16,7 +16,7 @@
  */
 import type { LexicalEditor } from 'lexical'
 import {
-  $getAdjacentNode, $getSelection, $isElementNode, $isLineBreakNode, $isRangeSelection, $isTextNode,
+  $getAdjacentNode, $getRoot, $getSelection, $isElementNode, $isLineBreakNode, $isRangeSelection, $isTextNode,
   KEY_DOWN_COMMAND, MOVE_TO_END,
   COMMAND_PRIORITY_CRITICAL, KEY_ARROW_DOWN_COMMAND, KEY_ARROW_UP_COMMAND, KEY_ENTER_COMMAND,
   KEY_ESCAPE_COMMAND, KEY_SPACE_COMMAND, KEY_TAB_COMMAND, PASTE_COMMAND,
@@ -29,6 +29,8 @@ import { $isQuoteNode } from './QuoteNode.tsx'
 export interface ComposerKeymapHandlers {
   /** Keyboard arbitration while the menu is open ('pass' when no pipeline). */
   arbitrate(key: ArbitrateKey, composing: boolean): ArbitrateOutcome
+  /** Recall the latest pending message into an empty composer; false leaves native navigation intact. */
+  recallQueue?(): boolean
   /** Space adjudication; true = a claim was applied — the keystroke is consumed. */
   space(): boolean
   /** Dismiss the popupSelect shell (Escape layering: an open overlay closes first). */
@@ -224,7 +226,20 @@ export function registerComposerKeymap(editor: LexicalEditor, handlers: Composer
     }, COMMAND_PRIORITY_CRITICAL),
     editor.registerCommand(MOVE_TO_END, event => movePastQuote(editor, event), COMMAND_PRIORITY_CRITICAL),
     editor.registerUpdateListener(syncComposition),
-    editor.registerCommand(KEY_ARROW_UP_COMMAND, arrow('up'), COMMAND_PRIORITY_CRITICAL),
+    editor.registerCommand(KEY_ARROW_UP_COMMAND, (event) => {
+      if (arrow('up')(event)) return true
+      if (event === null || isComposingEvent(event, recentlyComposing) || editor.isComposing()
+        || event.repeat || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey
+        || event.getModifierState('AltGraph')) return false
+      const selection = $getSelection()
+      // Empty means literally empty: whitespace, chips, and a selected range
+      // belong to the user's draft and must never be replaced by history.
+      if (!$isRangeSelection(selection) || !selection.isCollapsed()
+        || $getRoot().getTextContentSize() !== 0) return false
+      if (handlers.recallQueue?.() !== true) return false
+      event.preventDefault()
+      return true
+    }, COMMAND_PRIORITY_CRITICAL),
     editor.registerCommand(KEY_ARROW_DOWN_COMMAND, arrow('down'), COMMAND_PRIORITY_CRITICAL),
     // Tab settles the highlighted completion and passes without one, keeping
     // native focus traversal; Shift+Tab leaves the menu like Escape whenever it

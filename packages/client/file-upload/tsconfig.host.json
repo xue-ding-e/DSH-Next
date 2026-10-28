@@ -5,12 +5,13 @@
     "outDir": "lib/types",
     "tsBuildInfoFile": "lib/tsconfig.host.tsbuildinfo"
   },
-  "files": ["src/http-route.ts", "src/index.ts", "src/protocol.ts", "src/types.ts"],
+  "files": ["src/http-route.ts", "src/queued-file-route.ts", "src/index.ts", "src/protocol.ts", "src/types.ts"],
   "references": [
     { "path": "../../../vendor/cordis" },
     { "path": "../../util/brand" },
     { "path": "../../core/agent" },
     { "path": "../../core/session" },
+    { "path": "../../llm/llm" },
     { "path": "../../attachment/attachment" },
     { "path": "../../interaction/commands" },
     { "path": "../../typert/protocol" },
