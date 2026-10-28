@@ -1,4 +1,4 @@
-name: Next queue recall locked-toolchain validation
+name: Next queue and balance focused browser validation
 
 on:
   workflow_dispatch:
@@ -30,7 +30,7 @@ concurrency:
   cancel-in-progress: false
 env:
   EXPECTED_CONTROL_SHA: ${{ inputs.expected_control_sha }}
-  EXPECTED_PRODUCT_SHA: 3da034befa3cbb14a9076a978d3367f92e4893ce
+  EXPECTED_PRODUCT_SHA: fa9e0aa9bc3c881a8c8ad804f5fd33e8beae275b
   DSH_TELEMETRY_DISABLED: '1'
   DSH_GATE_CONCURRENCY: '2'
   DSH_OXLINT_THREADS: '2'
@@ -64,7 +64,7 @@ jobs:
           package-manager-cache: false
       - name: Validate control gates without installing dependencies
         timeout-minutes: 2
-        run: node --test control/.github/validation/stage2.test.mjs
+        run: node --test control/.github/validation/queue-balance-browser.test.mjs
       - name: Require terminal predecessors before allocation
         timeout-minutes: 5
         env:
@@ -72,19 +72,19 @@ jobs:
           FLUTTER_EXPECTED_SHA: ${{ inputs.flutter_expected_sha }}
           MAGPIE_RUN_ID: ${{ inputs.magpie_run_id }}
           MAGPIE_EXPECTED_SHA: ${{ inputs.magpie_expected_sha }}
-        run: node control/.github/validation/heavy-queue.mjs
+        run: node control/.github/validation/queue-balance-heavy-queue.mjs
       - name: Checkout exact unvalidated product candidate and parent
         timeout-minutes: 5
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
-          ref: 3da034befa3cbb14a9076a978d3367f92e4893ce
+          ref: fa9e0aa9bc3c881a8c8ad804f5fd33e8beae275b
           path: product
-          fetch-depth: 4
+          fetch-depth: 3
           persist-credentials: false
       - name: Verify exact reviewed source chain and range blobs before dependency scripts
         timeout-minutes: 2
         run: |
-          node control/.github/validation/stage2.mjs product --identity-only
+          node control/.github/validation/queue-balance-browser.mjs product --identity-only
           test -z "$(git -C product status --porcelain)"
           test ! -e product/.env
           test -z "${DEEPSEEK_API_KEY:-}"
@@ -105,15 +105,15 @@ jobs:
         working-directory: product
         timeout-minutes: 25
         run: pnpm install --frozen-lockfile
-      - name: Run bounded real unit, Loader, artifact, aggregate and doc gates
+      - name: Run required builds and the exact two synthetic browser regressions
         timeout-minutes: 270
-        run: node control/.github/validation/stage2.mjs product
+        run: node control/.github/validation/queue-balance-browser.mjs product
       - name: Upload only generated review evidence, never installation packages
         if: always()
         timeout-minutes: 5
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
-          name: queue-recall-locked-validation-${{ github.run_id }}
+          name: queue-balance-browser-${{ github.run_id }}
           path: ${{ runner.temp }}/dsh-next-evidence/
           if-no-files-found: warn
           retention-days: 7
