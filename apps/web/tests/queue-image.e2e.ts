@@ -198,4 +198,118 @@ describe('web e2e: queued image submission', () => {
     expect(tripwire.pageErrors).toEqual([])
     expect(tripwire.warnings).toEqual([])
   }, 120_000)
+
+  it.skipIf(MODE === 'record')('recalls only the latest queued image after rejection and ignores repeated ArrowUp', async () => {
+    overrideDir = await mkdtemp(join(tmpdir(), 'dsh-web-queue-recall-'))
+    const readyFile = join(overrideDir, '.hang-ready')
+    const overridePath = join(overrideDir, 'replay.override.json')
+    await writeFile(overridePath, JSON.stringify([{ kind: 'hang', readyFile } satisfies ReplayEntry]))
+    scaffold = await launchWebScaffold({ replayFixture: FIXTURE, replayOverride: overridePath, compareReplaySession: false })
+    browser = await chromium.launch()
+    page = await newEnglishPage(browser)
+    const tripwire = watchConsole(page)
+    await page.goto(scaffold.authenticatedUrl, { waitUntil: 'load' })
+    await connectFreshWorkspace(page, scaffold.workspaceCwd)
+    onTestFailed(() => saveFailureShot(page, 'web-e2e-queue-recall'))
+    const input = page.locator('[data-composer-input]').first()
+    const settled = scaffold.whenTurnSettled()
+    await input.fill(ACTIVE_PROMPT)
+    await input.press('Enter')
+    await expect.poll(() => existsSync(readyFile), { timeout: 15_000 }).toBe(true)
+    const older = 'Earlier queued message must remain'
+    for (const text of [older, QUEUED_TEXT]) {
+      await page.locator('[data-composer-input][contenteditable="true"]').first().waitFor()
+      if (text === QUEUED_TEXT) {
+        await pasteImage(page, await readFile(PNG))
+        await page.locator('button[aria-busy="false"]', { has: page.getByRole('img', { name: 'queued.png' }) }).waitFor()
+      }
+      const admitted = page.waitForResponse('**/api/session/prompt')
+      await input.fill(text)
+      await input.press('Enter')
+      expect((await admitted).ok()).toBe(true)
+    }
+    const header = page.getByRole('button', { name: '2 queued messages' })
+    await header.waitFor()
+    if (await header.getAttribute('aria-expanded') !== 'true') await header.click()
+    await page.getByRole('button', { name: 'Stop generating' }).click()
+    await settled
+    await expect.poll(() => page.getByRole('button', { name: 'Stop generating' }).count()).toBe(0)
+    const rows = page.locator('[data-queue-dock] li:not([data-submission-echo])')
+    await expect.poll(() => rows.count()).toBe(2)
+
+    // A definitive rejection must not transfer the prepared image into the draft.
+    let rejectedItem: string | undefined
+    await page.route('**/api/session/updateQueue', async route => {
+      const envelope = route.request().postDataJSON() as { rpcId: string; payload: { args: { request: { itemId: string } } } }
+      rejectedItem = envelope.payload.args.request.itemId
+      await route.fulfill({ status: 200, contentType: 'application/json', json: {
+        type: 'server-response', rpcId: envelope.rpcId,
+        result: { ok: false, error: { code: 'gateway/bad-request', message: 'Recall rejected by fixture', details: {} } },
+      } })
+    }, { times: 1 })
+    await input.press('ArrowUp')
+    await page.getByText('Could not recall the queued message. Press ↑ to retry. Messages already sending will not be restored.', { exact: true }).waitFor()
+    await page.locator('[data-composer-input][contenteditable="true"]').first().waitFor()
+    expect(await input.textContent()).toBe('')
+    expect(await rows.count()).toBe(2)
+    expect(await page.locator('[data-composer-card]').getByRole('img', { name: 'queued.png' }).count()).toBe(0)
+
+    const received = Promise.withResolvers<void>()
+    const release = Promise.withResolvers<void>()
+    let recalls = 0
+    let recallRequest: unknown
+    await page.route('**/api/session/updateQueue', async route => {
+      recalls++
+      recallRequest = route.request().postDataJSON()
+      received.resolve()
+      await release.promise
+      await route.continue()
+    })
+    cleanupRoutes = async () => {
+      release.resolve()
+      await page.unrouteAll({ behavior: 'wait' })
+    }
+    try {
+      await input.press('ArrowUp')
+      await received.promise
+      expect(rejectedItem).toEqual(expect.any(String))
+      expect(recallRequest).toMatchObject({ type: 'client-request', method: 'session/updateQueue', rpcId: expect.any(String), payload: { args: { request: {
+        sessionId: scaffold.ctx.sessions.list()[0]!.id,
+        itemId: rejectedItem,
+        action: { kind: 'recall', expectedContent: [
+          { type: 'image', attachment: { name: 'queued.png' } },
+          { type: 'text', text: QUEUED_TEXT },
+        ] },
+      } } } })
+      await input.press('ArrowUp')
+      await input.press('ArrowUp')
+      expect(await input.textContent()).toBe('')
+      expect(await rows.count()).toBe(2)
+      expect(recalls).toBe(1)
+      release.resolve()
+      await expect.poll(() => input.textContent()).toBe(QUEUED_TEXT)
+      await expect.poll(() => rows.count()).toBe(1)
+      expect(await rows.textContent()).toContain(older)
+      const restored = page.locator('[data-composer-card]').getByRole('img', { name: 'queued.png' })
+      await restored.waitFor()
+      await expect.poll(() => restored.evaluate(element =>
+        element instanceof HTMLImageElement && element.complete && element.naturalWidth > 0)).toBe(true)
+      const restoredBytes = await restored.evaluate(async element => {
+        if (!(element instanceof HTMLImageElement) || !element.src.startsWith('blob:')) {
+          throw new Error('Recalled image must use a browser-owned preview')
+        }
+        return [...new Uint8Array(await (await fetch(element.src)).arrayBuffer())]
+      })
+      expect(restoredBytes).toEqual([...await readFile(PNG)])
+      await input.press('ArrowUp')
+      expect(await input.textContent()).toBe(QUEUED_TEXT)
+      expect(await rows.count()).toBe(1)
+      expect(recalls).toBe(1)
+      expect(tripwire.pageErrors).toEqual([])
+      expect(tripwire.warnings).toEqual([])
+    } finally {
+      await cleanupRoutes()
+    }
+  }, 120_000)
+
 })
