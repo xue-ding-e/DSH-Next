@@ -1,14 +1,18 @@
 {
-  "final": "05666542a4f0444f6707d60be5e61a6e6b234540",
+  "final": "3da034befa3cbb14a9076a978d3367f92e4893ce",
   "base": "282f8d630784eab0d935ca06155d96f773983b1e",
   "chain": [
     {
-      "sha": "ad72c3e1d8eb74249f5696e5a95534afa555b9f8",
+      "sha": "79a2287909a071a28f01503e050810a3cd73b1be",
       "parent": "282f8d630784eab0d935ca06155d96f773983b1e"
     },
     {
-      "sha": "05666542a4f0444f6707d60be5e61a6e6b234540",
-      "parent": "ad72c3e1d8eb74249f5696e5a95534afa555b9f8"
+      "sha": "86d708dca8d50b0ae2f139df1f6b2c9557a2bd12",
+      "parent": "79a2287909a071a28f01503e050810a3cd73b1be"
+    },
+    {
+      "sha": "3da034befa3cbb14a9076a978d3367f92e4893ce",
+      "parent": "86d708dca8d50b0ae2f139df1f6b2c9557a2bd12"
     }
   ],
   "files": [
@@ -206,6 +210,16 @@
       "path": "docs/development.zh.md",
       "mode": "100644",
       "blob": "e2b5b9daec3447ea087e830b2e47bfcebce14d74"
+    },
+    {
+      "path": "docs/event-producer-consumer.md",
+      "mode": "100644",
+      "blob": "47b57bf54b61450350dde108d0c543a858ee0aab"
+    },
+    {
+      "path": "docs/event-producer-consumer.zh.md",
+      "mode": "100644",
+      "blob": "434cf1262aab2c6e465c8bd2d93a46369c9e4295"
     },
     {
       "path": "docs/persistence-catalog.i18n.yaml",
@@ -588,6 +602,11 @@
       "blob": "d4449001bd6b30d3f1cf824164562216e25633ab"
     },
     {
+      "path": "packages/extensions/cordis-client-runner/src/client/slot-catalog.ts",
+      "mode": "100644",
+      "blob": "be23040e3ae684312f5b9b6213ff35912138c806"
+    },
+    {
       "path": "packages/extensions/tool-cordis/src/api-catalog.ts",
       "mode": "100644",
       "blob": "30d2884e550f183acdd4994e41376203b667b58e"
@@ -671,5 +690,5 @@
     "packages/interaction/tool-ask-user/tests/tool-ask-user.spec.ts"
   ],
   "reviewNote": "Reviewed final queue feature with fixture fixes; exact single-parent chain and full range blobs pinned after independent review. Runtime application validation remains required.",
-  "tree": "4f870bc72cac2c63f26b56e48079332f3e9d9690"
+  "tree": "d6188a002f67f4d98cdd628e4d2a954db0a4d4d9"
 }

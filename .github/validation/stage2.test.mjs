@@ -26,13 +26,13 @@ test('only exact current control job can pass queue self-exemption', () => {
  assert(!isCurrentValidationRun('xue-ding-e/DSH-Next',{...r,head_branch:'validation/queue-recall-generation-20261027'},'1',sha))
 })
 
-test('final manifest binds reviewed queue feature plus independent initialization links and all 35 real file paths', () => {
+test('final manifest binds reviewed queue feature, initialization links and workspace catalog and all 35 real file paths', () => {
  assertPinned(m)
- assert.equal(m.final, '05666542a4f0444f6707d60be5e61a6e6b234540')
+ assert.equal(m.final, '3da034befa3cbb14a9076a978d3367f92e4893ce')
  assert.equal(m.base, '282f8d630784eab0d935ca06155d96f773983b1e')
- assert.deepEqual(m.chain, [{"sha": "ad72c3e1d8eb74249f5696e5a95534afa555b9f8", "parent": "282f8d630784eab0d935ca06155d96f773983b1e"}, {"sha": "05666542a4f0444f6707d60be5e61a6e6b234540", "parent": "ad72c3e1d8eb74249f5696e5a95534afa555b9f8"}])
- assert.equal(m.chain.length, 2)
- assert.equal(m.files.length, 124)
+ assert.deepEqual(m.chain, [{"sha": "79a2287909a071a28f01503e050810a3cd73b1be", "parent": "282f8d630784eab0d935ca06155d96f773983b1e"}, {"sha": "86d708dca8d50b0ae2f139df1f6b2c9557a2bd12", "parent": "79a2287909a071a28f01503e050810a3cd73b1be"}, {"sha": "3da034befa3cbb14a9076a978d3367f92e4893ce", "parent": "86d708dca8d50b0ae2f139df1f6b2c9557a2bd12"}])
+ assert.equal(m.chain.length, 3)
+ assert.equal(m.files.length, 127)
  const helper = 'packages/api/session-controller/tests/queue-recall-agent.ts'
  assert(m.files.some(file => file.path === helper))
  assert(!m.tests.includes(helper))
@@ -93,7 +93,13 @@ test('workflow retains bounded shallow exact checkout, four action pins and read
  const controlCheckout=workflow.split('      - name: Checkout immutable validation controls\n')[1]?.split('      - name: ')[0]
  assert(controlCheckout, 'the control checkout step must exist')
  assert.match(controlCheckout, /sparse-checkout: \|\n            \.github\/validation\n            \.github\/workflows\n/, 'control sparse checkout must include its validation code and inspected workflow')
- assert(workflow.includes('fetch-depth: 3'))
+ assert(workflow.startsWith('name: Next queue recall locked-toolchain validation'))
+ assert(workflow.includes('run: pnpm install --frozen-lockfile\n'))
+ assert(workflow.includes('run: node control/.github/validation/stage2.mjs product\n'))
+ assert(!workflow.includes('documentation-generation.mjs product'))
+ assert(!workflow.includes('readonly-freshness.mjs product'))
+ assert(!workflow.includes('--ignore-scripts'))
+ assert(workflow.includes('fetch-depth: 4'))
  assert(!workflow.includes('fetch-depth: 0'))
  assert(!workflow.includes('UNPINNED'))
  assert(workflow.includes('contents: read'))
