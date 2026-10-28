@@ -2,34 +2,27 @@ import assert from 'node:assert/strict'
 import { it } from 'vitest'
 import { Session, SessionId } from '@deepseek-ai/dsh-session'
 import type { SessionEvent } from '@deepseek-ai/dsh-session'
-import type { Agent, AgentEventDispatch } from '@deepseek-ai/dsh-agent'
 import type { Context } from '@deepseek-ai/cordis'
 import type { SessionRequestId } from '../src/types.ts'
 import { brandString } from '@deepseek-ai/dsh-brand'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import { FileUploads } from '@deepseek-ai/dsh-client-file-upload'
-import { ReactLoopInbox, inboxProjectionDefinition } from '@deepseek-ai/dsh-agent-loop/src/inbox.ts'
+import { recallAgent } from './queue-recall-agent.ts'
 import { queueRecallProjection } from '../src/queue-recall-projection.ts'
 import { QueueRecallController } from '../src/queue-recall.ts'
 
-function harness(seed?: readonly SessionEvent[], child = false) {
+async function harness(seed?: readonly SessionEvent[], child = false) {
   const initial = Session.create(SessionId('transaction'))
-  const session = Session.create(initial.id, seed, child
-    ? { ...initial.header, origin: 'subagent', parentSession: SessionId('parent') } : initial.header)
+  const { ctx, agent, session, inbox } = await recallAgent(Session.create(initial.id, seed, child
+    ? { ...initial.header, origin: 'subagent', parentSession: SessionId('parent') } : initial.header))
   let throwOnDiscard = false
   let onDiscard: (() => void) | undefined
-  const state = () => session.snapshotEvents().reduce((value, event) => inboxProjectionDefinition.apply(value, event), inboxProjectionDefinition.init())
-  const inbox = new ReactLoopInbox(state, session, { emit(name: string) {
-    if (name === 'agent/inbox/discarded') onDiscard?.()
-    if (name === 'agent/inbox/discarded' && throwOnDiscard) throw new Error('observer failed')
-  } } as AgentEventDispatch)
-  const agent = { id: session.id, session, inbox } as Agent
-  const ctx = {
-    agents: { get: (id: string) => id === agent.id ? agent : undefined },
-    commands: { registerFileReceiptResolver: () => () => {} },
-    connection: { fetch: { register: () => () => {} } },
-    effect: (effect: () => unknown) => effect(), on: () => () => {},
-  } as never as Context
+  ctx.on('agent/inbox/discarded', () => {
+    onDiscard?.()
+    if (throwOnDiscard) throw new Error('observer failed')
+  })
+  ctx.provide('commands', { registerFileReceiptResolver: () => () => {} } as Context['commands'])
+  ctx.provide('connection', { fetch: { register: () => () => {} } } as Context['connection'])
   const files = new FileUploads(ctx)
   const controller = new QueueRecallController()
   const projection = {
@@ -52,8 +45,8 @@ function pending() {
   ] })
 }
 
-it('recovers a lost response after Host restart with fresh receipts and no duplicate queue mutation', () => {
-  const first = harness(); const message = pending()
+it('recovers a lost response after Host restart with fresh receipts and no duplicate queue mutation', async () => {
+  const first = await harness(); const message = pending()
   first.inbox.append('next-turn', message)
   const action = { kind: 'recall' as const, requestId, expectedContent: message.content }
   const accepted = first.controller.recall(first.agent, message.id, action, first.projection, first.files)
@@ -61,7 +54,7 @@ it('recovers a lost response after Host restart with fresh receipts and no dupli
   assert.deepEqual(accepted.recalled?.attachments.map(item => item.type), ['file', 'image'])
   assert.equal(first.inbox.nextTurn.length, 0)
   assert.deepEqual(first.controller.recall(first.agent, message.id, action, first.projection, first.files), accepted)
-  const second = harness(JSON.parse(JSON.stringify(first.session.snapshotEvents())))
+  const second = await harness(JSON.parse(JSON.stringify(first.session.snapshotEvents())))
   const count = second.session.snapshotEvents().length
   const recovered = second.controller.recall(second.agent, message.id, action, second.projection, second.files)
   assert.deepEqual(recovered.recalled?.content, message.content)
@@ -72,8 +65,8 @@ it('recovers a lost response after Host restart with fresh receipts and no dupli
   assert(receipt); assert.equal(second.files.resolve(second.agent, receipt)?.type, 'file')
 })
 
-it('retains a durably committed response when a discard observer throws', () => {
-  const h = harness(); const message = pending(); h.inbox.append('next-turn', message); h.failObserver()
+it('retains a durably committed response when a discard observer throws', async () => {
+  const h = await harness(); const message = pending(); h.inbox.append('next-turn', message); h.failObserver()
   const action = { kind: 'recall' as const, requestId, expectedContent: message.content }
   const result = h.controller.recall(h.agent, message.id, action, h.projection, h.files)
   assert.deepEqual(result.recalled?.content, message.content)
@@ -81,8 +74,8 @@ it('retains a durably committed response when a discard observer throws', () => 
   assert.equal(h.inbox.nextTurn.length, 0)
 })
 
-it('rejects stale CAS and reused request identity without removing other pending messages', () => {
-  const h = harness(); const message = pending(); const other = pending()
+it('rejects stale CAS and reused request identity without removing other pending messages', async () => {
+  const h = await harness(); const message = pending(); const other = pending()
   h.inbox.append('next-turn', message); h.inbox.append('next-turn', other)
   assert.throws(() => h.controller.recall(h.agent, message.id,
     { kind: 'recall', requestId, expectedContent: [{ type: 'text', text: 'stale' }] }, h.projection, h.files))
@@ -93,8 +86,8 @@ it('rejects stale CAS and reused request identity without removing other pending
   assert.deepEqual(h.inbox.nextTurn, [other])
 })
 
-it('leaves the queue intact on a precommit failure and allows the same request to retry', () => {
-  const h = harness(); const message = pending(); h.inbox.append('next-turn', message)
+it('leaves the queue intact on a precommit failure and allows the same request to retry', async () => {
+  const h = await harness(); const message = pending(); h.inbox.append('next-turn', message)
   const original = h.inbox.recall.bind(h.inbox)
   const stage = h.files.stageRecalled.bind(h.files)
   let prepared: readonly import('@deepseek-ai/dsh-client-file-upload').FileUploadReceiptId[] = []
@@ -112,8 +105,8 @@ it('leaves the queue intact on a precommit failure and allows the same request t
 })
 
 
-it('returns the same staged receipt identities to a reentrant postcommit discard observer', () => {
-  const h = harness(); const message = pending(); h.inbox.append('next-turn', message)
+it('returns the same staged receipt identities to a reentrant postcommit discard observer', async () => {
+  const h = await harness(); const message = pending(); h.inbox.append('next-turn', message)
   const action = { kind: 'recall' as const, requestId, expectedContent: message.content }
   let observed: ReturnType<QueueRecallController['recall']> | undefined
   h.onDiscard(() => { observed = h.controller.recall(h.agent, message.id, action, h.projection, h.files) })
@@ -122,8 +115,8 @@ it('returns the same staged receipt identities to a reentrant postcommit discard
   assert.equal(h.projection.stateOf().recalls.length, 1)
 })
 
-it('does not acknowledge a reentrant call before its durable handoff exists', () => {
-  const h = harness(); const message = pending(); h.inbox.append('next-turn', message)
+it('does not acknowledge a reentrant call before its durable handoff exists', async () => {
+  const h = await harness(); const message = pending(); h.inbox.append('next-turn', message)
   const action = { kind: 'recall' as const, requestId, expectedContent: message.content }
   const original = h.inbox.recall.bind(h.inbox)
   h.inbox.recall = (id, operation) => {
@@ -135,11 +128,11 @@ it('does not acknowledge a reentrant call before its durable handoff exists', ()
   assert.equal(h.projection.stateOf().recalls.length, 1)
 })
 
-it('recovers after browser reload from only item and request identities without removing other work', () => {
-  const h = harness(); const message = pending(); const other = pending()
+it('recovers after browser reload from only item and request identities without removing other work', async () => {
+  const h = await harness(); const message = pending(); const other = pending()
   h.inbox.append('next-turn', message); h.inbox.append('next-turn', other)
   h.controller.recall(h.agent, message.id, { kind: 'recall', requestId, expectedContent: message.content }, h.projection, h.files)
-  const restarted = harness(JSON.parse(JSON.stringify(h.session.snapshotEvents())))
+  const restarted = await harness(JSON.parse(JSON.stringify(h.session.snapshotEvents())))
   const before = restarted.session.snapshotEvents().length
   const result = restarted.controller.recover(restarted.agent, message.id, requestId, restarted.projection, restarted.files)
   assert.deepEqual(result.recalled?.content, message.content)
@@ -150,9 +143,9 @@ it('recovers after browser reload from only item and request identities without 
 })
 
 
-it('recalls already-authorized child text and images without invoking file receipt services', () => {
+it('recalls already-authorized child text and images without invoking file receipt services', async () => {
   for (const withImage of [false, true]) {
-    const h = harness(undefined, true)
+    const h = await harness(undefined, true)
     h.files.stageRecalled = () => { throw new Error('must not mint child receipts') }
     h.files.retirePrompt = () => { throw new Error('must not touch child receipts') }
     const content = pending().content.filter(part => part.type === 'text' || (withImage && part.type === 'image'))
@@ -167,8 +160,8 @@ it('recalls already-authorized child text and images without invoking file recei
   }
 })
 
-it('rejects child generic files before mutation or file staging/read', () => {
-  const h = harness(undefined, true); const message = pending(); h.inbox.append('next-turn', message)
+it('rejects child generic files before mutation or file staging/read', async () => {
+  const h = await harness(undefined, true); const message = pending(); h.inbox.append('next-turn', message)
   h.files.stageRecalled = () => { throw new Error('must not stage') }
   h.files.readQueuedFile = async () => { throw new Error('must not read') }
   assert.throws(() => h.controller.recall(h.agent, message.id,

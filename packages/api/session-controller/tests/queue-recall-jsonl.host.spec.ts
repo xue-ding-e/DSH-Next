@@ -14,9 +14,8 @@ import LocalAttachmentStore from '@deepseek-ai/dsh-attachment-local'
 import { AttachmentId } from '@deepseek-ai/dsh-attachment'
 import { brandString } from '@deepseek-ai/dsh-brand'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
-import type { AgentEventDispatch } from '@deepseek-ai/dsh-agent'
-import { ReactLoopInbox, inboxProjectionDefinition } from '@deepseek-ai/dsh-agent-loop/src/inbox.ts'
-import { generationLogPath } from '../../../session/session-persistence-jsonl/src/format.ts'
+import { recallAgent } from './queue-recall-agent.ts'
+import { generationLogPath } from '@deepseek-ai/dsh-session-persistence-jsonl/src/format.ts'
 import { queueRecallProjection } from '../src/queue-recall-projection.ts'
 import type { SessionRequestId } from '../src/types.ts'
 
@@ -61,13 +60,6 @@ async function boot(root: string, contexts: Context[]): Promise<Context> {
   return ctx
 }
 
-async function inboxFor(ctx: Context, session: Session): Promise<ReactLoopInbox> {
-  const projection = await ctx.sessionProjections.register(inboxProjectionDefinition)
-  // No scheduler or model runs in this storage fixture; only the notification sink is inert.
-  const dispatch = { emit() {} } as AgentEventDispatch
-  return new ReactLoopInbox(() => projection.stateOf(session), session, dispatch)
-}
-
 async function persist(ctx: Context, session: Session): Promise<void> {
   const writer = await ctx.sessionPersistence.create(session.header, { inheritedEventCount: session.inheritedEventCount })
   try {
@@ -99,8 +91,7 @@ it('recovers full queue recall identity and file bytes from JSONL in a fresh Loa
     }
   })
   const first = await boot(root, contexts)
-  const session = first.sessions.create(SessionId('persistent-recall-owner'))
-  const inbox = await inboxFor(first, session)
+  const { ctx: agentContext, session, inbox } = await recallAgent(Session.create(SessionId('persistent-recall-owner')))
   const bytes = Uint8Array.of(0, 255, 1, 128, 10, 13, 0)
   const file = await first.attachments.saveFile({ name: '中文 queue.bin', data: bytes })
   const message = createUserMessage({ source: { kind: 'user' }, content: [
@@ -122,7 +113,7 @@ it('recovers full queue recall identity and file bytes from JSONL in a fresh Loa
     target: 'next-turn', removedCount: 1, inserted: [], outcome: 'canceled', recall: { requestId, message },
   } })
   expect(inbox.nextTurn).toEqual([other])
-  const fork = first.sessions.fork(session, undefined, SessionId('persistent-recall-fork'))
+  const fork = agentContext.sessions.fork(session, undefined, SessionId('persistent-recall-fork'))
   await persist(first, session)
   await persist(first, fork)
   const path = generationLogPath(join(root, 'sessions'), undefined, session.id, 4, 'none')
@@ -137,11 +128,14 @@ it('recovers full queue recall identity and file bytes from JSONL in a fresh Loa
   expect(restored.snapshotEvents()).toEqual(session.snapshotEvents())
   const recalls = await second.sessionProjections.register(queueRecallProjection)
   expect(recalls.stateOf(restored).recalls).toEqual([{ requestId, message }])
-  const restoredInbox = await inboxFor(second, restored)
+  const replayed = await recallAgent(restored)
+  expect(replayed.session.snapshotEvents()).toEqual(restored.snapshotEvents())
+  const restoredInbox = replayed.inbox
   const eventCount = restored.snapshotEvents().length
   expect(restoredInbox.nextTurn).toEqual([other])
   expect(restoredInbox.recall(message.id, requestId)).toBe(false)
   expect(restored.snapshotEvents()).toHaveLength(eventCount)
+  expect(replayed.session.snapshotEvents()).toHaveLength(eventCount)
   expect(restoredInbox.nextTurn).toEqual([other])
   const recoveredFile = recalls.stateOf(restored).recalls[0]?.message.content[1]
   if (recoveredFile?.type !== 'file') throw new Error('missing persisted file block')
