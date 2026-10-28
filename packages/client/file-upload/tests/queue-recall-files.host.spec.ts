@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
-import { it } from 'vitest'
-import type { Context } from '@deepseek-ai/cordis'
+import { it, onTestFinished } from 'vitest'
+import { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import type { Session } from '@deepseek-ai/dsh-session'
 import { FileUploads } from '../src/index.ts'
@@ -14,12 +14,14 @@ function fixture() {
   const agent = { id: 'session', session, inbox: { nextTurn: [message], nextStep: [] } } as Agent
   let live: Agent | undefined = agent
   let data: number[][] = [[0, 255], [1]]
-  const ctx = {
-    agents: { get: (id: string) => id === agent.id ? live : undefined }, commands: { registerFileReceiptResolver: () => () => {} },
-    connection: { fetch: { register: () => () => {} } },
-    attachments: { readFileStream: async function* () { for (const chunk of data) yield Uint8Array.from(chunk) } },
-    effect: (effect: () => unknown) => effect(), on: () => () => {},
-  } as never as Context
+  const ctx = new Context()
+  onTestFinished(() => ctx.fiber.dispose())
+  ctx.provide('agents', { get: (id: string) => id === agent.id ? live : undefined } as never)
+  ctx.provide('commands', { registerFileReceiptResolver: () => () => {} } as never)
+  ctx.provide('connection', { fetch: { register: () => () => {} } } as never)
+  ctx.provide('attachments', {
+    readFileStream: async function* () { for (const chunk of data) yield Uint8Array.from(chunk) },
+  } as never)
   const service = new FileUploads(ctx)
   return { service, agent, file, message, otherSession,
     disposeAgent: () => { live = undefined }, setData: (value: number[][]) => { data = value } }
