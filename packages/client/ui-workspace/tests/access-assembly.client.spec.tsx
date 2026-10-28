@@ -8,7 +8,7 @@
  * access Hooks are the renderer's bindings over one non-owner snapshot.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { act, cleanup, screen } from '@testing-library/react'
+import { act, cleanup, screen, waitFor } from '@testing-library/react'
 import type { TypertResourceKind } from '@deepseek-ai/dsh-api-remote-access/client'
 import { ClientAccessState } from '@deepseek-ai/dsh-api-remote-access/src/client/state.ts'
 import type { WorkspaceId } from '@deepseek-ai/dsh-api-workspace-controller/client'
@@ -31,6 +31,7 @@ function SidebarFrame({ renderSlot }: FrameProps) {
 }
 
 const WORKSPACE = 'w1' as WorkspaceId
+const BLANK_SESSION = 'workspace-blank' as SessionId
 
 /**
  * The assembled browsing region over one Workspace, answering access from one snapshot owner.
@@ -64,6 +65,15 @@ async function bench(access: ClientAccessState, options: { ungroupedSession?: Se
   const locale = new LocaleRuntime(runtime.ctx)
   runtime.ctx.provide('locale', locale)
   runtime.slots.installLocale(locale)
+  // Initial navigation restores the Workspace through the real Session fixture contract.
+  // A successful create must name a catalogued Session that can subsequently be retained.
+  await runtime.sessions.add({
+    id: BLANK_SESSION,
+    summary: { blank: true, cwd: '/projects/project' },
+    snapshot: { blank: true },
+  })
+  const create = vi.fn<Parameters<typeof runtime.sessions.stubCreate>[0]>(async () => BLANK_SESSION)
+  runtime.sessions.stubCreate(create)
   if (options.ungroupedSession !== undefined) {
     await runtime.sessions.add({
       id: options.ungroupedSession,
@@ -73,7 +83,7 @@ async function bench(access: ClientAccessState, options: { ungroupedSession?: Se
   await runtime.workspaces.update((draft) => {
     draft.items = [{
       workspaceId: WORKSPACE, title: 'Project', path: '/projects/project',
-      sessionIds: [], createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z',
+      sessionIds: [BLANK_SESSION], createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z',
     }] as never
   })
   await runtime.root.declare(
@@ -81,6 +91,10 @@ async function bench(access: ClientAccessState, options: { ungroupedSession?: Se
     SidebarFrame as never,
   )
   await runtime.mount({ inject: [...inject], apply })
+  await waitFor(() => {
+    expect(create).toHaveBeenCalledExactlyOnceWith({ workspaceId: WORKSPACE, sessionId: BLANK_SESSION })
+    expect(runtime.sessions.retainInfo(BLANK_SESSION).getSnapshot().retainedBy.mainView).toBe(1)
+  })
   return runtime
 }
 
@@ -94,7 +108,7 @@ describe('Workspace header actions under the page access snapshot', () => {
     const runtime = await bench(access)
     try {
       runtime.renderRoot()
-      const header = await screen.findByRole('treeitem')
+      const header = await screen.findByRole('treeitem', { name: /Project/ })
       expect(screen.queryByRole('button', { name: '在“Project”中新建会话' })).toBeNull()
       expect(screen.queryByRole('button', { name: '工作区“Project”的操作' })).toBeNull()
       expect(header.getAttribute('draggable')).toBe('false')
@@ -111,7 +125,7 @@ describe('Workspace header actions under the page access snapshot', () => {
       })
       expect(screen.getByRole('button', { name: '在“Project”中新建会话' })).toBeTruthy()
       expect(screen.getByRole('button', { name: '工作区“Project”的操作' })).toBeTruthy()
-      expect(screen.getByRole('treeitem').getAttribute('draggable')).toBe('true')
+      expect(screen.getByRole('treeitem', { name: /Project/ }).getAttribute('draggable')).toBe('true')
 
       // The owner's snapshot answers every action.
       act(() => { access.replace({ type: 'baseline', owner: true }) })
