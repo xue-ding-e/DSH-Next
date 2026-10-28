@@ -14,7 +14,7 @@ function unsupportedInbox(): Agent['inbox'] {
   }
   return {
     nextTurn: [], nextStep: [], clear: rejectMutation, append: rejectMutation,
-    prepend: rejectMutation, replace: rejectMutation, remove: rejectMutation, splice: rejectMutation,
+    prepend: rejectMutation, replace: rejectMutation, remove: rejectMutation, recall: rejectMutation, splice: rejectMutation,
   }
 }
 
@@ -280,4 +280,39 @@ describe('ReactLoopInbox', () => {
     agent.inbox.clear()
     expect(session.snapshotEvents()).toHaveLength(beforeClear + 2)
   })
+})
+
+it('commits recall content and removal in one splice before publishing discard notifications', async () => {
+  const { ctx, session, agent, inbox } = await inboxAgent('durable-recall')
+  const before = createUserMessage({ content: [{ type: 'text', text: 'before' }], source: { kind: 'user' } })
+  const pending = createUserMessage({ content: [{ type: 'text', text: 'recover me' }], source: { kind: 'user' } })
+  inbox.append('next-turn', before)
+  inbox.append('next-turn', pending)
+  const priorLength = session.snapshotEvents().length
+  const recallId = 'recall-atomic' as import('@deepseek-ai/dsh-brand').Branded<'session-request-id'>
+  ctx.on('agent/inbox/discarded', ({ agent: observed }) => {
+    if (observed !== agent) return
+    expect(session.snapshotEvents().at(-1)).toMatchObject({ type: 'agent/inbox/spliced', data: {
+      target: 'next-turn', start: 1, removedCount: 1, inserted: [], outcome: 'canceled',
+      recall: { requestId: recallId, message: pending },
+    } })
+  })
+  expect(inbox.recall(pending.id, recallId)).toBe(true)
+  expect(session.snapshotEvents()).toHaveLength(priorLength + 1)
+  expect(inbox.nextTurn).toEqual([before])
+  // The unchanged Session reader must accept optional recall metadata on the
+  // existing event; the ordinary Inbox fold still sees only a cancellation.
+  const restored = Session.create(session.id, JSON.parse(JSON.stringify(session.snapshotEvents())), session.header)
+  expect(restored.snapshotEvents().findLast(event => event.type === 'agent/inbox/spliced')).toMatchObject({ data: { recall: { message: pending } } })
+})
+
+it('does not recall next-step or plugin input and does not append a second removal', async () => {
+  const { session, inbox } = await inboxAgent('recall-reject')
+  const pending = createUserMessage({ content: [{ type: 'text', text: 'pending' }], source: { kind: 'user' } })
+  inbox.append('next-step', pending)
+  const recallId = 'recall-reject' as import('@deepseek-ai/dsh-brand').Branded<'session-request-id'>
+  const count = session.snapshotEvents().length
+  expect(inbox.recall(pending.id, recallId)).toBe(false)
+  expect(session.snapshotEvents()).toHaveLength(count)
+  expect(inbox.nextStep).toEqual([pending])
 })

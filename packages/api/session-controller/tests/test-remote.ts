@@ -287,6 +287,7 @@ async function installControllers(
   if (ctx.get('fileUploads') === undefined) {
     ctx.provide('fileUploads', {
       registerAgentResolver: () => () => {},
+      registerRecallResolver: () => () => {},
       resolve: () => undefined,
       bindPrompt: () => ({ commit: () => {}, [Symbol.dispose]: () => {} }),
       retirePrompt: () => {},
