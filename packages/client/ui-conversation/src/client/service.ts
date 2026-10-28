@@ -24,6 +24,9 @@ import type { SnapshotStore } from '@deepseek-ai/dsh-client-store'
 import type {
   ComposerAttachment, ComposerFileAttachment, ComposerImageAttachment, DraftFileUpload,
 } from './contract/slots.ts'
+import { QueueRecall } from './queue/recall.ts'
+import type { SessionRequestId } from '@deepseek-ai/dsh-api-session-controller/types'
+import type { InboxState } from '@deepseek-ai/dsh-agent/types'
 import type { QueueAction } from '@deepseek-ai/dsh-api-session-controller/types'
 import type { MessageId } from '@deepseek-ai/dsh-llm/brand'
 import type { ComposerBlocks } from './contract/composer-blocks.ts'
@@ -31,6 +34,9 @@ import type {
   DraftAttachmentId, DraftAttachmentSerializationResult, SessionInputResolver, SubmitAttachment, SubmitOutcome,
 } from './contract/input.ts'
 import type { InputSubmitMode } from './contract/composer-submission.ts'
+
+/** QueueDock mutations do not expose recall's separate draft-ownership transaction. */
+export type QueueMutationAction = Exclude<QueueAction, { kind: 'recall' | 'recover-recall' }>
 
 /**
  * The outward conversation face (`ctx.conversation`): the scope-addressed
@@ -57,7 +63,7 @@ export interface IConversation {
    * @param action - requested queue operation.
    * @returns completion; converged QueueDock races resolve, while other failures reject.
    */
-  updateQueue(itemId: MessageId, action: QueueAction): Promise<void>
+  updateQueue(itemId: MessageId, action: QueueMutationAction): Promise<void>
   /**
    * Cancel the scoped session's in-flight turn while preserving its pending Queue.
    * @returns completion; failures reject as in send.
@@ -157,6 +163,13 @@ export class ConversationController extends Service implements IConversation {
   readonly blocks: ComposerBlocks
   /** Live upload state per draft that uploads when added: every file draft and every uploaded image draft. */
   readonly fileUploads: SnapshotStore<Record<string, DraftFileUpload>> = createSnapshotStore<Record<string, DraftFileUpload>>({})
+  private readonly recalledText = new Map<SessionId, { ids: readonly DraftAttachmentId[]; content: InboxState['next-turn'][number]['content'] }>()
+  private readonly recalledAttachments = new Map<DraftAttachmentId, { ids: readonly DraftAttachmentId[]; content: InboxState['next-turn'][number]['content'] }>()
+  private readonly recalls = new QueueRecall(
+    (session, item, signal, recalledRequestId) => this.prepareRecall(session, item, signal, recalledRequestId),
+    attachments => this.releaseDraftAttachments(attachments),
+    () => randomUUID() as SessionRequestId,
+  )
   private readonly draftAttachments = new Map<DraftAttachmentId, ComposerAttachment>()
   private readonly fileUploadOperations = new Map<DraftAttachmentId, {
     readonly controller: AbortController
@@ -190,12 +203,15 @@ export class ConversationController extends Service implements IConversation {
       const operations = [...this.fileUploadOperations.values()]
       for (const operation of operations) operation.controller.abort()
       await Promise.allSettled([...this.pendingFileUploads])
+      this.recalls.dispose()
       this.fileUploadOperations.clear()
       this.fileUploadQueue.length = 0
       for (const attachment of this.draftAttachments.values()) {
         if (attachment.kind === 'image') revokePreview(attachment.previewUrl)
       }
       this.draftAttachments.clear()
+      this.recalledText.clear()
+      this.recalledAttachments.clear()
       this.fileUploads.set({})
     }, 'conversation draft attachments')
   }
@@ -288,7 +304,25 @@ export class ConversationController extends Service implements IConversation {
     try {
       await nextPaint()
       const uploaded = await serializeAttachments()
-      content = [...uploaded, ...(text === '' ? [] : [{ type: 'text' as const, text }])]
+      const recalled = attachmentIds.length === 0
+        ? this.recalledText.get(session.sessionId)
+        : this.recalledAttachments.get(attachmentIds[0]!)
+      if (recalled !== undefined && recalled.ids.length === attachmentIds.length
+        && recalled.ids.every((id, index) => id === attachmentIds[index])) {
+        const originalText = recalled.content.filter(block => block.type === 'text').map(block => block.text).join('')
+        let attachmentIndex = 0
+        let textPlaced = false
+        content = recalled.content.flatMap((block) => {
+          if (block.type !== 'text') return [uploaded[attachmentIndex++]!]
+          if (text === originalText) return [block]
+          if (textPlaced) return []
+          textPlaced = true
+          return text === '' ? [] : [{ type: 'text' as const, text }]
+        })
+        if (!recalled.content.some(block => block.type === 'text') && text !== '') content = [...content, { type: 'text', text }]
+      } else {
+        content = [...uploaded, ...(text === '' ? [] : [{ type: 'text' as const, text }])]
+      }
     } catch (error) {
       submission.abandon()
       throw error
@@ -296,6 +330,7 @@ export class ConversationController extends Service implements IConversation {
     const result = await session.prompt(content, mode, signal, submission.requestId)
     if (!result.ok) return { kind: 'error' }
     if (retirement !== undefined && (await retirement).reason !== 'observed') return { kind: 'error' }
+    if (attachmentIds.length === 0) this.recalledText.delete(session.sessionId)
     return { kind: 'success' }
   }
 
@@ -360,6 +395,7 @@ export class ConversationController extends Service implements IConversation {
   }
 
   private beginFileUpload(sessionId: SessionId, attachment: ComposerAttachment): void {
+    const file = attachment.file
     this.fileUploadOperations.get(attachment.id)?.controller.abort()
     const controller = new AbortController()
     this.fileUploads.update((draft) => {
@@ -388,9 +424,9 @@ export class ConversationController extends Service implements IConversation {
           || this.fileUploadOperations.get(attachment.id)?.controller !== controller) return
         const result = attachment.kind === 'image'
           ? await this.ctx.fileUpload.uploadImage(
-            sessionId, attachment.file, imageMediaType(attachment.file.type), name, controller.signal, onProgress,
+            sessionId, file, imageMediaType(file.type), name, controller.signal, onProgress,
           )
-          : await this.ctx.fileUpload.upload(sessionId, attachment.file, name, controller.signal, onProgress)
+          : await this.ctx.fileUpload.upload(sessionId, file, name, controller.signal, onProgress)
         if (this.fileUploadOperations.get(attachment.id)?.controller !== controller) return
         this.fileUploads.update((draft) => {
           if (!(attachment.id in draft)) return
@@ -489,6 +525,7 @@ export class ConversationController extends Service implements IConversation {
     const attachment = this.draftAttachments.get(id)
     if (attachment === undefined) return
     this.draftAttachments.delete(id)
+    this.recalledAttachments.delete(id)
     if (attachment.kind === 'image') revokePreview(attachment.previewUrl)
     // The stored Host object stays durable; only the draft's upload state ends.
     this.dropUpload(id)
@@ -517,8 +554,81 @@ export class ConversationController extends Service implements IConversation {
     for (const attachment of attachments) this.releaseDraftAttachment(attachment.id)
   }
 
+  /** Whether this exact Session has a pending or uncertain recall to resume. */
+  canRecallQueue(session: SessionFace): boolean {
+    return this.recalls.available(session)
+  }
+
+  /** Whether the original Session should display unfinished-recall recovery guidance. */
+  hasPendingRecall(session: SessionFace): boolean {
+    return this.recalls.recoverable(session)
+  }
+
+  /** Prepare all attachment descriptors before the Host can remove a pending message. */
+  private async prepareRecall(session: SessionFace, item: InboxState['next-turn'][number], signal?: AbortSignal, recalledRequestId?: SessionRequestId): Promise<readonly ComposerAttachment[]> {
+    const attachments: ComposerAttachment[] = []
+    const subagent = session.getSnapshot().subagent
+    if (subagent !== null && subagent.address.mode !== 'continuable') throw new Error('queue recall: child is not continuable')
+    if (subagent !== null && item.content.some(block => block.type === 'file')) throw new Error('queue recall: child file input is unsupported')
+    try {
+      for (const block of item.content) {
+        signal?.throwIfAborted()
+        if (block.type === 'text') continue
+        if (block.type === 'file') {
+          const file = await this.ctx.fileUpload.readQueuedFile(session.sessionId, item.id, block.attachment, signal, recalledRequestId)
+          attachments.push({ kind: 'file', id: randomUUID() as DraftAttachmentId, file })
+          continue
+        }
+        if (block.type !== 'image' || !('attachment' in block)) throw new Error('queue recall: unsupported content')
+        const read = await session.readAttachment(block.attachment.attachmentId)
+        if (!read.ok) throw new Error(`queue recall: ${read.error.message}`)
+        const file = new File([new Uint8Array(read.value.data)], block.attachment.name ?? '', { type: block.attachment.mediaType })
+        const attachment = browserDraftAttachment(file)
+        attachment.width = block.attachment.width
+        attachment.height = block.attachment.height
+        attachments.push(attachment)
+      }
+      for (const attachment of attachments) this.draftAttachments.set(attachment.id, attachment)
+      return attachments
+    } catch (error) {
+      for (const attachment of attachments) if (attachment.kind === 'image') revokePreview(attachment.previewUrl)
+      throw error
+    }
+  }
+
+  /** Transfer one acknowledged queue occurrence into already-prepared local attachment ownership. */
+  async recallQueue(session: SessionFace, stillAccepts: () => boolean, signal?: AbortSignal): Promise<{
+    readonly text: string; readonly attachmentIds: readonly DraftAttachmentId[]; commit(): void
+  } | undefined> {
+    const result = await this.recalls.recall(session, stillAccepts, signal)
+    if (result === undefined) return undefined
+    const { prepared, recalled } = result
+    const uploads = { ...this.fileUploads.getSnapshot() }
+    for (const [index, attachment] of prepared.entries()) {
+      const receipt = recalled.attachments[index]!
+      if (attachment.kind === 'image' && !this.draftAttachments.has(attachment.id)) {
+        attachment.previewUrl = URL.createObjectURL(attachment.file)
+      }
+      this.draftAttachments.set(attachment.id, attachment)
+      if (receipt.type === 'file') {
+        uploads[attachment.id] = { status: 'ready', receiptId: receipt.receiptId, file: receipt.file }
+      } else if (receipt.receiptId !== undefined) {
+        uploads[attachment.id] = { status: 'ready', receiptId: receipt.receiptId }
+      } else {
+        // Continuable children accept inline image bytes, not upload receipts.
+        delete uploads[attachment.id]
+      }
+    }
+    this.fileUploads.set(uploads)
+    const replay = { ids: prepared.map(attachment => attachment.id), content: recalled.content }
+    if (replay.ids.length === 0) this.recalledText.set(session.sessionId, replay)
+    else for (const id of replay.ids) this.recalledAttachments.set(id, replay)
+    return { text: recalled.content.filter(block => block.type === 'text').map(block => block.text).join(''),
+      attachmentIds: prepared.map(attachment => attachment.id), commit: result.commit }
+  }
+
   /** Apply one operation to a pending queue occurrence. */
-  async updateQueue(itemId: MessageId, action: QueueAction): Promise<void> {
+  async updateQueue(itemId: MessageId, action: QueueMutationAction): Promise<void> {
     const session = this.scopedSession('updateQueue')
     const result = await session.updateQueue(itemId, action)
     if (!result.ok) {
@@ -592,6 +702,7 @@ export class ConversationController extends Service implements IConversation {
         continue
       }
       this.draftAttachments.delete(attachment.id)
+      this.recalledAttachments.delete(attachment.id)
       this.forgetUpload(attachment.id)
       if (ref !== undefined && 'mediaType' in ref
         && uiConversation?.seedImageUrl(sessionId, ref, attachment.previewUrl) === true) continue

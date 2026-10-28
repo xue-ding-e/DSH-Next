@@ -2,14 +2,17 @@
 
 import { randomUUID } from 'node:crypto'
 import type { Context } from '@deepseek-ai/cordis'
+import type { Branded } from '@deepseek-ai/dsh-brand'
 import type { Agent } from '@deepseek-ai/dsh-agent'
-import type { ImageAttachmentRef } from '@deepseek-ai/dsh-attachment'
+import type { AttachmentId, FileAttachmentRef, ImageAttachmentRef } from '@deepseek-ai/dsh-attachment'
 import type {} from '@deepseek-ai/dsh-client-connection'
 import type { CommandFileReceiptResolver } from '@deepseek-ai/dsh-commands'
-import type { Session, SessionEvent, SessionId } from '@deepseek-ai/dsh-session'
+import type { Session, SessionEvent, SessionId, UserMessage } from '@deepseek-ai/dsh-session'
 import { Remote, RemoteError, remoteErrorOf, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
+import { handleQueuedFileHttp } from './queued-file-route.ts'
+import type { MessageId } from '@deepseek-ai/dsh-llm/brand'
 import { handleFileUploadHttp } from './http-route.ts'
-import { FILE_UPLOAD_PATH } from './protocol.ts'
+import { FILE_UPLOAD_PATH, QUEUED_FILE_PATH } from './protocol.ts'
 import type {
   EncodedFileUploadRequest, FileUploadReceiptId, FileUploadValue, ImageUploadValue, StagedAttachment,
 } from './types.ts'
@@ -32,10 +35,18 @@ interface StagedFileUpload {
 /** Resolve or resume the ordinary Agent that owns one Session identity. */
 export type AgentResolver = (sessionId: SessionId) => Promise<Agent>
 
+/** Host-only authority reader for one durable recalled occurrence in the exact Session. */
+export type QueueRecallResolver = (agent: Agent, itemId: MessageId, requestId: Branded<'session-request-id'>) => UserMessage | undefined
+
 /** Prompt receipt binding that restores its previous owners unless delivery commits it. */
 export interface PromptFileBinding extends Disposable {
   /** Keep the receipt bindings until queue or history observation retires them. */
   commit(): void
+}
+
+/** Fresh receipts prepared from authoritative pending content, rolled back unless committed. */
+export interface RecalledFileStaging extends PromptFileBinding {
+  readonly receiptIds: readonly FileUploadReceiptId[]
 }
 
 class PromptFileBindingGuard implements PromptFileBinding {
@@ -64,6 +75,8 @@ export class FileUploads extends TypertRemoteService {
   // registered resolver would always be false; a plain object is returned as is.
   private readonly agentResolution: { resolver: AgentResolver | undefined } = { resolver: undefined }
 
+  private readonly recallResolution: { resolver: QueueRecallResolver | undefined } = { resolver: undefined }
+
   /** @param ctx - Host context carrying Agent, attachment, command, and Connection services. */
   constructor(ctx: Context) {
     super(ctx, 'fileUploads')
@@ -85,6 +98,15 @@ export class FileUploads extends TypertRemoteService {
       }),
       'file-upload: streaming route',
     )
+    ctx.effect(
+      () => ctx.connection.fetch.register({
+        path: QUEUED_FILE_PATH,
+        methods: ['GET'],
+        requestBody: 'buffered',
+        fetch: request => handleQueuedFileHttp(this, request),
+      }),
+      'file-upload: pending file read route',
+    )
     ctx.on('session/event', (session, event) => { this.observeSessionEvent(session, event) })
     ctx.on('session/disposed', (session) => { this.stagedFiles.delete(session) })
   }
@@ -99,6 +121,19 @@ export class FileUploads extends TypertRemoteService {
     this.agentResolution.resolver = resolve
     return () => {
       if (this.agentResolution.resolver === resolve) this.agentResolution.resolver = undefined
+    }
+  }
+
+  /**
+   * Register the Session domain's durable recall reader, without widening file-read authority.
+   * @param resolve - exact Session/occurrence/operation reader.
+   * @returns disposer removing this owner on plugin unload.
+   */
+  registerRecallResolver(resolve: QueueRecallResolver): () => void {
+    if (this.recallResolution.resolver !== undefined) throw new Error('file-upload: recall resolver is already registered')
+    this.recallResolution.resolver = resolve
+    return () => {
+      if (this.recallResolution.resolver === resolve) this.recallResolution.resolver = undefined
     }
   }
 
@@ -230,6 +265,77 @@ export class FileUploads extends TypertRemoteService {
    */
   retirePrompt(agent: Agent, requestId: string): void {
     this.retire(agent.session, requestId)
+  }
+
+  /**
+   * Read a file from one pending user occurrence or its committed recall record, never an arbitrary reference.
+   * @param request - Session, message, attachment and optional committed recall identities plus cancellation.
+   * @returns the authoritative reference and a bounded verified byte stream.
+   */
+  async readQueuedFile(request: {
+    readonly sessionId: SessionId
+    readonly itemId: MessageId
+    readonly attachmentId: AttachmentId
+    readonly recallRequestId?: Branded<'session-request-id'>
+    readonly signal: AbortSignal
+  }): Promise<{ readonly file: FileAttachmentRef; readonly data: AsyncIterable<Uint8Array> }> {
+    request.signal.throwIfAborted()
+    const agent = await this.resolveAgent(request.sessionId)
+    this.assertOrdinaryAgent(agent)
+    const message = request.recallRequestId === undefined
+      ? agent.inbox.nextTurn.find(candidate => candidate.id === request.itemId)
+      : this.recallResolution.resolver?.(agent, request.itemId, request.recallRequestId)
+    const part = message?.id === request.itemId && message.source.kind === 'user'
+      ? message.content.find(block => block.type === 'file' && block.attachment.attachmentId === request.attachmentId)
+      : undefined
+    if (part?.type !== 'file') {
+      throw new RemoteError('gateway/bad-request', 'file is not referenced by this pending user occurrence', {})
+    }
+    const file = part.attachment
+    const source = this.ctx.attachments.readFileStream(file, request.signal)
+    const isCurrent = () => this.ctx.agents.get(agent.id) === agent
+    async function* read(): AsyncIterable<Uint8Array> {
+      let bytes = 0
+      for await (const chunk of source) {
+        request.signal.throwIfAborted()
+        if (!isCurrent()) throw new Error('pending file Session was disposed')
+        bytes += chunk.byteLength
+        if (bytes > file.bytes) throw new Error('pending file exceeded its stored byte length')
+        yield chunk
+      }
+      request.signal.throwIfAborted()
+      if (!isCurrent()) throw new Error('pending file Session was disposed')
+      if (bytes !== file.bytes) throw new Error('pending file did not match its stored byte length')
+    }
+    return { file, data: read() }
+  }
+
+  /**
+   * Stage trusted attachments from an already admitted pending message.
+   * This Host-only method grants no authority to client-supplied references.
+   * @param agent - exact ordinary Session owner of the pending message.
+   * @param attachments - authoritative attachments in content order.
+   * @returns fresh receipts and a rollback guard for the queue removal transaction.
+   */
+  stageRecalled(agent: Agent, attachments: readonly StagedAttachment[]): RecalledFileStaging {
+    this.assertOrdinaryAgent(agent)
+    const receiptIds: FileUploadReceiptId[] = []
+    const guard = new PromptFileBindingGuard(() => {
+      const staged = this.stagedFiles.get(agent.session)
+      for (const receiptId of receiptIds) staged?.delete(receiptId)
+      if (staged?.size === 0) this.stagedFiles.delete(agent.session)
+    })
+    try {
+      for (const attachment of attachments) receiptIds.push(this.stage(agent, attachment))
+      return {
+        receiptIds,
+        commit: () => guard.commit(),
+        [Symbol.dispose]: () => guard[Symbol.dispose](),
+      }
+    } catch (error) {
+      guard[Symbol.dispose]()
+      throw error
+    }
   }
 
   /** Store one upload for an ordinary Agent; storage failures become Remote failures. */
