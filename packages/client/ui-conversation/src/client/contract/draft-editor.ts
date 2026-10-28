@@ -83,6 +83,8 @@ export interface ComposerKeyboard {
    * button is the same operation applied to the whole queue).
    */
   steerQueue(): void
+  /** Recall the latest pending message only when this Session has no draft or admission in flight. */
+  recallQueue(): boolean
   /** Insert pasted plain text over the current editor selection (reference-placeholder-sanitized). */
   paste(text: string): void
   /**
