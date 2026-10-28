@@ -22,13 +22,13 @@ import type { SessionRequestId } from '../src/types.ts'
 async function boot(root: string, contexts: Context[]): Promise<Context> {
   const configPath = join(root, 'cordis.yml')
   await writeFile(configPath, [
-    "- name: '@deepseek-ai/dsh-session'",
-    "- name: '@deepseek-ai/dsh-session-projection'",
-    "- name: '@deepseek-ai/dsh-session-persistence-jsonl'",
+    "- name: 'cordis:@deepseek-ai/dsh-session'",
+    "- name: 'cordis:@deepseek-ai/dsh-session-projection'",
+    "- name: 'cordis:@deepseek-ai/dsh-session-persistence-jsonl'",
     '  config:',
     `    root: ${JSON.stringify(join(root, 'sessions'))}`,
     '    compression: none',
-    "- name: '@deepseek-ai/dsh-attachment-local'",
+    "- name: 'cordis:@deepseek-ai/dsh-attachment-local'",
     '  config:',
     `    dshHome: ${JSON.stringify(join(root, 'home'))}`,
     '',
@@ -45,13 +45,7 @@ async function boot(root: string, contexts: Context[]): Promise<Context> {
     ['@deepseek-ai/dsh-attachment-local', LocalAttachmentStore],
   ])
   // The table changes module resolution only; Loader owns activation and disposal.
-  ctx.loader.internal = {
-    version: 'v2',
-    async import(specifier: string) {
-      if (!modules.has(specifier)) throw new Error(`unexpected Loader import: ${specifier}`)
-      return modules.get(specifier)
-    },
-  } as NonNullable<typeof ctx.loader.internal>
+  for (const [specifier, module] of modules) ctx.loader.builtins[specifier] = module
   await ctx.loader.create({ name: 'cordis:include', config: { path: pathToFileURL(configPath).href } })
   await ctx.loader.await()
   expect([...ctx.loader.entries()].filter(entry => !entry.disabled && entry.fiber === undefined)).toEqual([])

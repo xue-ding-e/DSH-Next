@@ -21,8 +21,10 @@ async function harness(seed?: readonly SessionEvent[], child = false) {
     onDiscard?.()
     if (throwOnDiscard) throw new Error('observer failed')
   })
-  ctx.provide('commands', { registerFileReceiptResolver: () => () => {} } as Context['commands'])
-  ctx.provide('connection', { fetch: { register: () => () => {} } } as Context['connection'])
+  ctx.provide('commands', { registerFileReceiptResolver: () => () => {} } satisfies Pick<Context['commands'], 'registerFileReceiptResolver'>)
+  ctx.provide('connection', {
+    fetch: { register: () => async () => {} } satisfies Pick<Context['connection']['fetch'], 'register'>,
+  } satisfies Pick<Context['connection'], 'fetch'>)
   const files = new FileUploads(ctx)
   const controller = new QueueRecallController()
   const projection = {
