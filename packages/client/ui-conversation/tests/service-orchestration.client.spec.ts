@@ -1226,36 +1226,55 @@ describe('InputHub pending queue recall', () => {
   })
 })
 
-it('rolls back an observer-failed recall before retry, without leaking a retained Session or writing view-owned editability', async () => {
+it('rolls back a journal-commit-failed recall before retry, without leaking a retained Session or writing view-owned editability', async () => {
   const b = await bench()
   const latest: UserMessage = { id: 'recover-observer' as MessageId, role: 'user', source: { kind: 'user' },
     content: [{ type: 'text', text: 'queued draft' }] }
-  let off: (() => void) | undefined
+  const nativeRemoveItem = Storage.prototype.removeItem
+  const removeItem = vi.spyOn(Storage.prototype, 'removeItem')
+  let failedKey: string | undefined
   try {
     await b.runtime.sessions.setProjection('s1', 'inbox', { 'next-turn': [latest], 'next-step': [] })
     b.updateQueue.mockResolvedValue({ ok: true, value: { accepted: true,
       recalled: { content: latest.content, attachments: [] } } } as never)
     const retained = b.runtime.sessions.retainInfo('s1' as SessionId).getSnapshot()
     const setEditable = vi.spyOn(b.shell.editor, 'setEditable')
-    let fail = true
-    off = b.shell.state.subscribe(() => {
-      if (fail && b.shell.snapshot.draft === 'queued draft') {
-        fail = false
-        throw new Error('synthetic observer failure')
+    // Store observers are intentionally isolated by notifySubscribers. Inject
+    // a real transaction failure instead: clearing its durable recall identity.
+    removeItem.mockImplementation(function (this: Storage, key: string) {
+      const prefix = 'dsh.conversation.recall/s1/'
+      if (failedKey === undefined && this === localStorage && key.startsWith(prefix)) {
+        const identity = JSON.parse(this.getItem(key) ?? 'null') as { itemId?: string; requestId?: string } | null
+        if (identity?.itemId === latest.id && typeof identity.requestId === 'string'
+          && key === `${prefix}${encodeURIComponent(identity.requestId)}`) {
+          failedKey = key
+          throw new Error('synthetic journal failure')
+        }
       }
+      nativeRemoveItem.call(this, key)
     })
     expect(b.shell.recallQueue()).toBe(true)
     await vi.waitFor(() => { expect(b.shell.notices.getSnapshot()?.level).toBe('error') })
+    expect(failedKey).toBeDefined()
+    expect(removeItem).toHaveBeenCalledWith(failedKey)
+    const identity = JSON.parse(localStorage.getItem(failedKey!)!) as { version: number; itemId: string; requestId: string }
+    expect(identity).toEqual({ version: 1, itemId: latest.id, requestId: expect.any(String) })
+    expect(failedKey).toBe(`dsh.conversation.recall/s1/${encodeURIComponent(identity.requestId)}`)
+    expect(b.updateQueue).toHaveBeenCalledExactlyOnceWith(latest.id, {
+      kind: 'recall', requestId: identity.requestId, expectedContent: latest.content,
+    })
     expect(b.shell.snapshot.draft).toBe('')
     expect(b.shell.snapshot.attachmentIds).toEqual([])
     expect(b.runtime.sessions.retainInfo('s1' as SessionId).getSnapshot()).toEqual(retained)
     expect(b.shell.recallQueue()).toBe(true)
     await vi.waitFor(() => { expect(b.shell.snapshot.draft).toBe('queued draft') })
     expect(b.updateQueue.mock.calls[1]).toEqual(b.updateQueue.mock.calls[0])
+    expect(removeItem.mock.calls.filter(([key]) => key === failedKey)).toHaveLength(2)
+    expect(localStorage.getItem(failedKey!)).toBeNull()
     expect(setEditable).not.toHaveBeenCalled()
     expect(b.runtime.sessions.retainInfo('s1' as SessionId).getSnapshot()).toEqual(retained)
   } finally {
-    off?.()
+    removeItem.mockRestore()
     await b.runtime.dispose()
   }
 })
@@ -1280,7 +1299,20 @@ it('restores continuable child images as inline bytes without creating unsupport
     expect(draft).toBeDefined()
     draft!.commit()
     expect(b.root.fileUploads.getSnapshot()[draft!.attachmentIds[0]!]).toBeUndefined()
-    await b.root.sendSession(session, draft!.text, draft!.attachmentIds, 'queue')
+    let retire: BeginSubmissionInput['onRetire']
+    vi.spyOn(session, 'beginSubmission').mockImplementation((input) => {
+      retire = input.onRetire
+      return { requestId: 'child-image-resubmit' as never, abandon: vi.fn() }
+    })
+    const sending = b.root.sendSession(session, draft!.text, draft!.attachmentIds, 'queue')
+    // An accepted RPC is not an observed echo. Keep recovered bytes alive
+    // until the Session reports the attachment-bearing submission retired.
+    await vi.waitFor(() => { expect(b.prompt).toHaveBeenCalledOnce() })
+    expect(b.root.resolveDraftAttachments(draft!.attachmentIds)).toHaveLength(1)
+    expect(retire).toBeTypeOf('function')
+    retire!({ reason: 'observed', attachments: [IMAGE_REF] })
+    await expect(sending).resolves.toEqual({ kind: 'success' })
+    expect(b.root.resolveDraftAttachments(draft!.attachmentIds)).toEqual([])
     expect(b.prompt.mock.calls[0]?.[0]).toEqual([
       { type: 'image', mediaType: 'image/png', data: 'AQ==' }, { type: 'text', text: 'caption' },
     ])
@@ -1300,4 +1332,37 @@ it('refuses unsupported child file recall before downloading or removing queued 
     await expect(b.root.recallQueue(session, () => true)).rejects.toThrow('child file input is unsupported')
     expect(b.updateQueue).not.toHaveBeenCalled()
   } finally { vi.restoreAllMocks(); await b.runtime.dispose() }
+})
+
+
+it('isolates a failing recall observer without losing the draft or recalling twice', async () => {
+  const b = await bench()
+  const failure = new Error('synthetic observer failure')
+  const report = vi.spyOn(console, 'error').mockImplementation(() => {})
+  let off: (() => void) | undefined
+  try {
+    const latest: UserMessage = { id: 'observer-isolation' as MessageId, role: 'user', source: { kind: 'user' },
+      content: [{ type: 'text', text: 'queued draft' }] }
+    await b.runtime.sessions.setProjection('s1', 'inbox', { 'next-turn': [latest], 'next-step': [] })
+    b.updateQueue.mockResolvedValue({ ok: true, value: { accepted: true,
+      recalled: { content: latest.content, attachments: [] } } } as never)
+    const retained = b.runtime.sessions.retainInfo('s1' as SessionId).getSnapshot()
+    off = b.shell.state.subscribe(() => {
+      if (b.shell.snapshot.draft === 'queued draft') throw failure
+    })
+    expect(b.shell.recallQueue()).toBe(true)
+    await vi.waitFor(() => {
+      expect(b.shell.snapshot.draft).toBe('queued draft')
+      expect(b.shell.snapshot.phase).toBe('plain')
+    })
+    expect(report).toHaveBeenCalledWith('[client-store] subscriber failed:', failure)
+    expect(b.shell.notices.getSnapshot()?.level).not.toBe('error')
+    expect(b.shell.recallQueue()).toBe(false)
+    expect(b.updateQueue).toHaveBeenCalledOnce()
+    expect(b.runtime.sessions.retainInfo('s1' as SessionId).getSnapshot()).toEqual(retained)
+  } finally {
+    off?.()
+    report.mockRestore()
+    await b.runtime.dispose()
+  }
 })
