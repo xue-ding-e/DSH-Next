@@ -13,8 +13,6 @@ kind: "package-reference"
 
 `ui-conversation` 拥有与 target 无关的 Conversation 组装和共享浏览器 shell。它消费 Session Controller 的 `SessionEventLikeEntry` feed，通过 `ctx.uiConversation` 暴露不依赖 React 的注册表与逐 Session binding，并通过 `ctx.uiSession` 提供 `useConversation`、`useInput` 和 `inputActions` 标准 props。它还拥有按会话的持久化图片 URL 缓存：`ctx.uiConversation.imageUrl(sessionId, attachment)` 为每个附件解析一个经会话授权的浏览器 URL，并随 Session binding 释放而撤销，因此所有 Conversation target 共享一次 `session.attachment` 读取。Chat 等具体 target 位于独立包，由各自包注册 Definition、快照 builder、View 和 renderer。
 
-空闲且为空的输入框可通过方向键 ↑ 撤回最新一条符合条件的排队用户消息。仅在 Host 提交撤回后，编辑器才恢复文本和已核验的附件字节。本地日志只保存操作身份，不保存消息内容，以便恢复中断的交付而不移除其他队列条目。已有草稿或正在进行的撤回操作会阻止再次撤回。
-
 ## 目录
 
 - [Conversation 组装](#conversation-assembly)
@@ -134,6 +132,8 @@ Send 和 Stop 按钮禁用时不显示提示气泡，轮次结束后由 Stop 切
 
 <a id="temporary-composer-entries"></a>
 ## 临时 composer entry
+
+空闲且为空的输入框可通过方向键 ↑ 撤回最新一条符合条件的排队用户消息。仅在 Host 提交撤回后，编辑器才恢复文本和已核验的附件字节。本地日志只保存操作身份，不保存消息内容，以便恢复中断的交付而不移除其他队列条目。已有草稿或正在进行的撤回操作会阻止再次撤回。
 
 `conversation.composer` 是通用 chain，其完整 owner currency 为：
 

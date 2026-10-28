@@ -12,8 +12,6 @@ Desktop analytics follows the [product collection policy](../../client/product-a
 
 `@deepseek-ai/dsh-api-session-controller` owns the Host `ctx.sessionController` service and the generated Client `session`, `skills`, and `fileReferences` Remote namespaces. It serves Session lifecycle and history, the Host-generation model catalog, human background-job kill, workspace-path opening, user-invocable skill discovery, and Agent-scoped file references. Use it through API Gateway when a Client needs operations addressed by a Session.
 
-Queue recall compares the complete expected content before removing one pending user occurrence. Its request identity and removed message commit together in the inbox log. Recovery reads only committed operations owned by the current Session, excludes inherited fork events, and preserves the original message block order. A continuable child must still have its existing owner.
-
 ## Table of Contents
 
 - [Use this package](#use-this-package)
@@ -28,6 +26,8 @@ Queue recall compares the complete expected content before removing one pending 
 
 <a id="use-this-package"></a>
 ## Use this package
+
+Queue recall compares the complete expected content before removing one pending user occurrence. Its request identity and removed message commit together in one inbox splice without changing model admission. Recovery reads only committed operations owned by the current Session, excludes inherited fork events, and preserves the original message block order. A continuable child must still have its existing owner.
 
 The controller reads a Session's recorded preset through the optional `agentPresets.presetForSession(session)` service method. A null result means no preset was recorded; an absent service means preset identity is unavailable to the controller.
 

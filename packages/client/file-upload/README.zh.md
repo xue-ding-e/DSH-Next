@@ -11,8 +11,6 @@ kind: "package-reference"
 
 本包让浏览器功能为一个 Session 存储 `Blob`、精确字节或 `ReadableStream<Uint8Array>`，并取得供后续 prompt 使用的不透明凭证。普通服务页面发送 Blob 和 stream 请求体时，不会在页面线程聚合全部字节；Host 位于其他执行上下文中的页面会在 Cordis 启动前提供 Fetch 形式的载体。调用方可以观察已消费字节并取消活动操作。stream 请求体只能消费一次，跨 Worker 边界时会转移所有权。图片上传会暂存一张规整后的 prompt 图片，供后续 prompt 凭证引用。
 
-排队文件读取必须匹配准确的 Session、用户消息和附件身份。已提交的撤回请求可在响应丢失后恢复相同字节。QueueRecallResolver 提供该 Session 所有的恢复查询；RecalledFileStaging 持有新的回执绑定，交付未提交时回滚绑定。子 Session 保留内联图片准入，不能撤回普通文件。
-
 ## 目录
 
 - [使用本包](#use-this-package)
@@ -43,6 +41,8 @@ kind: "package-reference"
 
 <details>
 <summary>实现细节——点击展开</summary>
+
+排队文件读取必须匹配准确的 Session、用户消息和附件身份。已提交的撤回请求可在响应丢失后恢复相同字节。QueueRecallResolver 提供该 Session 所有的恢复查询；RecalledFileStaging 持有新的回执绑定，交付未提交时回滚绑定。子 Session 保留内联图片准入，不能撤回普通文件。
 
 Client 插件提供 `ctx.fileUpload`。其 `upload()` 方法接收所属 Session 标识，组装原始路由请求，并为精确字节调用生成的 Remote。提供方只读取一次可选的 Cordis 启动前 `__DSH_FILE_UPLOAD__` 钩子。没有该钩子时，每个 Blob 或 stream 请求拥有一个短期 Worker，并在完成、失败或取消后释放。存在该钩子时，服务通过页面自己提供的 Fetch 载体发送请求体；Web Worker runtime 会通过请求帧转移 stream 请求体，再以带背压的分片形式交给 Host HTTP bridge。
 

@@ -11,8 +11,6 @@ English | [中文](README.zh.md)
 
 This package lets browser features store a `Blob`, exact bytes, or a `ReadableStream<Uint8Array>` for one Session and receive an opaque receipt for a later prompt. Served pages send Blob and stream bodies without aggregating their bytes on the page thread; pages whose Host runs in another execution context supply a Fetch-shaped carrier before Cordis boots. Callers can observe consumed bytes and cancel an active operation. A stream body is consumed once and transfers ownership when it crosses a Worker boundary. An image upload stages a normalized prompt image that a later prompt cites by receipt.
 
-Queued-file reads require the exact Session, user occurrence and attachment identities. A committed recall request may recover the same bytes after a lost response. QueueRecallResolver supplies that Session-owned recovery lookup; RecalledFileStaging owns fresh receipt bindings and rolls them back unless delivery commits them. Child Sessions retain inline image admission and cannot recall generic files.
-
 ## Table of Contents
 
 - [Use this package](#use-this-package)
@@ -43,6 +41,8 @@ The package has no Cordis configuration fields. A `Blob` uses XMLHttpRequest ins
 
 <details>
 <summary>Implementation internals — click to expand</summary>
+
+Queued-file reads require the exact Session, user occurrence and attachment identities. A committed recall request may recover the same bytes after a lost response. QueueRecallResolver supplies that Session-owned recovery lookup; RecalledFileStaging owns fresh receipt bindings and rolls them back unless delivery commits them. Child Sessions retain inline image admission and cannot recall generic files.
 
 The Client plugin provides `ctx.fileUpload`. Its `upload()` method receives the owning Session identity, assembles the raw route request, and invokes the generated Remote for exact bytes. The provider reads the optional pre-Cordis `__DSH_FILE_UPLOAD__` hook once. Without a hook, each Blob or stream request owns a short-lived Worker and releases it after completion, failure, or cancellation. With the hook, the service sends the body through the page-owned Fetch carrier; the Web Worker runtime transfers stream bodies through its request frame and exposes them to the Host HTTP bridge as backpressured chunks.
 
