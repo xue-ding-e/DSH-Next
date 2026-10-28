@@ -28,10 +28,10 @@ test('only exact current control job can pass queue self-exemption', () => {
 
 test('final manifest binds one reviewed logical queue commit and all 35 real file paths', () => {
  assertPinned(m)
- assert.equal(m.final, '35f5fad4bd311fd64846979895f6e26ed3c0a1ae')
+ assert.equal(m.final, '07b53ef00927b4f053ddd1ddd19207297876822d')
  assert.equal(m.base, '282f8d630784eab0d935ca06155d96f773983b1e')
  assert.equal(m.chain.length, 1)
- assert.equal(m.files.length, 77)
+ assert.equal(m.files.length, 80)
  const helper = 'packages/api/session-controller/tests/queue-recall-agent.ts'
  assert(m.files.some(file => file.path === helper))
  assert(!m.tests.includes(helper))

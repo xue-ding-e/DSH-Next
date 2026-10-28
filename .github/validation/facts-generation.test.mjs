@@ -1,7 +1,10 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
-import { ALLOWED, ACK, COMMANDS, PRODUCT, PARENT, TREE, assertScope, assertFactShapes, assertSealed, assertFixedPoint, assertExit } from './facts-generation.mjs'
+import { readFileSync, mkdtempSync, writeFileSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { spawnSync } from 'node:child_process'
+import { ALLOWED, ACK, COMMANDS, PRODUCT, PARENT, TREE, assertScope, assertFactShapes, assertSealed, assertFixedPoint, assertExit, patchOutput } from './facts-generation.mjs'
 const workflow = readFileSync(new URL('../workflows/next-context-menu-validation.yml', import.meta.url), 'utf8')
 const source = readFileSync(new URL('./facts-generation.mjs', import.meta.url), 'utf8')
 test('only exact three README files and no new files allowed', () => {
@@ -24,8 +27,9 @@ test('command errors, signals and nonzero statuses fail closed', () => {
 })
 test('exact reviewed product parent tree and accepted hashes remain pinned', () => {
   const m = JSON.parse(readFileSync(new URL('./stage2-manifest.json', import.meta.url)))
-  assert.equal(PRODUCT, m.final); assert.equal(TREE, m.tree); assert.equal(PARENT, m.base)
-  assert.equal(m.files.length, 77); assert.equal(m.tests.length, 35)
+  // Historical generation source stays pinned; the formal manifest now includes its reviewed output.
+  assert.equal(PRODUCT, '35f5fad4bd311fd64846979895f6e26ed3c0a1ae'); assert.equal(TREE, 'aff83ad9aee375e56a54c4cdd9b97b03d620dc55'); assert.equal(PARENT, m.base)
+  assert.equal(m.files.length, 80); assert.equal(m.tests.length, 35)
   assert.equal(Object.keys(ACK).length, 4)
   for (const [path, sha] of Object.entries(ACK)) { assert(path.startsWith('docs/persistence-changes/2026-10-27-queued-message-recall.')); assert.match(sha, /^[a-f0-9]{64}$/) }
 })
@@ -37,14 +41,14 @@ test('two official writes followed only by required readonly checks', () => {
   assert(source.indexOf('assertExit(r)\n      guard()') < source.indexOf("writeFileSync(join(evidence, 'generated.patch')"))
   assert(source.includes('productValidated: false')); assert(source.includes('complete: false'))
 })
-test('generation workflow is explicitly isolated from formal runtime validation', () => {
-  assert(workflow.startsWith('name: Next persistence facts generation-only review'))
-  assert(workflow.includes('pnpm install --frozen-lockfile --ignore-scripts'))
-  assert(workflow.includes('facts-generation.mjs product'))
+test('formal workflow restored without generator writes or skipped validation', () => {
+  assert(workflow.startsWith('name: Next queue recall locked-toolchain validation'))
+  assert(workflow.includes('run: pnpm install --frozen-lockfile\n'))
+  assert(workflow.includes('run: node control/.github/validation/stage2.mjs product\n'))
   assert(workflow.includes('stage2.mjs product --identity-only'))
-  assert(!workflow.includes('run: node control/.github/validation/stage2.mjs product\n'))
-  assert(workflow.includes('stage2.test.mjs control/.github/validation/facts-generation.test.mjs'))
-  assert(workflow.includes('persistence-facts-generation-only-'))
+  assert(!workflow.includes('facts-generation.mjs product'))
+  assert(!workflow.includes('--write'))
+  assert(workflow.includes('run: node --test control/.github/validation/stage2.test.mjs'))
 })
 test('four exact actions and read-only serial queue guard remain', () => {
   assert.deepEqual([...new Set([...workflow.matchAll(/uses: ([^\n]+)/g)].map(x => x[1]))].sort(), [
@@ -55,7 +59,7 @@ test('four exact actions and read-only serial queue guard remain', () => {
   ].sort())
   assert.match(workflow, /permissions:\n  contents: read\nconcurrency:\n  group: next-reviewed-heavy-validation\n  cancel-in-progress: false/)
   assert(workflow.includes('node control/.github/validation/heavy-queue.mjs'))
-  assert(workflow.includes('timeout-minutes: 60'))
+  assert(workflow.includes('timeout-minutes: 270'))
 })
 test('bounded source checkout and credential isolation retained', () => {
   assert(workflow.includes('fetch-depth: 2'))
@@ -74,4 +78,20 @@ test('README facts reject deletion, symlink and executable-mode changes', () => 
   }
   assert(source.includes("git('ls-files', '--others', '--', 'docs')"))
   assert(source.includes("'--diff-filter=ADTR'"))
+})
+
+test('patch serialization preserves trailing blank context and round-trips through git', () => {
+  const cwd = mkdtempSync(join(tmpdir(), 'dsh-patch-framing-'))
+  const git = (...args) => spawnSync('git', args, { cwd, encoding: 'utf8' })
+  try {
+    assertExit(git('init', '-q'))
+    writeFileSync(join(cwd, 'facts.md'), 'before\n\n')
+    assertExit(git('add', 'facts.md'))
+    writeFileSync(join(cwd, 'facts.md'), 'after\n\n')
+    const raw = git('diff', '--', 'facts.md')
+    const patch = patchOutput(raw)
+    assert(patch.endsWith(' \n'))
+    assertExit(spawnSync('git', ['apply', '--check', '--reverse', '-'], { cwd, encoding: 'utf8', input: patch }))
+    assert.notEqual(spawnSync('git', ['apply', '--check', '--reverse', '-'], { cwd, encoding: 'utf8', input: patch.trimEnd() + '\n' }).status, 0)
+  } finally { rmSync(cwd, { recursive: true, force: true }) }
 })

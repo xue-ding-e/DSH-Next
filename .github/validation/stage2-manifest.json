@@ -1,9 +1,9 @@
 {
-  "final": "35f5fad4bd311fd64846979895f6e26ed3c0a1ae",
+  "final": "07b53ef00927b4f053ddd1ddd19207297876822d",
   "base": "282f8d630784eab0d935ca06155d96f773983b1e",
   "chain": [
     {
-      "sha": "35f5fad4bd311fd64846979895f6e26ed3c0a1ae",
+      "sha": "07b53ef00927b4f053ddd1ddd19207297876822d",
       "parent": "282f8d630784eab0d935ca06155d96f773983b1e"
     }
   ],
@@ -57,6 +57,21 @@
       "path": "docs/persistence-changes/2026-10-27-queued-message-recall.zh.md",
       "mode": "100644",
       "blob": "af33d3e34a87b8004da96b4618cb56b4851233b4"
+    },
+    {
+      "path": "docs/persistence-changes/historical-formats/README.i18n.yaml",
+      "mode": "100644",
+      "blob": "2b70488063d79d72163582a507c5f3b6f8bc24fd"
+    },
+    {
+      "path": "docs/persistence-changes/historical-formats/README.md",
+      "mode": "100644",
+      "blob": "52104a5d0c4b49460881ddd1d2ea4336bd601f8c"
+    },
+    {
+      "path": "docs/persistence-changes/historical-formats/README.zh.md",
+      "mode": "100644",
+      "blob": "5728fa8070cfaa6573cbe2d48e171abfc9cf1c63"
     },
     {
       "path": "docs/persistence-schema.json",
@@ -432,5 +447,5 @@
     "packages/interaction/tool-ask-user/tests/tool-ask-user.spec.ts"
   ],
   "reviewNote": "Reviewed final queue feature with fixture fixes; exact single-parent chain and full range blobs pinned after independent review. Runtime application validation remains required.",
-  "tree": "aff83ad9aee375e56a54c4cdd9b97b03d620dc55"
+  "tree": "1b7b0d9a9dc0ee471d5dd4b3d368ed15dfd3361a"
 }

@@ -36,6 +36,7 @@ export function assertFactShapes(before, after) {
 }
 export function assertSealed(before, after) { assert.deepEqual(after, before, 'source/schema/ack seal changed') }
 export function assertFixedPoint(first, second) { assert.deepEqual(second, first, 'generation not a fixed point') }
+export function patchOutput(result) { assertExit(result); return result.stdout }
 export function assertExit(result) {
   assert.equal(result.error, undefined); assert.equal(result.signal, null); assert.equal(result.status, 0)
 }
@@ -103,7 +104,10 @@ function main() {
     }
     final = immutable(); schemaAfter = snapshot(schemaFiles())
     generatedFiles = snapshot(ALLOWED)
-    const patch = git('diff', '--binary', '--no-ext-diff', 'HEAD', '--', ...ALLOWED) + '\n'
+    // Git patch framing may end with a space-only context line: never trim stdout.
+    const patch = patchOutput(spawnSync('git', ['diff', '--binary', '--no-ext-diff', 'HEAD', '--', ...ALLOWED], {
+      cwd: root, encoding: 'utf8', timeout: 30000, maxBuffer: 1024 * 1024,
+    }))
     assert(Buffer.byteLength(patch) < 1024 * 1024, 'unexpectedly large generated patch')
     // Export only after every command, exact-path guard and fixed-point check succeeded.
     writeFileSync(join(evidence, 'generated.patch'), patch)
