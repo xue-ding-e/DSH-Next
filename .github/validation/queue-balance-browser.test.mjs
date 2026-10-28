@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { TARGETS, PREREQUISITES, exactFilter, assertTarget, assertEnvironment } from './queue-balance-browser.mjs'
 import { assertPinned } from './stage2.mjs'
+import { CC_EVIDENCE, assertCcPredecessor } from './queue-balance-heavy-queue.mjs'
 const m = JSON.parse(readFileSync(new URL('./queue-balance-browser-manifest.json', import.meta.url)))
 const workflow = readFileSync(new URL('../workflows/next-context-menu-validation.yml', import.meta.url), 'utf8')
 const source = readFileSync(new URL('./queue-balance-browser.mjs', import.meta.url), 'utf8')
@@ -82,8 +83,58 @@ test('workflow preserves exact actions read-only serial scope and complete prere
   assert(workflow.includes('queue-balance-heavy-queue.mjs')); assert(workflow.includes('timeout-minutes: 270'))
   assert.equal([...workflow.matchAll(/persist-credentials: false/g)].length, 2)
 })
-test('queue preflight changes only the reviewed main SHA from prior control', () => {
+test('queue retains other predecessor and active-run gates while binding reviewed CC evidence', () => {
   const old = readFileSync(new URL('./heavy-queue.mjs', import.meta.url), 'utf8')
   const current = readFileSync(new URL('./queue-balance-heavy-queue.mjs', import.meta.url), 'utf8')
-  assert.equal(current, old.replace('27b18a0026c569e2072350c552a952483f756436', m.base))
+  assert.equal(current.slice(0, current.indexOf('/** Independently downloaded receipt')), old.slice(0, old.indexOf('/** Release the CC slot')))
+  assert.equal(current.slice(current.indexOf('    // This is a fail-closed preflight')), old.slice(old.indexOf('    // This is a fail-closed preflight')))
+  assert(current.includes(m.base))
+  assert(current.includes('assert.equal(process.env.GITHUB_SHA, process.env.EXPECTED_CONTROL_SHA)'))
+  assert(current.includes("assert.match(process.env.EXPECTED_CONTROL_SHA ?? '', /^[0-9a-f]{40}$/)"))
+  assert(current.includes('assertCcPredecessor(run, jobs, artifact)'))
+  assert(!current.includes('40602600351'))
+})
+function ccFixture() {
+  return {
+    run: { id: 40751857975, repository: { full_name: 'xue-ding-e/CC-Switch-Next' }, head_sha: CC_EVIDENCE.controlSha,
+      head_branch: 'validation/minimax-8124-20261028', path: '.github/workflows/cloud-validation.yml', workflow_id: 386700965,
+      event: 'workflow_dispatch', run_attempt: 1, status: 'completed', conclusion: 'success' },
+    jobs: { total_count: 1, jobs: [{ id: 123040368342, name: 'parser', status: 'completed', conclusion: 'success',
+      steps: [1, 2, 3, 4, 5, 6, 7, 8, 15, 16, 17].map(number => ({ number, status: 'completed', conclusion: 'success',
+        name: number === 7 ? 'Compile once and verify actual parser tests' : number === 8 ? 'Upload bounded verification evidence (not binaries)' : 'fixture step' })) }] },
+    artifact: { id: 12845390567, name: 'minimax-validation-40751857975-1', expired: false, digest: CC_EVIDENCE.artifactDigest,
+      workflow_run: { id: 40751857975, head_sha: CC_EVIDENCE.controlSha, head_branch: 'validation/minimax-8124-20261028' } },
+  }
+}
+test('CC gate distinguishes reviewed control SHA from actual source and pinned receipt bytes', () => {
+  assert.equal(CC_EVIDENCE.controlSha, '461f99855f37cb25acc5524b5e84c920170c4a1f')
+  assert.equal(CC_EVIDENCE.sourceSha, 'bd416383d971e302ed059ae7ada73fd57429ab26')
+  assert.equal(CC_EVIDENCE.receiptPath, 'minimax-evidence/receipt.json')
+  assert.equal(CC_EVIDENCE.receiptSha256, 'dffed32a9a437613861a1d58c1b889241cd27a917516057da75ccace5750213e')
+  assert.equal(CC_EVIDENCE.tests, 7)
+  assert.equal(CC_EVIDENCE.inventoryCount, 3740)
+  const f = ccFixture(); assertCcPredecessor(f.run, f.jobs, f.artifact)
+})
+test('green CC summary cannot substitute for exact attempt, parser steps, or reviewed artifact', () => {
+  for (const mutate of [
+    f => f.run.head_sha = CC_EVIDENCE.sourceSha,
+    f => f.run.id = 40602600351,
+    f => f.run.run_attempt = 2,
+    f => f.run.event = 'push',
+    f => f.run.conclusion = 'failure',
+    f => f.jobs.total_count = 2,
+    f => f.jobs.jobs = [],
+    f => f.jobs.jobs[0].name = 'synthetic-control-only',
+    f => f.jobs.jobs[0].steps[6].conclusion = 'skipped',
+    f => f.jobs.jobs[0].steps[6].name = 'No actual parser tests',
+    f => f.jobs.jobs[0].steps.pop(),
+    f => f.artifact.expired = true,
+    f => f.artifact.id = 1,
+    f => f.artifact.digest = 'sha256:' + '0'.repeat(64),
+    f => f.artifact.workflow_run.head_sha = CC_EVIDENCE.sourceSha,
+    f => f.artifact.workflow_run.id = 1,
+  ]) {
+    const f = ccFixture(); mutate(f)
+    assert.throws(() => assertCcPredecessor(f.run, f.jobs, f.artifact))
+  }
 })

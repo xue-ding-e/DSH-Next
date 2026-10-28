@@ -71,18 +71,55 @@ export function assertMagpiePredecessor(run, expectedSha) {
   // A terminal failure releases resources; it is never reported as a passing product validation.
 }
 
-/** Release the CC slot only after the exact reviewed push attempt is terminal. */
-export function assertCcPredecessor(run) {
-  assert.equal(run.id, 40602600351)
+/** Independently downloaded receipt was reviewed before pinning this public artifact digest.
+ * The CI gate checks public metadata; it does not download or reinterpret the receipt.
+ */
+export const CC_EVIDENCE = Object.freeze({
+  runId: 40751857975,
+  controlSha: '461f99855f37cb25acc5524b5e84c920170c4a1f',
+  sourceSha: 'bd416383d971e302ed059ae7ada73fd57429ab26',
+  artifactId: 12845390567,
+  artifactDigest: 'sha256:57890fcf9ae2fcb8f8e134f1108e5357c1337d4277f7715ce7324ffd8bc8b708',
+  receiptPath: 'minimax-evidence/receipt.json',
+  receiptSha256: 'dffed32a9a437613861a1d58c1b889241cd27a917516057da75ccace5750213e',
+  binarySha256: '4c91bedbb377c992b743f102060b12804c79fd50d09af316c2f6eaa839c7e48b',
+  tests: 7,
+  inventoryCount: 3740,
+})
+
+/** Require the reviewed parser job and receipt artifact, not merely a green run summary. */
+export function assertCcPredecessor(run, jobs, artifact) {
+  assert.equal(run.id, CC_EVIDENCE.runId)
   assert.equal(run.repository.full_name, 'xue-ding-e/CC-Switch-Next')
-  assert.equal(run.head_sha, 'b5e6702a6be29f3413a689f94d718bca4df8e782')
-  assert.equal(run.head_branch, 'main')
+  assert.equal(run.head_sha, CC_EVIDENCE.controlSha)
+  assert.equal(run.head_branch, 'validation/minimax-8124-20261028')
   assert.equal(run.path, '.github/workflows/cloud-validation.yml')
   assert.equal(run.workflow_id, 386700965)
-  assert.equal(run.event, 'push')
+  assert.equal(run.event, 'workflow_dispatch')
   assert.equal(run.run_attempt, 1)
   assert.equal(run.status, 'completed')
-  assert(['success', 'failure', 'cancelled', 'timed_out', 'action_required', 'neutral', 'skipped', 'stale', 'startup_failure'].includes(run.conclusion))
+  assert.equal(run.conclusion, 'success')
+  assert.equal(jobs.total_count, 1)
+  assert.equal(jobs.jobs.length, jobs.total_count, 'complete CC attempt/job inventory required')
+  const job = jobs.jobs[0]
+  assert.equal(job.id, 123040368342)
+  assert.equal(job.name, 'parser')
+  assert.equal(job.status, 'completed')
+  assert.equal(job.conclusion, 'success')
+  assert.deepEqual(job.steps.map(step => step.number), [1, 2, 3, 4, 5, 6, 7, 8, 15, 16, 17])
+  for (const step of job.steps) {
+    assert.equal(step.status, 'completed')
+    assert.equal(step.conclusion, 'success')
+  }
+  assert.equal(job.steps.find(step => step.number === 7).name, 'Compile once and verify actual parser tests')
+  assert.equal(job.steps.find(step => step.number === 8).name, 'Upload bounded verification evidence (not binaries)')
+  assert.equal(artifact.id, CC_EVIDENCE.artifactId)
+  assert.equal(artifact.name, 'minimax-validation-40751857975-1')
+  assert.equal(artifact.expired, false)
+  assert.equal(artifact.digest, CC_EVIDENCE.artifactDigest)
+  assert.equal(artifact.workflow_run.id, CC_EVIDENCE.runId)
+  assert.equal(artifact.workflow_run.head_sha, CC_EVIDENCE.controlSha)
+  assert.equal(artifact.workflow_run.head_branch, run.head_branch)
 }
 
 /** Permit only the current reviewed validation itself; other DSH activity also blocks heavy work. */
@@ -98,7 +135,7 @@ async function main() {
   mkdirSync(evidenceRoot, { recursive: true })
   const evidence = { checkedAt: new Date().toISOString(), predecessors: [], staleMetadata: [], success: false }
   const items = [
-    ['xue-ding-e/CC-Switch-Next', '40602600351', 'main'],
+    ['xue-ding-e/CC-Switch-Next', String(CC_EVIDENCE.runId), 'validation/minimax-8124-20261028'],
     ['xue-ding-e/XenTerm', process.env.FLUTTER_VALIDATION_RUN_ID, undefined],
     ['xue-ding-e/AI-Toolbox-Next', '40481574537', 'fix/codex-fetched-model-picker-20261027'],
     ['xue-ding-e/Magpie-Next', process.env.MAGPIE_RUN_ID, 'security/compress1187-gzip-contract'],
@@ -126,7 +163,12 @@ async function main() {
       assert.equal(run.status, 'completed', `${repo} run ${id} has not reached a terminal state`)
       assert.notEqual(run.conclusion, null)
       if (branch) assert.equal(run.head_branch, branch)
-      if (repo === 'xue-ding-e/CC-Switch-Next') assertCcPredecessor(run)
+      if (repo === 'xue-ding-e/CC-Switch-Next') {
+        const jobs = await request(`repos/${repo}/actions/runs/${id}/jobs?filter=all&per_page=100`)
+        const artifact = await request(`repos/${repo}/actions/artifacts/${CC_EVIDENCE.artifactId}`)
+        assertCcPredecessor(run, jobs, artifact)
+        evidence.ccReviewedReceipt = CC_EVIDENCE
+      }
       if (repo === 'xue-ding-e/XenTerm') assertFlutterPredecessor(run, process.env.FLUTTER_EXPECTED_SHA)
       if (repo === 'xue-ding-e/AI-Toolbox-Next') assertAiPredecessor(run)
       if (repo === 'xue-ding-e/Magpie-Next') assertMagpiePredecessor(run, process.env.MAGPIE_EXPECTED_SHA)
