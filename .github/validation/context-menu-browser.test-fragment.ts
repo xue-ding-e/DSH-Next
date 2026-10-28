@@ -107,7 +107,13 @@ it('DSH-Next workspace menu opens only the clicked Host folder', async () => {
   const opened = workspaceMenuVi.fn(async (_path: string, signal: AbortSignal) => { signal.throwIfAborted() })
   expect(Reflect.set(controller, 'openPath', opened)).toBe(true)
   expect(Reflect.set(controller, 'canOpenPath', () => true)).toBe(true)
-  expect(Reflect.get(controller, 'openPath')).toBe(opened)
+  // Cordis wraps service methods on access; verify the backing slot before safely probing the wrapper.
+  expect(Object.getOwnPropertyDescriptor(controller, 'openPath')?.value).toBe(opened)
+  const probePath = '/synthetic-next-workspace-opener-probe'
+  const probeSignal = new AbortController().signal
+  await Reflect.get(controller, 'openPath')(probePath, probeSignal)
+  expect(opened).toHaveBeenCalledExactlyOnceWith(probePath, probeSignal)
+  opened.mockClear()
   const currentWorkspace = await scaffold.ctx.workspaceRegistry.create(scaffold.workspaceCwd)
   await currentWorkspace.setTitle('Next current workspace')
   const targetPath = await mkdtemp(join(scaffold.workspaceCwd, 'Next 中文 folder,= & '))
