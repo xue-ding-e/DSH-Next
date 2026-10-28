@@ -6,7 +6,7 @@ DSH-Next 是基于 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-ha
 
 `main` 保持独立线性历史；`upstream-main` 原样保留官方 `master` 的完整历史。初始源码快照为 [22ddee3](https://github.com/deepseek-ai/deepseek-harness/commit/22ddee3792402c3e70ec5f86a63c3e3e895a2f60)，原始 [MIT 许可证](LICENSE)、[第三方声明](THIRD_PARTY_NOTICES.md)和作者归属均予以保留。
 
-发布自动化尚未配置。上游 GitHub Actions 工作流以 `.disabled` 后缀原样保存在 `.github/upstream-workflows/`，仓库级 Actions 也已禁用。本仓库尚未发布 DSH-Next 软件包或二进制文件；下方 npm 命令安装的是上游软件，而非 DSH-Next。
+发布自动化尚未配置。上游 GitHub Actions 工作流以 `.disabled` 后缀原样保存在 `.github/upstream-workflows/`，已启用经过审查的手动验证工作流；继承的发布和部署工作流仍保持禁用。本仓库尚未发布 DSH-Next 软件包或二进制文件；下方 npm 命令安装的是上游软件，而非 DSH-Next。
 
 DeepSeek Harness（`dsh`）是由 [DeepSeek AI](https://deepseek.com) 开发的开源 agent harness（智能体框架）。
 

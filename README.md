@@ -6,7 +6,7 @@ DSH-Next is an independent community-maintained source repository based on [Deep
 
 `main` has independent linear history; `upstream-main` preserves the complete official `master` history without changes. The initial source snapshot is [22ddee3](https://github.com/deepseek-ai/deepseek-harness/commit/22ddee3792402c3e70ec5f86a63c3e3e895a2f60). The original [MIT license](LICENSE), [third-party notices](THIRD_PARTY_NOTICES.md), and author attribution are preserved.
 
-Release automation is not configured. Upstream GitHub Actions workflows are preserved in `.github/upstream-workflows/` with `.disabled` suffixes, and repository Actions is disabled. This repository has no published DSH-Next packages or binaries; the npm command below installs upstream software, not DSH-Next.
+Release automation is not configured. Upstream GitHub Actions workflows are preserved in `.github/upstream-workflows/` with `.disabled` suffixes, while reviewed manual validation workflows are enabled. Inherited release and deployment workflows remain disabled. This repository has no published DSH-Next packages or binaries; the npm command below installs upstream software, not DSH-Next.
 
 DeepSeek Harness (`dsh`) is an open-source agent harness developed by [DeepSeek AI](https://deepseek.com).
 

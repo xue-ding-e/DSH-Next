@@ -3,8 +3,8 @@
 # After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write README.md
 /dsh-next:
-  en: fd4981e417ef9d31
-  zh: 77c8bc40613d56dc
+  en: 45353aeb30b55faf
+  zh: 2c419d98544eadfd
 /dsh-next/developer-preview:
   en: 4ef4d8a71ac143f0
   zh: 1bfc3149ba8e5543
