@@ -1,10 +1,10 @@
-name: Next queue recall locked-toolchain validation
+name: Next documentation freshness diagnostic-only
 
 on:
   workflow_dispatch:
     inputs:
       expected_control_sha:
-        description: Reviewed full SHA of this locked-validation control commit
+        description: Reviewed full SHA of this read-only diagnostic control commit
         type: string
         required: true
       flutter_validation_run_id:
@@ -30,7 +30,7 @@ concurrency:
   cancel-in-progress: false
 env:
   EXPECTED_CONTROL_SHA: ${{ inputs.expected_control_sha }}
-  EXPECTED_PRODUCT_SHA: 07b53ef00927b4f053ddd1ddd19207297876822d
+  EXPECTED_PRODUCT_SHA: 05666542a4f0444f6707d60be5e61a6e6b234540
   DSH_TELEMETRY_DISABLED: '1'
   DSH_GATE_CONCURRENCY: '2'
   DSH_OXLINT_THREADS: '2'
@@ -64,7 +64,7 @@ jobs:
           package-manager-cache: false
       - name: Validate control gates without installing dependencies
         timeout-minutes: 2
-        run: node --test control/.github/validation/stage2.test.mjs
+        run: node --test control/.github/validation/stage2.test.mjs control/.github/validation/readonly-freshness.test.mjs
       - name: Require terminal predecessors before allocation
         timeout-minutes: 5
         env:
@@ -77,9 +77,9 @@ jobs:
         timeout-minutes: 5
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
-          ref: 07b53ef00927b4f053ddd1ddd19207297876822d
+          ref: 05666542a4f0444f6707d60be5e61a6e6b234540
           path: product
-          fetch-depth: 2
+          fetch-depth: 3
           persist-credentials: false
       - name: Verify exact reviewed source chain and range blobs before dependency scripts
         timeout-minutes: 2
@@ -101,19 +101,19 @@ jobs:
           run_install: false
           package_json_file: product/package.json
           dest: ${{ runner.temp }}/pnpm
-      - name: Install frozen dependencies with repository-approved allowBuilds
+      - name: Install frozen dependencies without lifecycle scripts
         working-directory: product
         timeout-minutes: 25
-        run: pnpm install --frozen-lockfile
-      - name: Run bounded real unit, Loader, artifact, aggregate and doc gates
+        run: pnpm install --frozen-lockfile --ignore-scripts
+      - name: Collect read-only freshness diagnostics without generating files
         timeout-minutes: 270
-        run: node control/.github/validation/stage2.mjs product
+        run: node control/.github/validation/readonly-freshness.mjs product
       - name: Upload only generated review evidence, never installation packages
         if: always()
         timeout-minutes: 5
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
-          name: queue-recall-locked-validation-${{ github.run_id }}
+          name: readonly-freshness-diagnostic-${{ github.run_id }}
           path: ${{ runner.temp }}/dsh-next-evidence/
           if-no-files-found: warn
           retention-days: 7

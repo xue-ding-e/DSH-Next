@@ -1,27 +1,211 @@
 {
-  "final": "07b53ef00927b4f053ddd1ddd19207297876822d",
+  "final": "05666542a4f0444f6707d60be5e61a6e6b234540",
   "base": "282f8d630784eab0d935ca06155d96f773983b1e",
   "chain": [
     {
-      "sha": "07b53ef00927b4f053ddd1ddd19207297876822d",
+      "sha": "ad72c3e1d8eb74249f5696e5a95534afa555b9f8",
       "parent": "282f8d630784eab0d935ca06155d96f773983b1e"
+    },
+    {
+      "sha": "05666542a4f0444f6707d60be5e61a6e6b234540",
+      "parent": "ad72c3e1d8eb74249f5696e5a95534afa555b9f8"
     }
   ],
   "files": [
     {
+      "path": ".agents/notes/implemented/architecture/2026-07-10-single-file-executable-sdk-runtime-distribution.i18n.yaml",
+      "mode": "100644",
+      "blob": "b32f95357620f8a5a5c52960d2eb6de3937bcf79"
+    },
+    {
+      "path": ".agents/notes/implemented/architecture/2026-07-10-single-file-executable-sdk-runtime-distribution.md",
+      "mode": "100644",
+      "blob": "c7dbc1a0908087a1d3b8c51e15adc375cdb2ced5"
+    },
+    {
+      "path": ".agents/notes/implemented/architecture/2026-07-10-single-file-executable-sdk-runtime-distribution.zh.md",
+      "mode": "100644",
+      "blob": "0c5f364d2ccd9188292efa42a2fd16d760ab4ca6"
+    },
+    {
+      "path": ".agents/notes/implemented/process/2026-07-21-serial-cross-platform-ci-reference.i18n.yaml",
+      "mode": "100644",
+      "blob": "40069464e2c9de3ecb8f80222649173b936d9e5a"
+    },
+    {
+      "path": ".agents/notes/implemented/process/2026-07-21-serial-cross-platform-ci-reference.md",
+      "mode": "100644",
+      "blob": "3e3225ccdbdc191be0e36ff86caeea8344333a3f"
+    },
+    {
+      "path": ".agents/notes/implemented/process/2026-07-21-serial-cross-platform-ci-reference.zh.md",
+      "mode": "100644",
+      "blob": "b42ecc349478277fad7c351c8dc7d0fbe097e143"
+    },
+    {
+      "path": ".agents/notes/implemented/process/2026-07-26-ci-failover-runbook.i18n.yaml",
+      "mode": "100644",
+      "blob": "09aee2e7ae68981dac207a974eec0a0a0e292f48"
+    },
+    {
+      "path": ".agents/notes/implemented/process/2026-07-26-ci-failover-runbook.md",
+      "mode": "100644",
+      "blob": "cb6c55b40c671051748c12b3d3f839e8823e490b"
+    },
+    {
+      "path": ".agents/notes/implemented/process/2026-07-26-ci-failover-runbook.zh.md",
+      "mode": "100644",
+      "blob": "3d3fcf84b31e40e6d152867a4656ef4369b72c43"
+    },
+    {
+      "path": ".agents/notes/implemented/process/2026-08-08-native-windows-pull-request-ci.i18n.yaml",
+      "mode": "100644",
+      "blob": "2f1119c0faeb14a20b2482d0b243b7d13f1bf24c"
+    },
+    {
+      "path": ".agents/notes/implemented/process/2026-08-08-native-windows-pull-request-ci.md",
+      "mode": "100644",
+      "blob": "85219616ea11dae3cedc92be2bd3a79a373b69d3"
+    },
+    {
+      "path": ".agents/notes/implemented/process/2026-08-08-native-windows-pull-request-ci.zh.md",
+      "mode": "100644",
+      "blob": "51b4e5d78251765a054a7722f86d8592013931a8"
+    },
+    {
+      "path": ".agents/notes/implemented/process/2026-08-10-event-directed-pr-review-status.i18n.yaml",
+      "mode": "100644",
+      "blob": "41fe3af69cd69711c9eef26b2658b5223b9275b4"
+    },
+    {
+      "path": ".agents/notes/implemented/process/2026-08-10-event-directed-pr-review-status.md",
+      "mode": "100644",
+      "blob": "80b4e7d343a86c55909c585a3aa39048f82d2820"
+    },
+    {
+      "path": ".agents/notes/implemented/process/2026-08-10-event-directed-pr-review-status.zh.md",
+      "mode": "100644",
+      "blob": "5da88fe9b786707b4a91f5ad11a48254bf5af4f1"
+    },
+    {
+      "path": ".agents/notes/implemented/process/2026-09-06-python-runtime-windows-hosted.i18n.yaml",
+      "mode": "100644",
+      "blob": "4bdd43dcaa2fa397bf3607b66b1d02cc5b644697"
+    },
+    {
+      "path": ".agents/notes/implemented/process/2026-09-06-python-runtime-windows-hosted.md",
+      "mode": "100644",
+      "blob": "2e714acab2258eccd55905e934c4c945da908d8f"
+    },
+    {
+      "path": ".agents/notes/implemented/process/2026-09-06-python-runtime-windows-hosted.zh.md",
+      "mode": "100644",
+      "blob": "d8c057bdd2ff7258686488cf29b5cd7c148f144f"
+    },
+    {
+      "path": ".agents/notes/implemented/process/2026-09-09-blacksmith-failover-leg.i18n.yaml",
+      "mode": "100644",
+      "blob": "c5e6af47718097323b9fe6962eec033b0e4d1efc"
+    },
+    {
+      "path": ".agents/notes/implemented/process/2026-09-09-blacksmith-failover-leg.md",
+      "mode": "100644",
+      "blob": "dd201408b4da1ce3557e155b29ebb2b82be0a571"
+    },
+    {
+      "path": ".agents/notes/implemented/process/2026-09-09-blacksmith-failover-leg.zh.md",
+      "mode": "100644",
+      "blob": "f238caa03c11f80fe46e4fcce74af0d1b01c0892"
+    },
+    {
+      "path": ".agents/notes/implemented/testing/2026-06-19-real-api-e2e-ci.i18n.yaml",
+      "mode": "100644",
+      "blob": "55a1397cef3f76a57ef4ea72ec9fedde6db364cd"
+    },
+    {
+      "path": ".agents/notes/implemented/testing/2026-06-19-real-api-e2e-ci.md",
+      "mode": "100644",
+      "blob": "da7e2efa600025bb491c5ba5b063ca8ef90ba5b7"
+    },
+    {
+      "path": ".agents/notes/implemented/testing/2026-06-19-real-api-e2e-ci.zh.md",
+      "mode": "100644",
+      "blob": "7b5e172bf1fab7a114c48d0f4038e6c544b0dfbc"
+    },
+    {
+      "path": ".agents/notes/implemented/testing/2026-08-23-installed-python-wheel-black-box-ci.i18n.yaml",
+      "mode": "100644",
+      "blob": "4ccbb2bb84cb7c66e72cf7c748d1c10398d9056a"
+    },
+    {
+      "path": ".agents/notes/implemented/testing/2026-08-23-installed-python-wheel-black-box-ci.md",
+      "mode": "100644",
+      "blob": "f4f2036c5c3b3f5f75ea27934e88a31a927c8c99"
+    },
+    {
+      "path": ".agents/notes/implemented/testing/2026-08-23-installed-python-wheel-black-box-ci.zh.md",
+      "mode": "100644",
+      "blob": "cf0d52fce625a8aa35d28ca8c07fce935c4d999c"
+    },
+    {
+      "path": ".agents/notes/implemented/testing/2026-09-04-session-open-performance-gate.i18n.yaml",
+      "mode": "100644",
+      "blob": "c4de3caffabf787978d65d9e44783f931d10a4aa"
+    },
+    {
+      "path": ".agents/notes/implemented/testing/2026-09-04-session-open-performance-gate.md",
+      "mode": "100644",
+      "blob": "2d9b0ed47fb636db54e86b4625dd771c1f4fb279"
+    },
+    {
+      "path": ".agents/notes/implemented/testing/2026-09-04-session-open-performance-gate.zh.md",
+      "mode": "100644",
+      "blob": "3d1d87b473025543cec9bfbb2dad83d2b526feb4"
+    },
+    {
+      "path": ".agents/notes/implemented/testing/2026-09-06-frontend-performance-budgets.i18n.yaml",
+      "mode": "100644",
+      "blob": "46e5487b260d5a1cbf0e7ac17b17fa3582c0aeda"
+    },
+    {
+      "path": ".agents/notes/implemented/testing/2026-09-06-frontend-performance-budgets.md",
+      "mode": "100644",
+      "blob": "3e85bb9d31f3fce4e5606c257deee54e78700fbb"
+    },
+    {
+      "path": ".agents/notes/implemented/testing/2026-09-06-frontend-performance-budgets.zh.md",
+      "mode": "100644",
+      "blob": "d391656084d4fd38ded987d78c8bc05c7753562a"
+    },
+    {
       "path": "docs/architecture.i18n.yaml",
       "mode": "100644",
-      "blob": "7964febc619881f1713847a16d280be3dbc0173d"
+      "blob": "f3831013a33e26eec69956b908723f158f205e2f"
     },
     {
       "path": "docs/architecture.md",
       "mode": "100644",
-      "blob": "335bca90402cce65aa1696e032f959aa42a18fea"
+      "blob": "2e82e33b2996096b4693d94c3e4dc526f401e61e"
     },
     {
       "path": "docs/architecture.zh.md",
       "mode": "100644",
-      "blob": "b3dec6ea2dd9f461ca665b2dc4d738abfe8fee4b"
+      "blob": "0e9ae12285e03ffbe952697be181dc058ae669f2"
+    },
+    {
+      "path": "docs/development.i18n.yaml",
+      "mode": "100644",
+      "blob": "13aa53bc11d663e1650f2db9b30317779c8760f2"
+    },
+    {
+      "path": "docs/development.md",
+      "mode": "100644",
+      "blob": "512acbb1a11b9bf3e185be7a5b480230207b2a33"
+    },
+    {
+      "path": "docs/development.zh.md",
+      "mode": "100644",
+      "blob": "e2b5b9daec3447ea087e830b2e47bfcebce14d74"
     },
     {
       "path": "docs/persistence-catalog.i18n.yaml",
@@ -89,19 +273,44 @@
       "blob": "8a7a995ab17032eebba2f8203d3f25387d0ad53b"
     },
     {
+      "path": "docs/subsystems/core.md",
+      "mode": "100644",
+      "blob": "d52b79eeac4842f1324f07c48ad7e6ca31d29bbf"
+    },
+    {
+      "path": "docs/subsystems/core.zh.md",
+      "mode": "100644",
+      "blob": "fe1ce6d188b6dc6553b65551306b13069be2a20d"
+    },
+    {
+      "path": "docs/testing.i18n.yaml",
+      "mode": "100644",
+      "blob": "b894c441f29b96586516f356b52ccf3c4a9a70ac"
+    },
+    {
+      "path": "docs/testing.md",
+      "mode": "100644",
+      "blob": "e5a7afcf34f40371a7e7b6ceef1d2c77dcb30ea2"
+    },
+    {
+      "path": "docs/testing.zh.md",
+      "mode": "100644",
+      "blob": "60dd5efb79017b2f0b91160224b8591337a58c58"
+    },
+    {
       "path": "packages/api/session-controller/README.i18n.yaml",
       "mode": "100644",
-      "blob": "2106cd45cfd2eb52395fd65563153b42ec0164dd"
+      "blob": "5d763cacc2a900ab5212d56e04ae61c4c0f73884"
     },
     {
       "path": "packages/api/session-controller/README.md",
       "mode": "100644",
-      "blob": "90fd10d60e2a4db56a80d8c8481bb47d7d08d485"
+      "blob": "8f18f2b7453cc4e2de2cb610822f15604a646fc7"
     },
     {
       "path": "packages/api/session-controller/README.zh.md",
       "mode": "100644",
-      "blob": "7e4b2adc2600021e81c63d98dab3c4d61f0a88c5"
+      "blob": "84ff812a7e950083ac08d0150a3fdd089cb633ec"
     },
     {
       "path": "packages/api/session-controller/package.json",
@@ -131,12 +340,12 @@
     {
       "path": "packages/api/session-controller/src/queue-recall-projection.ts",
       "mode": "100644",
-      "blob": "28f990915dfefda93352350afebfa3c8e521daaa"
+      "blob": "45e553bf7ae141c84e8fb295018e3da3371e8f8c"
     },
     {
       "path": "packages/api/session-controller/src/queue-recall.ts",
       "mode": "100644",
-      "blob": "b89dca9c8063660b59a3c754f9418b4761ed54d4"
+      "blob": "ef0dbff13c9905fe4ee50072c7f4f7683132ac52"
     },
     {
       "path": "packages/api/session-controller/src/types.ts",
@@ -196,17 +405,17 @@
     {
       "path": "packages/client/file-upload/README.i18n.yaml",
       "mode": "100644",
-      "blob": "465d1c69e808346f4abf1bf881fe3a0b678eca96"
+      "blob": "42959f6ce6380468406ffd819f6193dc3ad7c892"
     },
     {
       "path": "packages/client/file-upload/README.md",
       "mode": "100644",
-      "blob": "d2835e8c611555228008534c513adcde6fc81999"
+      "blob": "c6354800db715e9f3b72693f7dd3366aec235f28"
     },
     {
       "path": "packages/client/file-upload/README.zh.md",
       "mode": "100644",
-      "blob": "25cfcaa066ece4010eed53613a2dabe48b344ea1"
+      "blob": "47fab5014f9390fa2dcf81fa21b8989c46bd859b"
     },
     {
       "path": "packages/client/file-upload/package.json",
@@ -231,7 +440,7 @@
     {
       "path": "packages/client/file-upload/src/protocol.ts",
       "mode": "100644",
-      "blob": "bae775e1791580b9548bf2c146092129be9a02dc"
+      "blob": "e8094f1d42febcc7a66cb63ab1a9a2eaa55333b4"
     },
     {
       "path": "packages/client/file-upload/src/queued-file-route.ts",
@@ -266,17 +475,17 @@
     {
       "path": "packages/client/ui-conversation/README.i18n.yaml",
       "mode": "100644",
-      "blob": "866a0e88e94858dbf70fff2bbefc98fac30bec0f"
+      "blob": "e7e2237ff867dc895f27efe1993f57b1e44ec01e"
     },
     {
       "path": "packages/client/ui-conversation/README.md",
       "mode": "100644",
-      "blob": "a450be5bec9b04515312d1d0b3bb9660b1f9f36b"
+      "blob": "f7b4a373ee05e23e5debddbd86c9a1598e059eb0"
     },
     {
       "path": "packages/client/ui-conversation/README.zh.md",
       "mode": "100644",
-      "blob": "9b966a8790175f8cf5a3ccdd493aeba4e084fd69"
+      "blob": "ea85e62d490504efc9065d13eab155ce3db79fcd"
     },
     {
       "path": "packages/client/ui-conversation/src/client/contract/draft-editor.ts",
@@ -296,7 +505,7 @@
     {
       "path": "packages/client/ui-conversation/src/client/input/facade.ts",
       "mode": "100644",
-      "blob": "9989acc6a660f9f2518683d3332e54fa1d33b478"
+      "blob": "5905cf8d7820907b6c6ad54eef2d2bfe8a16c04d"
     },
     {
       "path": "packages/client/ui-conversation/src/client/input/hub.ts",
@@ -316,17 +525,17 @@
     {
       "path": "packages/client/ui-conversation/src/client/queue/recall-journal.ts",
       "mode": "100644",
-      "blob": "2ad2f32078408f377ee865ca7ad1b4044e943ad8"
+      "blob": "59fef581754f18d842fe0bc4315d334697b2de89"
     },
     {
       "path": "packages/client/ui-conversation/src/client/queue/recall.ts",
       "mode": "100644",
-      "blob": "7d0a1fedad1c5993a1a97b13251b825727d8452b"
+      "blob": "300cf1922f38d1530008bb60853c1adf77142dff"
     },
     {
       "path": "packages/client/ui-conversation/src/client/service.ts",
       "mode": "100644",
-      "blob": "1e4e591bf48e6ec56d93f75316dd0f9f2d89f1ec"
+      "blob": "d7fd752d0414d9a81eea2b5c2064462692a19555"
     },
     {
       "path": "packages/client/ui-conversation/tests/keymap-routing.client.spec.tsx",
@@ -389,6 +598,21 @@
       "blob": "c6c74c87c02042edcd2781eee7e433c4465e5394"
     },
     {
+      "path": "packages/ssh/ssh-helper-runtime/README.i18n.yaml",
+      "mode": "100644",
+      "blob": "34b310b0b0f028337172e298e2e95a31e101ccb8"
+    },
+    {
+      "path": "packages/ssh/ssh-helper-runtime/README.md",
+      "mode": "100644",
+      "blob": "2e197858cb7f47e9f42572e5fc7e4cb73b42f36c"
+    },
+    {
+      "path": "packages/ssh/ssh-helper-runtime/README.zh.md",
+      "mode": "100644",
+      "blob": "1b92a52bd2371bb1bef134d0d77a8337cf0b7fda"
+    },
+    {
       "path": "packages/test-support/agent-loop-testkit/src/inbox.ts",
       "mode": "100644",
       "blob": "95c569bd5a1948af20a8b49d4605ebd1c27a42c4"
@@ -447,5 +671,5 @@
     "packages/interaction/tool-ask-user/tests/tool-ask-user.spec.ts"
   ],
   "reviewNote": "Reviewed final queue feature with fixture fixes; exact single-parent chain and full range blobs pinned after independent review. Runtime application validation remains required.",
-  "tree": "1b7b0d9a9dc0ee471d5dd4b3d368ed15dfd3361a"
+  "tree": "4f870bc72cac2c63f26b56e48079332f3e9d9690"
 }
