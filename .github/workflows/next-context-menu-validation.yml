@@ -52,7 +52,9 @@ jobs:
         with:
           ref: ${{ github.sha }}
           path: control
-          sparse-checkout: .github/validation
+          sparse-checkout: |
+            .github/validation
+            .github/workflows
           persist-credentials: false
       - name: Set up pinned Node without dependency cache
         timeout-minutes: 5

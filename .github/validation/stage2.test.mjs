@@ -47,6 +47,9 @@ test('manifest rejects disconnected ancestry even with final identity preserved'
 })
 test('workflow retains bounded shallow exact checkout, four action pins and read-only permission', () => {
  const workflow=readFileSync(new URL('../workflows/next-context-menu-validation.yml',import.meta.url),'utf8')
+ const controlCheckout=workflow.split('      - name: Checkout immutable validation controls\n')[1]?.split('      - name: ')[0]
+ assert(controlCheckout, 'the control checkout step must exist')
+ assert.match(controlCheckout, /sparse-checkout: \|\n            \.github\/validation\n            \.github\/workflows\n/, 'control sparse checkout must include its validation code and inspected workflow')
  assert(workflow.includes('fetch-depth: 2'))
  assert(!workflow.includes('fetch-depth: 0'))
  assert(!workflow.includes('UNPINNED'))
