@@ -26,16 +26,16 @@ test('only exact current control job can pass queue self-exemption', () => {
  assert(!isCurrentValidationRun('xue-ding-e/DSH-Next',{...r,head_branch:'validation/queue-recall-generation-20261027'},'1',sha))
 })
 
-test('final manifest binds one reviewed logical queue commit and all 34 real file paths', () => {
+test('final manifest binds one reviewed logical queue commit and all 35 real file paths', () => {
  assertPinned(m)
- assert.equal(m.final, 'fd3e299df3c254fde54a4dc446563f1883913eeb')
+ assert.equal(m.final, '35f5fad4bd311fd64846979895f6e26ed3c0a1ae')
  assert.equal(m.base, '282f8d630784eab0d935ca06155d96f773983b1e')
  assert.equal(m.chain.length, 1)
- assert.equal(m.files.length, 76)
+ assert.equal(m.files.length, 77)
  const helper = 'packages/api/session-controller/tests/queue-recall-agent.ts'
  assert(m.files.some(file => file.path === helper))
  assert(!m.tests.includes(helper))
- assert.deepEqual(m.tests.slice(0, 33), [
+ assert.deepEqual(m.tests.slice(0, 34), [
   "packages/api/session-controller/tests/queue-recall-projection.host.spec.ts",
   "packages/api/session-controller/tests/queue-recall-replay.host.spec.ts",
   "packages/api/session-controller/tests/queue-recall-transaction.host.spec.ts",
@@ -68,12 +68,14 @@ test('final manifest binds one reviewed logical queue commit and all 34 real fil
   "packages/client/ui-primitives/tests/menu-anchor-width.client.spec.tsx",
   "packages/client/ui-primitives/tests/menu-group.client.spec.tsx",
   "packages/client/ui-primitives/tests/menu-surface.client.spec.tsx",
-  "packages/client/ui-primitives/tests/menu-top-clearance.client.spec.tsx"
+  "packages/client/ui-primitives/tests/menu-top-clearance.client.spec.tsx",
+  "scripts/locale-dictionary-parity.spec.ts"
 ])
  assert.equal(m.tests[33], 'scripts/locale-dictionary-parity.spec.ts')
- assert.equal(m.tests.filter(path => path.startsWith('packages/')).length, 33)
- assert.equal(m.tests.length, 34)
- assert.equal(new Set(m.tests).size, 34)
+ assert.equal(m.tests[34], 'packages/interaction/tool-ask-user/tests/tool-ask-user.spec.ts')
+ assert.equal(m.tests.filter(path => path.startsWith('packages/')).length, 34)
+ assert.equal(m.tests.length, 35)
+ assert.equal(new Set(m.tests).size, 35)
  assert(m.tests.includes('packages/api/session-controller/tests/queue-recall-jsonl.host.spec.ts'))
 })
 test('CC predecessor fails closed on active, unknown and altered identity', () => {

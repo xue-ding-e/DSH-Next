@@ -1,9 +1,9 @@
 {
-  "final": "fd3e299df3c254fde54a4dc446563f1883913eeb",
+  "final": "35f5fad4bd311fd64846979895f6e26ed3c0a1ae",
   "base": "282f8d630784eab0d935ca06155d96f773983b1e",
   "chain": [
     {
-      "sha": "fd3e299df3c254fde54a4dc446563f1883913eeb",
+      "sha": "35f5fad4bd311fd64846979895f6e26ed3c0a1ae",
       "parent": "282f8d630784eab0d935ca06155d96f773983b1e"
     }
   ],
@@ -151,12 +151,12 @@
     {
       "path": "packages/api/session-controller/tests/queue-recall-jsonl.host.spec.ts",
       "mode": "100644",
-      "blob": "4b6b83134d7f1f6163ab36f0b18b50d020a1e545"
+      "blob": "07f210ca5eafb11f2a39abd388d1dad81ae637a5"
     },
     {
       "path": "packages/api/session-controller/tests/queue-recall-projection.host.spec.ts",
       "mode": "100644",
-      "blob": "7f4c91017a6d62a3b2028e46c85428b198eb77a6"
+      "blob": "f9155412e2f12fcaaad71bac436ea1f92bc70acc"
     },
     {
       "path": "packages/api/session-controller/tests/queue-recall-replay.host.spec.ts",
@@ -166,7 +166,7 @@
     {
       "path": "packages/api/session-controller/tests/queue-recall-transaction.host.spec.ts",
       "mode": "100644",
-      "blob": "5724de69b2a372cd8dca32d50d50c5619db320ab"
+      "blob": "75fcbbc4a908c3f44b5be99bd74dce022ddb8c8b"
     },
     {
       "path": "packages/api/session-controller/tests/test-remote.ts",
@@ -226,7 +226,7 @@
     {
       "path": "packages/client/file-upload/tests/queue-recall-files.host.spec.ts",
       "mode": "100644",
-      "blob": "13c8a5527a8ab59f131b594c7580c4e273458fe3"
+      "blob": "c4e5bf21971dbe422a9bf7f9f54ed055f2fc2819"
     },
     {
       "path": "packages/client/file-upload/tests/queued-file-route.host.spec.ts",
@@ -369,6 +369,11 @@
       "blob": "30d2884e550f183acdd4994e41376203b667b58e"
     },
     {
+      "path": "packages/interaction/tool-ask-user/tests/tool-ask-user.spec.ts",
+      "mode": "100644",
+      "blob": "c6c74c87c02042edcd2781eee7e433c4465e5394"
+    },
+    {
       "path": "packages/test-support/agent-loop-testkit/src/inbox.ts",
       "mode": "100644",
       "blob": "95c569bd5a1948af20a8b49d4605ebd1c27a42c4"
@@ -423,8 +428,9 @@
     "packages/client/ui-primitives/tests/menu-group.client.spec.tsx",
     "packages/client/ui-primitives/tests/menu-surface.client.spec.tsx",
     "packages/client/ui-primitives/tests/menu-top-clearance.client.spec.tsx",
-    "scripts/locale-dictionary-parity.spec.ts"
+    "scripts/locale-dictionary-parity.spec.ts",
+    "packages/interaction/tool-ask-user/tests/tool-ask-user.spec.ts"
   ],
   "reviewNote": "Reviewed final queue feature with fixture fixes; exact single-parent chain and full range blobs pinned after independent review. Runtime application validation remains required.",
-  "tree": "8cf1ba5187a1cff4eb3c6be8de06b1153d918db6"
+  "tree": "aff83ad9aee375e56a54c4cdd9b97b03d620dc55"
 }
