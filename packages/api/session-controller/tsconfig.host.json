@@ -13,6 +13,8 @@
     "src/assistant-stream.ts",
     "src/catalog.ts",
     "src/commands.ts",
+    "src/queue-recall-projection.ts",
+    "src/queue-recall.ts",
     "src/control.ts",
     "src/file-references.ts",
     "src/history.ts",

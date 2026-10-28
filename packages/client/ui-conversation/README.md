@@ -133,6 +133,8 @@ Two independent Escape presses in the focused Chat or Composer stop its current 
 <a id="temporary-composer-entries"></a>
 ## Temporary composer entries
 
+An empty, idle composer can recall the latest eligible queued user message with ArrowUp. The editor restores text and verified attachment bytes only after the Host commits the recall. A local journal retains operation identities, not message content, to recover interrupted handoffs without removing another queue entry. Existing drafts and in-flight recall operations prevent a second recall.
+
 `conversation.composer` is a generic chain. Its complete owner currency is:
 
 ```ts type-equiv

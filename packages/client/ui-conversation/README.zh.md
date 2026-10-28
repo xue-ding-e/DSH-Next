@@ -133,6 +133,8 @@ Send 和 Stop 按钮禁用时不显示提示气泡，轮次结束后由 Stop 切
 <a id="temporary-composer-entries"></a>
 ## 临时 composer entry
 
+空闲且为空的输入框可通过方向键 ↑ 撤回最新一条符合条件的排队用户消息。仅在 Host 提交撤回后，编辑器才恢复文本和已核验的附件字节。本地日志只保存操作身份，不保存消息内容，以便恢复中断的交付而不移除其他队列条目。已有草稿或正在进行的撤回操作会阻止再次撤回。
+
 `conversation.composer` 是通用 chain，其完整 owner currency 为：
 
 ```ts type-equiv

@@ -1,12 +1,14 @@
 /** Background browser upload implementation for Blob and byte-stream bodies. */
 
 import { Service, type Context } from '@deepseek-ai/cordis'
-import type { ImageMediaType } from '@deepseek-ai/dsh-attachment/types'
+import type { FileAttachmentRef, ImageMediaType } from '@deepseek-ai/dsh-attachment/types'
 import { bytesToBase64 } from '@deepseek-ai/dsh-util-crypto'
 import { RemoteError } from '@deepseek-ai/dsh-typert-protocol'
 import type { RemoteResult } from '@deepseek-ai/dsh-typert-protocol'
+import type { Branded } from '@deepseek-ai/dsh-brand'
+import type { MessageId } from '@deepseek-ai/dsh-llm/brand'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
-import { FILE_UPLOAD_ROUTE } from '../protocol.ts'
+import { FILE_UPLOAD_ROUTE, QUEUED_FILE_ROUTE } from '../protocol.ts'
 import type {
   ClientFileUploadHooks, EncodedFileUploadRequest, FileUploadFetch, FileUploadValue, ImageUploadValue,
 } from '../types.ts'
@@ -163,12 +165,72 @@ interface FileUploadTransport {
 /** Cordis service that owns one background carrier per upload operation. */
 export class FileUploadRuntime extends Service implements FileUploadService {
   private readonly transport: FileUploadTransport
+  private readonly downloadFetch: FileUploadFetch
 
   /** @param ctx - providing Client context. */
   constructor(ctx: Context) {
     super(ctx, 'fileUpload')
     const hook = (globalThis as ClientFileUploadGlobal).__DSH_FILE_UPLOAD__
     this.transport = hook === undefined ? workerTransport() : customTransport(hook.fetch)
+    this.downloadFetch = hook?.fetch ?? ((input, init) => fetch(input, init))
+  }
+
+  /**
+   * Materialize a queued file before removing its owning occurrence. The
+   * persisted byte count bounds both streaming intake and the completed File.
+   * @param sessionId - exact receiving Session.
+   * @param itemId - still-pending user message.
+   * @param attachment - durable file identity from that queue projection.
+   * @param signal - cancellation before recall commits.
+   * @param recallRequestId - unfinished recall identity authorizing recovery after its queue removal.
+   * @returns original file bytes and name, or rejection without queue mutation.
+   */
+  async readQueuedFile(sessionId: SessionId, itemId: MessageId, attachment: FileAttachmentRef, signal?: AbortSignal, recallRequestId?: Branded<'session-request-id'>): Promise<File> {
+    if (!Number.isSafeInteger(attachment.bytes) || attachment.bytes < 0) throw new Error('Invalid queued file size')
+    signal?.throwIfAborted()
+    const query = new URLSearchParams({ sessionId, itemId, attachmentId: attachment.attachmentId })
+    if (recallRequestId !== undefined) query.set('recallRequestId', recallRequestId)
+    const response = await this.downloadFetch(`${QUEUED_FILE_ROUTE}?${query}`, {
+      method: 'GET', credentials: 'include', ...(signal === undefined ? {} : { signal }),
+    })
+    if (!response.ok || response.body === null) {
+      await response.body?.cancel()
+      throw new Error('Queued file is no longer available')
+    }
+    const length = response.headers.get('content-length')
+    if (length !== null && Number(length) !== attachment.bytes) {
+      await response.body.cancel()
+      throw new Error('Queued file size changed')
+    }
+    const reader = response.body.getReader()
+    const abort = (): void => {
+      void reader.cancel(signal?.reason).catch((_error: unknown) => {
+        // The read path reports cancellation; a transport cleanup failure must not escape its listener.
+      })
+    }
+    signal?.addEventListener('abort', abort, { once: true })
+    const chunks: Uint8Array<ArrayBuffer>[] = []
+    let bytes = 0
+    let complete = false
+    try {
+      while (true) {
+        signal?.throwIfAborted()
+        const chunk = await reader.read()
+        signal?.throwIfAborted()
+        if (chunk.done) break
+        bytes += chunk.value.byteLength
+        if (bytes > attachment.bytes) throw new Error('Queued file exceeds its stored size')
+        chunks.push(new Uint8Array(chunk.value))
+      }
+      if (bytes !== attachment.bytes) throw new Error('Queued file is incomplete')
+      complete = true
+      // FileAttachmentRef does not preserve a browser MIME; do not invent one.
+      return new File(chunks, attachment.name, { type: 'application/octet-stream' })
+    } finally {
+      signal?.removeEventListener('abort', abort)
+      if (!complete) await reader.cancel()
+      reader.releaseLock()
+    }
   }
 
   /**

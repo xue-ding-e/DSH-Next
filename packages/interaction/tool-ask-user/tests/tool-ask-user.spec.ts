@@ -94,7 +94,7 @@ function stubAgent(id: string, delegationDepth = 0): Agent {
     model: unsupportedModel(),
     inbox: {
       nextTurn: [], nextStep: [], clear() {}, append() {}, prepend() {},
-      replace: () => false, remove: () => false, splice: () => [],
+      replace: () => false, remove: () => false, recall: () => false, splice: () => [],
     },
     status: 'idle',
     ctx: new Context(),

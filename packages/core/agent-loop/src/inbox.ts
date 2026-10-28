@@ -4,6 +4,7 @@
  * @module @deepseek-ai/dsh-agent-loop/inbox
  */
 
+import type { Branded } from '@deepseek-ai/dsh-brand'
 import type { MessageId } from '@deepseek-ai/dsh-llm'
 import type { ProjectionDefinition } from '@deepseek-ai/dsh-session-projection'
 import type { Session, SessionEventMap, UserMessage } from '@deepseek-ai/dsh-session'
@@ -156,6 +157,19 @@ export class ReactLoopInbox implements InboxContract {
   }
 
   /**
+   * Atomically remove one pending user occurrence and retain its recoverable content.
+   * @param messageId - pending next-turn occurrence.
+   * @param requestId - stable caller retry identity.
+   * @returns false when the occurrence is no longer eligible.
+   */
+  recall(messageId: MessageId, requestId: Branded<'session-request-id'>): boolean {
+    const index = this.nextTurn.findIndex(message => message.id === messageId && message.source.kind === 'user')
+    if (index < 0) return false
+    this.mutate('next-turn', index, 1, [], true, requestId)
+    return true
+  }
+
+  /**
    * Apply standard splice semantics and durably record the normalized result.
    * @param target - pending list to mutate.
    * @param start - splice position.
@@ -189,6 +203,7 @@ export class ReactLoopInbox implements InboxContract {
     deleteCount: number,
     inserted: UserMessage[],
     discardRemoved: boolean,
+    recallId?: Branded<'session-request-id'>,
   ): UserMessage[] {
     const state = this.readState()
     const inbox = state[target]
@@ -212,14 +227,16 @@ export class ReactLoopInbox implements InboxContract {
       ids.add(message.id)
     }
     const outcome = discardRemoved && actualDeleteCount > 0 ? 'canceled' as const : undefined
+    const removed = inbox.slice(actualStart, actualStart + actualDeleteCount)
+    const recalled = removed[0]
     const splice: SessionEventMap['agent/inbox/spliced'] = {
       target,
       start: actualStart,
       ...(actualDeleteCount === 0 ? {} : { removedCount: actualDeleteCount }),
       inserted,
       ...(outcome === undefined ? {} : { outcome }),
+      ...(recallId === undefined || recalled === undefined ? {} : { recall: { requestId: recallId, message: recalled } }),
     }
-    const removed = inbox.slice(actualStart, actualStart + actualDeleteCount)
     const event = this.session.append('agent/inbox/spliced', splice)
     if (discardRemoved) {
       for (const message of removed) this.dispatch.emit('agent/inbox/discarded', { message })

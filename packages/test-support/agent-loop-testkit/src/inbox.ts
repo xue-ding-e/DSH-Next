@@ -47,6 +47,12 @@ export function createInboxStub(): Inbox {
       pending[location.target].splice(location.index, 1)
       return true
     },
+    recall(messageId) {
+      const index = pending['next-turn'].findIndex(message => message.id === messageId && message.source.kind === 'user')
+      if (index < 0) return false
+      pending['next-turn'].splice(index, 1)
+      return true
+    },
     splice(target, start, deleteCount, inserted) {
       return pending[target].splice(start, deleteCount, ...inserted)
     },
@@ -69,6 +75,7 @@ export function unsupportedInbox(): Inbox {
     prepend: rejectMutation,
     replace: rejectMutation,
     remove: rejectMutation,
+    recall: rejectMutation,
     splice: rejectMutation,
   }
 }

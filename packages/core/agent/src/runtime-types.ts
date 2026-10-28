@@ -5,6 +5,7 @@
  * @module @deepseek-ai/dsh-agent
  */
 
+import type { Branded } from '@deepseek-ai/dsh-brand'
 import type { Context } from '@deepseek-ai/cordis'
 import type { Scoped } from '@deepseek-ai/dsh-scope'
 import type {
@@ -109,6 +110,14 @@ export interface Inbox {
    * @returns whether the message was still pending.
    */
   remove(messageId: MessageId): boolean
+
+  /**
+   * Remove one pending next-turn user message with an atomic durable recovery record.
+   * @param messageId - exact pending occurrence, never a running or next-step message.
+   * @param requestId - caller identity retained for recovery after an uncertain response.
+   * @returns whether this occurrence was still eligible for recall.
+   */
+  recall(messageId: MessageId, requestId: Branded<'session-request-id'>): boolean
 
   /**
    * Apply standard splice semantics and durably record the normalized result.
