@@ -1,6 +1,7 @@
 name: Next workspace and session menu validation
 
 # Manual-only community validation; inherited automation remains quarantined.
+# Rebuilt community repository ID 1437727533: register this existing manual entry on the new repository.
 # Dispatch only after the reviewed cross-repository heavy-work queue.
 on:
   workflow_dispatch:
