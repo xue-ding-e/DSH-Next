@@ -18,7 +18,12 @@ test('the shipped client registers through the classic-script module loader', ()
   assert.equal(modules[0].id, 'dsh-nav-buttons')
   const plugin = modules[0].factory()
   assert.equal(typeof plugin.apply, 'function')
-  assert.deepEqual(Array.from(plugin.inject), ['sidebarRight'])
+  // Every service the code reads must be declared: Cordis resolves only declared
+  // properties, so an undeclared `ctx.get('x')` is undefined with no error. The
+  // declaration previously named only `sidebarRight` while the code also read
+  // `sessions`, `layout` and `uiWorkspace`, which made the history permanently
+  // empty. Pin all four.
+  assert.deepEqual(Array.from(plugin.inject).sort(), ['layout', 'sessions', 'sidebarRight', 'uiWorkspace'])
 })
 
 test('the client bundle is a classic script with no ESM syntax', () => {

@@ -519,6 +519,11 @@ function install(ctx) {
   }, 'dsh-nav-buttons: heartbeat and command drain')
 }
 
-return { inject: ['sidebarRight'], apply }
+// Every service `apply` reads through `ctx.get()` must be declared here: Cordis
+// resolves only declared properties, and an undeclared `ctx.get('x')` is
+// `undefined` with no error. This previously declared `sidebarRight` alone while
+// the code also read `sessions`, `layout` and `uiWorkspace`, so `currentPlace()`
+// returned undefined forever and the whole history stayed empty.
+return { inject: ['sessions', 'layout', 'sidebarRight', 'uiWorkspace'], apply }
   },
 })
