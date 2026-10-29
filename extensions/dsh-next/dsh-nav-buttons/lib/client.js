@@ -292,6 +292,8 @@ function install(ctx) {
   // zero sample count is ambiguous between "not installed" and "nobody clicked".
   let listenersInstalled = 0
   let lastEvent = null
+  // Per-observable firing counts; see the subscription site.
+  const fired = {}
   // The raw per-axis inputs behind the last key. A key that never changes can mean
   // "one axis is stuck" or "the axes are all stuck together"; only the parts say
   // which, and the joined key hides them.
@@ -365,13 +367,20 @@ function install(ctx) {
   ctx.effect(() => {
     record()
     const disposers = []
-    const observables = [
-      ctx.get('sessions')?.list,
-      ctx.get('layout')?.panelInfo,
-      ctx.get('sidebarRight')?.mounted,
+    // Counted per source: one total cannot say which observable is churning, and a
+    // source that fires hundreds of times while the place never changes is the
+    // difference between "quiet window" and "a subscription is looping".
+    const sources = [
+      ['list', ctx.get('sessions')?.list],
+      ['panel', ctx.get('layout')?.panelInfo],
+      ['mounted', ctx.get('sidebarRight')?.mounted],
     ]
-    for (const observable of observables) {
-      if (typeof observable?.subscribe === 'function') disposers.push(observable.subscribe(record))
+    for (const [name, observable] of sources) {
+      if (typeof observable?.subscribe !== 'function') continue
+      disposers.push(observable.subscribe(() => {
+        fired[name] = (fired[name] ?? 0) + 1
+        record()
+      }))
     }
     return () => { for (const dispose of disposers) dispose() }
   }, 'dsh-nav-buttons: record')
@@ -452,6 +461,7 @@ function install(ctx) {
       sampleCalls,
       listenersInstalled,
       lastEvent,
+      fired,
       lastParts,
       lastKeys,
       current: snapshot.current === undefined ? null : snapshot.current.key,
