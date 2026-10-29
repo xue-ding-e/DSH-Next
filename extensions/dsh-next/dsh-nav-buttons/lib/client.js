@@ -569,6 +569,9 @@ function install(ctx) {
           if (typeof body?.command === 'string') {
             if (body.command === 'back') step('back')
             else if (body.command === 'forward') step('forward')
+            // Forces one observation and reports it, so the sampling path can be
+            // verified without synthesizing a mouse or keyboard event.
+            else if (body.command === 'probe') record(true)
           }
         }
       } catch {

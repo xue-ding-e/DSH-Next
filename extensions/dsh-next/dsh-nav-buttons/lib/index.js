@@ -42,7 +42,7 @@ let lastRawKeys = []
 let lastRawSample = ''
 
 /** Commands the page half accepts from the diagnostics mailbox. */
-const COMMANDS = new Set(['back', 'forward'])
+const COMMANDS = new Set(['back', 'forward', 'probe'])
 
 /** The one queued command, if any. Single slot: a queue would let stale input pile up. */
 let pendingCommand
