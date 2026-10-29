@@ -82,7 +82,14 @@ describe('web e2e: row context-menu placement', () => {
       await row.focus()
       await page.keyboard.press(key)
       await menu.waitFor()
-      await expect.poll(async () => Math.abs((await rect(menu)).x - (await rect(row)).x)).toBeLessThan(1)
+      await expect.poll(async () => {
+        const anchor = await rect(row)
+        const placed = await rect(menu)
+        const viewportWidth = await page.evaluate(() => window.innerWidth)
+        // Keyboard anchoring retains the shared menu's 12px viewport safety margin.
+        const expectedX = Math.min(Math.max(anchor.x, 12), viewportWidth - placed.width - 12)
+        return Math.abs(placed.x - expectedX)
+      }).toBeLessThan(1)
       await expect.poll(async () => {
         const bounds = await rect(row)
         return Math.abs((await rect(menu)).y - (bounds.y + bounds.height + 4))
