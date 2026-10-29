@@ -414,6 +414,8 @@ function install(ctx) {
   // Result of the most recent selftest command: whether the three restore axes\r
   // were callable against the live services. Null until one is asked for.\r
   let lastSelftest = null
+  // Sessions the catalog knows, for the read-only peers command.
+  let lastPeers = null
   // Proof the interaction listener is attached and firing. Without these two, a
   // zero sample count is ambiguous between "not installed" and "nobody clicked".
   let listenersInstalled = 0
@@ -661,6 +663,7 @@ function install(ctx) {
       lastEvent,
       lastRestoreError,
       lastSelftest,
+      lastPeers,
       fired,
       lastParts,
       // The stack itself, not the observation log. `entries: 2, index: 0` cannot
@@ -711,6 +714,24 @@ function install(ctx) {
               lastSelftest = here === undefined
                 ? { skipped: 'no place' }
                 : { key: here.slice(0, 60), failed: restorePlace(ctx, here) }
+            }
+            // Switch the main view to a named session, then report. This exists so
+            // the session axis can be exercised end-to-end without synthesizing a
+            // mouse click; the operator passes an id from `peers`.
+            else if (body.command === 'switch' && typeof body.target === 'string') {
+              lastSelftest = { target: body.target, failed: restorePlace(ctx, `${body.target}${SEP}${SEP}`) }
+              setTimeout(() => record(true), 300)
+            }
+            // Read-only: list the sessions the catalog knows, so an operator can
+            // see what the session axis could switch between. It changes nothing.
+            else if (body.command === 'peers') {
+              const byId = ctx.get('sessions')?.list?.getSnapshot?.()?.byId
+              lastPeers = byId === undefined || byId === null
+                ? []
+                : Object.values(byId).slice(0, 12).map(candidate => ({
+                  id: candidate.id,
+                  main: (candidate.retainedBy?.mainView ?? 0) > 0,
+                }))
             }
           }
         }

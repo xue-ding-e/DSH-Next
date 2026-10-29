@@ -42,10 +42,13 @@ let lastRawKeys = []
 let lastRawSample = ''
 
 /** Commands the page half accepts from the diagnostics mailbox. */
-const COMMANDS = new Set(['back', 'forward', 'probe', 'selftest'])
+const COMMANDS = new Set(['back', 'forward', 'probe', 'selftest', 'peers', 'switch'])
 
 /** The one queued command, if any. Single slot: a queue would let stale input pile up. */
 let pendingCommand
+
+/** Optional argument for the queued command (currently only switch). */
+let pendingTarget
 
 /** Inert host body: no tools, one diagnostics route. */
 export function apply(ctx) {
@@ -104,6 +107,8 @@ export function apply(ctx) {
               res.end(JSON.stringify({ error: `unknown command: ${name}` }))
               return
             }
+            // switch carries a target session id; every other command is a bare name.
+            pendingTarget = typeof parsed?.target === 'string' ? parsed.target : undefined
             pendingCommand = name
             res.writeHead(202, { 'content-type': 'application/json' })
             res.end(JSON.stringify({ queued: name }))
@@ -119,9 +124,11 @@ export function apply(ctx) {
       // plain browser fetch cannot be mistaken for a state change by a proxy.
       if (endpoint === 'command' && req.method === 'GET') {
         const command = pendingCommand
+        const target = pendingTarget
         pendingCommand = undefined
+        pendingTarget = undefined
         res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' })
-        res.end(JSON.stringify({ command: command ?? null }))
+        res.end(JSON.stringify({ command: command ?? null, target: target ?? null }))
         return
       }
 
@@ -166,6 +173,7 @@ export function apply(ctx) {
               lastEvent: typeof parsed.lastEvent === 'string' ? parsed.lastEvent : null,
               lastRestoreError: typeof parsed.lastRestoreError === 'string' ? parsed.lastRestoreError : null,
               lastSelftest: parsed.lastSelftest !== null && typeof parsed.lastSelftest === 'object' ? parsed.lastSelftest : null,
+              lastPeers: Array.isArray(parsed.lastPeers) ? parsed.lastPeers : null,
               fired: parsed.fired !== null && typeof parsed.fired === 'object' ? parsed.fired : null,
               lastParts: parsed.lastParts !== null && typeof parsed.lastParts === 'object' ? parsed.lastParts : null,
               stack: Array.isArray(parsed.stack) ? parsed.stack : [],
