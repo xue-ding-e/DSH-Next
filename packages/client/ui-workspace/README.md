@@ -53,7 +53,7 @@ Collapsed search is one header action beside the view and add actions: activatin
 
 ### Managing sessions
 
-Right-clicking a nonblank Session row opens the same menu as its ellipsis button without opening or selecting the Session; blank New Session rows keep the native context menu.
+Right-clicking a nonblank Session or real Workspace row opens its actions at the pointer, fitted inside the viewport, without selecting the Session or toggling the Workspace. Repeated right-clicks move the same menu. ContextMenu or Shift+F10 on a focused row opens below that row; the ellipsis button retains its own anchor. Pointer and keyboard context menus remain open until selection, Escape, or an outside press. Blank New Session rows keep the native context menu.
 
 The final built-in item in a Session row's "..." menu is Copy Session ID. It closes the menu and copies the complete ID directly, without opening a dialog. Clipboard success or failure appears in the global toast; a failed copy can be retried from the menu. Copying does not retain the Session, load its history, or call the Host.
 

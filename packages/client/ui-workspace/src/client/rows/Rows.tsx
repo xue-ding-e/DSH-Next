@@ -10,7 +10,7 @@
  * context; this package's own actions are entries like any plugin's. The
  * session and workspace hover cards are suppressed while a menu is open.
  */
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { RefObject } from 'react'
 import clsx from 'clsx'
 import type { PropsRenderSlots } from '@deepseek-ai/dsh-client-ui-slots'
@@ -27,6 +27,39 @@ import type { WorkspaceId } from '@deepseek-ai/dsh-api-workspace-controller/clie
 import type { MenuOpenState, WorkspaceBrowserProps } from '../contract/slots.ts'
 import type { GroupNode, SearchResultNode, SessionNode } from '../tree.ts'
 import css from './Rows.module.css'
+
+/** Opening gesture determines placement and pointer-leave dismissal for one row menu. */
+type RowMenuAnchor =
+  | { kind: 'trigger' }
+  | { kind: 'row'; element: HTMLElement }
+  | { kind: 'pointer'; x: number; y: number }
+
+/** Keep the open state and its anchor together; action entries retain their boolean close API. */
+function useRowMenu() {
+  const [anchor, setAnchor] = useState<RowMenuAnchor | null>(null)
+  const setMenuOpen = useCallback<MenuOpenState[1]>((next) => {
+    setAnchor(current => {
+      const open = typeof next === 'function' ? next(current !== null) : next
+      return open ? current ?? { kind: 'trigger' } : null
+    })
+  }, [])
+  const anchorProps = useMemo(() => {
+    if (anchor === null || anchor.kind === 'trigger') return {}
+    return {
+      getAnchorRect: () => anchor.kind === 'row'
+        ? anchor.element.getBoundingClientRect()
+        : new DOMRect(anchor.x, anchor.y, 0, 0),
+    }
+  }, [anchor])
+  return {
+    menuOpen: anchor !== null,
+    setMenuOpen,
+    anchorProps,
+    closeOnPointerLeave: anchor?.kind === 'trigger',
+    openAtPointer: (x: number, y: number) => { setAnchor({ kind: 'pointer', x, y }) },
+    openAtRow: (element: HTMLElement) => { setAnchor({ kind: 'row', element }) },
+  }
+}
 
 /** The standard locale seat, prop-passed from the browser root. */
 type RowTranslate = WorkspaceBrowserProps['t']
@@ -282,7 +315,7 @@ function ProjectRow({
   // The ungrouped bucket has no workspace title: its label is dictionary copy.
   const label = row.workspaceId === undefined ? t('group.ungrouped') : row.label
   const active = containsCurrentDescendant || (group.expanded && group.containsCurrent)
-  const [menuOpen, setMenuOpen] = useState(false)
+  const { menuOpen, setMenuOpen, anchorProps, closeOnPointerLeave, openAtPointer, openAtRow } = useRowMenu()
   const dragPreview = useRowDragPreview(css.dragPreview as string)
   const menuTriggerRef = useRef<HTMLButtonElement>(null)
   const workspaceMenuItems = [
@@ -304,7 +337,7 @@ function ProjectRow({
         event.preventDefault()
         event.stopPropagation()
         menuTriggerRef.current?.focus()
-        setMenuOpen(true)
+        openAtPointer(event.clientX, event.clientY)
       }}
       onKeyDown={(event) => {
         if (event.target !== event.currentTarget) return
@@ -313,7 +346,7 @@ function ProjectRow({
           event.preventDefault()
           event.stopPropagation()
           menuTriggerRef.current?.focus()
-          setMenuOpen(true)
+          openAtRow(event.currentTarget)
         } else if ((event.key === 'Enter' || event.key === ' ')
           && !event.altKey && !event.ctrlKey && !event.metaKey && !event.shiftKey) {
           event.preventDefault()
@@ -357,7 +390,8 @@ function ProjectRow({
               else actions.delete()
             }}
             portal
-            closeOnPointerLeave
+            {...anchorProps}
+            closeOnPointerLeave={closeOnPointerLeave}
             anchor={(
               <button
                 type="button"
@@ -620,7 +654,8 @@ export function SearchResultItem({
  * neither marker renders there, and its live status stays on the hover card.
  * The row accepts Tab focus and opens with unmodified Enter or Space; descendant controls
  * handle their own activation without opening the row. Context-menu requests on nonblank
- * rows open the same actions as the ellipsis without selecting the Session.
+ * rows open the same actions as the ellipsis without selecting the Session. Pointer requests
+ * anchor at the cursor; ContextMenu and Shift+F10 anchor below the focused row.
  * @param props.node - derived session node.
  * @param props.currentId - selected session id (row highlight).
  * @param props.now - epoch ms for relative-time formatting.
@@ -676,10 +711,10 @@ export function SessionNodeItem({
   const renamable = useSessionAccess(node.id, 'session/rename')
   const reorderable = useSessionAccess(node.id, 'workspace/insertSessionBefore')
   const draggable = drag !== undefined && reorderable && !row.blank && !row.archived
-  const [menuOpen, setMenuOpen] = useState(false)
+  const { menuOpen, setMenuOpen, anchorProps, closeOnPointerLeave, openAtPointer, openAtRow } = useRowMenu()
   const dragPreview = useRowDragPreview(css.dragPreview as string)
   // The menu's open state, bound into the row entries' `useMenuOpenState` hook.
-  const menuOpenState = useMemo((): MenuOpenState => [menuOpen, setMenuOpen], [menuOpen])
+  const menuOpenState = useMemo((): MenuOpenState => [menuOpen, setMenuOpen], [menuOpen, setMenuOpen])
   const rowRef = useRef<HTMLDivElement>(null)
   const menuTriggerRef = useRef<HTMLButtonElement>(null)
   const titleRef = useRef<HTMLSpanElement>(null)
@@ -715,13 +750,20 @@ export function SessionNodeItem({
         event.preventDefault()
         event.stopPropagation()
         menuTriggerRef.current?.focus()
-        setMenuOpen(true)
+        openAtPointer(event.clientX, event.clientY)
       }}
       onKeyDown={(event) => {
-        if (event.target !== event.currentTarget || (event.key !== 'Enter' && event.key !== ' ')) return
-        if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return
-        event.preventDefault()
-        onOpen(node.id)
+        if (event.target !== event.currentTarget) return
+        if (!row.blank && (event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10'))) {
+          event.preventDefault()
+          event.stopPropagation()
+          menuTriggerRef.current?.focus()
+          openAtRow(event.currentTarget)
+        } else if ((event.key === 'Enter' || event.key === ' ')
+          && !event.altKey && !event.ctrlKey && !event.metaKey && !event.shiftKey) {
+          event.preventDefault()
+          onOpen(node.id)
+        }
       }}
       onPointerEnter={marquee.enter}
       onPointerLeave={marquee.leave}
@@ -804,12 +846,15 @@ export function SessionNodeItem({
             open={menuOpen}
             onClose={() => { setMenuOpen(false) }}
             portal
-            closeOnPointerLeave
+            {...anchorProps}
+            closeOnPointerLeave={closeOnPointerLeave}
             anchor={(
               <button
                 type="button"
                 className={css.iconButton}
                 ref={menuTriggerRef}
+                aria-haspopup="menu"
+                aria-expanded={menuOpen}
                 aria-label={t('actions.session.aria', { name: title })}
                 onClick={() => { setMenuOpen(v => !v) }}
               >

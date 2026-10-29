@@ -454,6 +454,23 @@ describe('Menu', () => {
     }
   })
 
+  it('disarms a pending grace close when pointer-leave dismissal is disabled while open', () => {
+    vi.useFakeTimers()
+    try {
+      const onClose = vi.fn()
+      const { rerender } = render(
+        <Menu open closeOnPointerLeave anchor={<span>trigger</span>} items={items} onClose={onClose} />)
+      fireEvent.pointerLeave(screen.getByText('trigger').parentElement as HTMLElement)
+      act(() => { vi.advanceTimersByTime(POINTER_GRACE_MS - 1) })
+      rerender(<Menu open anchor={<span>trigger</span>} items={items} onClose={onClose} />)
+      act(() => { vi.advanceTimersByTime(POINTER_GRACE_MS * 2) })
+      expect(onClose).not.toHaveBeenCalled()
+      expect(screen.getByRole('menu')).toBeTruthy()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('coming back inside the grace keeps the list open (trigger and list are one region)', () => {
     vi.useFakeTimers()
     try {
