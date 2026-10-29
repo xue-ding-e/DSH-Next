@@ -411,6 +411,9 @@ function install(ctx) {
   let lastKeys = []
   // Which axes failed on the most recent step, so a desync is explainable.\r
   let lastRestoreError = null
+  // Result of the most recent selftest command: whether the three restore axes\r
+  // were callable against the live services. Null until one is asked for.\r
+  let lastSelftest = null
   // Proof the interaction listener is attached and firing. Without these two, a
   // zero sample count is ambiguous between "not installed" and "nobody clicked".
   let listenersInstalled = 0
@@ -657,6 +660,7 @@ function install(ctx) {
       listenersInstalled,
       lastEvent,
       lastRestoreError,
+      lastSelftest,
       fired,
       lastParts,
       // The stack itself, not the observation log. `entries: 2, index: 0` cannot
@@ -698,6 +702,16 @@ function install(ctx) {
             // Forces one observation and reports it, so the sampling path can be
             // verified without synthesizing a mouse or keyboard event.
             else if (body.command === 'probe') record(true)
+            // Restores the CURRENT place, which is idempotent, but exercises all
+            // three restore branches against the live services. Without it the
+            // session/panel/tab calls only ever run when a history step happens,
+            // so their wiring is unverified until the day a user presses X1.
+            else if (body.command === 'selftest') {
+              const here = currentPlace(ctx)
+              lastSelftest = here === undefined
+                ? { skipped: 'no place' }
+                : { key: here.slice(0, 60), failed: restorePlace(ctx, here) }
+            }
           }
         }
       } catch {

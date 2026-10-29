@@ -42,7 +42,7 @@ let lastRawKeys = []
 let lastRawSample = ''
 
 /** Commands the page half accepts from the diagnostics mailbox. */
-const COMMANDS = new Set(['back', 'forward', 'probe'])
+const COMMANDS = new Set(['back', 'forward', 'probe', 'selftest'])
 
 /** The one queued command, if any. Single slot: a queue would let stale input pile up. */
 let pendingCommand
@@ -165,6 +165,7 @@ export function apply(ctx) {
               listenersInstalled: Number(parsed.listenersInstalled) || 0,
               lastEvent: typeof parsed.lastEvent === 'string' ? parsed.lastEvent : null,
               lastRestoreError: typeof parsed.lastRestoreError === 'string' ? parsed.lastRestoreError : null,
+              lastSelftest: parsed.lastSelftest !== null && typeof parsed.lastSelftest === 'object' ? parsed.lastSelftest : null,
               fired: parsed.fired !== null && typeof parsed.fired === 'object' ? parsed.fired : null,
               lastParts: parsed.lastParts !== null && typeof parsed.lastParts === 'object' ? parsed.lastParts : null,
               stack: Array.isArray(parsed.stack) ? parsed.stack : [],
