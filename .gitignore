@@ -5,6 +5,10 @@ apps/desktop/.env.macos
 apps/desktop/*.p12
 node_modules/
 lib/
+# DSH-Next community plugins are hand-authored JavaScript, not build output:
+# their `lib/` holds the shipped source, so the blanket `lib/` rule must not
+# swallow it. Everything else keeps ignoring build directories.
+!extensions/dsh-next/*/lib/
 *.tsbuildinfo
 pnpm-debug.log
 .pnpm-store/

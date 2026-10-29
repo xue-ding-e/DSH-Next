@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Browser control",
+    "description": "Let the model drive the sidebar browser tab: navigate, snapshot, click, fill, read text and screenshot, reusing that tab's cookies and login state."
+  }
+}
