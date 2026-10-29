@@ -35,6 +35,12 @@ let report
 /** When the last report arrived, so a stale page is distinguishable from none. */
 let reportedAt
 
+/** Commands the page half accepts from the diagnostics mailbox. */
+const COMMANDS = new Set(['back', 'forward'])
+
+/** The one queued command, if any. Single slot: a queue would let stale input pile up. */
+let pendingCommand
+
 /** Inert host body: no tools, one diagnostics route. */
 export function apply(ctx) {
   ctx.effect(() => ctx.webServer.register({
@@ -58,6 +64,42 @@ export function apply(ctx) {
           : { pageHalf: 'reported', ageMs: Date.now() - reportedAt, ...report })
         res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' })
         res.end(body)
+        return
+      }
+
+      if (endpoint === 'command' && req.method === 'POST') {
+        // A one-slot mailbox the page half drains. It exists so the navigation
+        // logic can be exercised without synthesizing real mouse or keyboard input:
+        // a test asks for `back`/`forward` and observes the resulting report.
+        const chunks = []
+        req.on('data', chunk => { chunks.push(chunk) })
+        req.on('end', () => {
+          try {
+            const parsed = JSON.parse(Buffer.concat(chunks).toString('utf8'))
+            const name = typeof parsed?.command === 'string' ? parsed.command : ''
+            if (!COMMANDS.has(name)) {
+              res.writeHead(400, { 'content-type': 'application/json' })
+              res.end(JSON.stringify({ error: `unknown command: ${name}` }))
+              return
+            }
+            pendingCommand = name
+            res.writeHead(202, { 'content-type': 'application/json' })
+            res.end(JSON.stringify({ queued: name }))
+          } catch {
+            res.writeHead(400, { 'content-type': 'application/json' })
+            res.end(JSON.stringify({ error: 'body must be JSON' }))
+          }
+        })
+        return
+      }
+
+      // The page half drains the mailbox through this. GET rather than POST so a
+      // plain browser fetch cannot be mistaken for a state change by a proxy.
+      if (endpoint === 'command' && req.method === 'GET') {
+        const command = pendingCommand
+        pendingCommand = undefined
+        res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' })
+        res.end(JSON.stringify({ command: command ?? null }))
         return
       }
 

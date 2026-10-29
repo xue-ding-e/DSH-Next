@@ -274,3 +274,36 @@ test('the tab axis is sampled, because no observable reports it', () => {
   assert.ok(code.includes('recordCalls++'), 'observer firings still counted')
   assert.ok(code.includes('sampleCalls,'), 'sample count is reported')
 })
+
+test('the command mailbox lets navigation be exercised without real input', async () => {
+  // Driving X1/X2 for real means synthesizing mouse input on the operator's
+  // machine. The mailbox replaces that: the test asks for a direction over HTTP
+  // and the page half performs it on its next drain. Without this the navigation
+  // path can only be verified by taking over the user's mouse.
+  const routes = new Map()
+  const webServer = { register(route) { routes.set(route.path, route); return () => {} } }
+  const ctx = { webServer, effect(install) { install(); return () => {} } }
+  const { apply } = await import('../lib/index.js')
+  apply(ctx)
+  {
+    const route = routes.get('/tool-nav-buttons')
+
+    const empty = await call(route, 'GET', 'command')
+    assert.equal(JSON.parse(empty.body).command, null, 'mailbox starts empty')
+
+    const queued = await call(route, 'POST', 'command', { command: 'back' })
+    assert.equal(queued.status, 202)
+    assert.equal(JSON.parse(queued.body).queued, 'back')
+
+    const drained = await call(route, 'GET', 'command')
+    assert.equal(JSON.parse(drained.body).command, 'back')
+
+    // Single slot: draining clears it, so stale directions cannot pile up.
+    const afterDrain = await call(route, 'GET', 'command')
+    assert.equal(JSON.parse(afterDrain.body).command, null)
+
+    // An unknown command is rejected rather than parked for the page to misread.
+    const bad = await call(route, 'POST', 'command', { command: 'explode' })
+    assert.equal(bad.status, 400)
+  }
+})

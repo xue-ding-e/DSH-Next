@@ -479,6 +479,29 @@ function install(ctx) {
     const timer = setInterval(live, 20_000)
     return () => { clearInterval(timer) }
   }, 'dsh-nav-buttons: heartbeat')
+
+  // Drain the diagnostics command mailbox. This is how the navigation logic gets
+  // exercised without synthesizing real mouse or keyboard input — the operator
+  // asks for `back`/`forward` over HTTP and reads the resulting counters.
+  // Deliberately not a user-facing feature: nothing routes to it but the route.
+  ctx.effect(() => {
+    let stopped = false
+    const drain = async () => {
+      try {
+        const response = await fetch('/tool-nav-buttons/command', { cache: 'no-store' })
+        if (!response.ok) return
+        const body = await response.json()
+        if (stopped || typeof body?.command !== 'string') return
+        if (body.command === 'back') step('back')
+        else if (body.command === 'forward') step('forward')
+        live()
+      } catch {
+        // The route is absent in a profile without the host half; harmless.
+      }
+    }
+    const timer = setInterval(drain, 1000)
+    return () => { stopped = true; clearInterval(timer) }
+  }, 'dsh-nav-buttons: command drain')
 }
 
 return { inject: ['sidebarRight'], apply }
