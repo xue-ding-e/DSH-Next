@@ -103,6 +103,20 @@ class NavHistory {
     return this.#entries[this.#index]
   }
 
+  /**
+   * Move the cursor back to a place already in the stack, without dropping later
+   * entries. KEEP IN SYNC with lib/history.js — see the note on `snapshot`.
+   * @param key - the place the caller ended up at, or undefined when nothing moved.
+   * @returns true when the cursor was moved.
+   */
+  returnTo(key) {
+    if (key === undefined) return false
+    const at = this.#entries.findIndex(entry => entry.key === key)
+    if (at < 0 || at === this.#index) return false
+    this.#index = at
+    return true
+  }
+
   clear() {
     this.#entries = []
     this.#index = -1
@@ -359,6 +373,8 @@ function install(ctx) {
   let recordCalls = 0
   let sampleCalls = 0
   let lastKeys = []
+  // Which axes failed on the most recent step, so a desync is explainable.\r
+  let lastRestoreError = null
   // Proof the interaction listener is attached and firing. Without these two, a
   // zero sample count is ambiguous between "not installed" and "nobody clicked".
   let listenersInstalled = 0
@@ -393,6 +409,11 @@ function install(ctx) {
   }
 
   const step = (direction) => {
+    // Remember where the stack stood BEFORE stepping: `back()`/`forward()` move the
+    // cursor and then hand back the entry, so a restore that cannot show that place
+    // would leave the stack claiming a position the screen is not on. The next step
+    // would then start from the wrong place.
+    const previousKey = history.snapshot.current?.key
     const entry = direction === 'back' ? history.back() : history.forward()
     if (entry === undefined) return
     if (direction === 'back') backs++
@@ -402,10 +423,25 @@ function install(ctx) {
     // selection may already have been there). Without the timeout a restore that
     // changes nothing would suppress the NEXT unrelated visit forever.
     restoring = entry.key
+    let failed
     try {
-      restorePlace(ctx, entry.key)
+      failed = restorePlace(ctx, entry.key)
+    } catch {
+      failed = ['unknown']
     } finally {
       setTimeout(() => { if (restoring === entry.key) restoring = null }, 250)
+    }
+    // A total failure means the user is still where they were, so put the cursor
+    // back or the stack silently diverges from the screen. A partial failure is
+    // left alone: part of the place did change, and rewinding would fight it.
+    if (failed !== undefined && failed.length === 3) {
+      restoring = null
+      history.returnTo(previousKey)
+      if (direction === 'back') backs--
+      else forwards--
+      lastRestoreError = failed.join(',')
+    } else if (failed !== undefined && failed.length > 0) {
+      lastRestoreError = failed.join(',')
     }
   }
 
@@ -550,6 +586,7 @@ function install(ctx) {
       sampleCalls,
       listenersInstalled,
       lastEvent,
+      lastRestoreError,
       fired,
       lastParts,
       // The stack itself, not the observation log. `entries: 2, index: 0` cannot

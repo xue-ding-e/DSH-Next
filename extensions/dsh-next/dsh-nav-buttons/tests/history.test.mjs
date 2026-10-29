@@ -412,3 +412,27 @@ test('suppressing the restore echo must not swallow a real switch', () => {
   assert.equal(visits, 4, 'the real switch counted')
   assert.deepEqual(history.snapshot.keys.map(k => k.split(SEP).pop()), ['tab5', 'tab7', 'tab1'])
 })
+
+test('returnTo rewinds the cursor without dropping later entries', () => {
+  // back()/forward() move the cursor and THEN return the entry, so a caller whose
+  // restore fails has already desynced the stack: it claims a position the screen
+  // is not on, and the next step starts from the wrong place. returnTo undoes
+  // exactly that, and must not truncate the way visit() does.
+  const history = new NavHistory()
+  for (const key of ['a', 'b', 'c']) history.visit(key)
+  assert.equal(history.position, 2)
+
+  const entry = history.back()
+  assert.equal(entry.key, 'b')
+  assert.equal(history.position, 1, 'the cursor moved before the restore ran')
+
+  // Restore failed: put the cursor back where it was.
+  assert.equal(history.returnTo('c'), true)
+  assert.equal(history.position, 2)
+  assert.equal(history.snapshot.size, 3, 'entries were not dropped')
+
+  // No-op cases.
+  assert.equal(history.returnTo('c'), false, 'already there')
+  assert.equal(history.returnTo('nope'), false, 'not in the stack')
+  assert.equal(history.returnTo(undefined), false, 'nothing to return to')
+})

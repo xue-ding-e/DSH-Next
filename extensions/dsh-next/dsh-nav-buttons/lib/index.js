@@ -164,6 +164,7 @@ export function apply(ctx) {
               sampleCalls: Number(parsed.sampleCalls) || 0,
               listenersInstalled: Number(parsed.listenersInstalled) || 0,
               lastEvent: typeof parsed.lastEvent === 'string' ? parsed.lastEvent : null,
+              lastRestoreError: typeof parsed.lastRestoreError === 'string' ? parsed.lastRestoreError : null,
               fired: parsed.fired !== null && typeof parsed.fired === 'object' ? parsed.fired : null,
               lastParts: parsed.lastParts !== null && typeof parsed.lastParts === 'object' ? parsed.lastParts : null,
               stack: Array.isArray(parsed.stack) ? parsed.stack : [],

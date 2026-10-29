@@ -113,6 +113,25 @@ export class NavHistory {
     return this.#entries[this.#index]
   }
 
+  /**
+   * Move the cursor back to a place already in the stack, without dropping later
+   * entries.
+   *
+   * `back()`/`forward()` move the cursor and then return the entry, so a caller
+   * that fails to actually show that place has already desynced the stack: it now
+   * claims to be somewhere the screen is not, and the next step starts from the
+   * wrong place. This undoes exactly that.
+   * @param key - the place the caller ended up at, or undefined when nothing moved.
+   * @returns true when the cursor was moved.
+   */
+  returnTo(key) {
+    if (key === undefined) return false
+    const at = this.#entries.findIndex(entry => entry.key === key)
+    if (at < 0 || at === this.#index) return false
+    this.#index = at
+    return true
+  }
+
   /** Forget every entry, e.g. when the window's workspace context is replaced. */
   clear() {
     this.#entries = []
