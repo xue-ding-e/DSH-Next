@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { join } from 'node:path'
+import { join, resolve } from 'node:path'
 import { registerHooks } from 'node:module'
-import { mkdtemp, mkdir, rm, symlink, writeFile } from 'node:fs/promises'
+import { mkdtemp, mkdir, realpath, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { NEXT_DESKTOP_IDENTITY, nextDesktopDistribution } from '../../apps/desktop/src/next-distribution.ts'
 import { nextDesktopPackageEnvironment, isNextDesktopPackage } from '../../apps/desktop/scripts/next-package-environment.mjs'
@@ -38,8 +38,8 @@ test('Next identifiers separate installation, protocol, package user data, and H
   assert.match(NEXT_DESKTOP_IDENTITY.installerGuid, /^[a-f0-9-]{36}$/u)
   assert.equal(NEXT_DESKTOP_IDENTITY.protocol, 'dsh-next')
   assert.equal(NEXT_DESKTOP_IDENTITY.packageName, 'dsh-next-desktop')
-  assert.equal(nextDesktopHome('/synthetic-user'), '/synthetic-user/.dsh-next')
-  assert.equal(nextDesktopHome('/synthetic-user', '/synthetic-user/restored-next'), '/synthetic-user/restored-next')
+  assert.equal(nextDesktopHome('/synthetic-user'), resolve('/synthetic-user', '.dsh-next'))
+  assert.equal(nextDesktopHome('/synthetic-user', '/synthetic-user/restored-next'), resolve('/synthetic-user', 'restored-next'))
   for (const path of ['/synthetic-user/.dsh', '/synthetic-user/.dsh/profiles/desktop', '/', 'relative']) {
     assert.throws(() => nextDesktopHome('/synthetic-user', path))
   }
@@ -198,7 +198,7 @@ test('Next data mapping protects original custom homes, installation roots and s
     const source = { DSH_HOME: upstream, DSH_NEXT_HOME: root }
     const first = await nextDesktopEnvironment(home, source, installed)
     assert.equal(source.DSH_HOME, upstream)
-    assert.equal(first.DSH_HOME, root)
+    assert.equal(first.DSH_HOME, join(await realpath(home), 'next-custom'))
     assert.deepEqual(await nextDesktopEnvironment(home, first, installed), first)
     for (const configured of [upstream, join(upstream, 'nested'), home, installed, join(installed, 'profile')]) {
       await assert.rejects(() => nextDesktopEnvironment(home, { ...source, DSH_NEXT_HOME: configured }, installed), /separate/u)
@@ -214,7 +214,7 @@ test('Next canonicalizes symlink ancestors even when the final data directory is
     await mkdir(join(home, '.dsh'))
     await symlink(join(home, '.dsh'), join(home, 'alias'), 'junction')
     await assert.rejects(() => resolveNextDesktopHome(home, join(home, 'alias', 'not-created')), /separate/u)
-    assert.equal(await resolveNextDesktopHome(home, join(home, 'legal separate home')), join(home, 'legal separate home'))
+    assert.equal(await resolveNextDesktopHome(home, join(home, 'legal separate home')), join(await realpath(home), 'legal separate home'))
   } finally { await rm(home, { recursive: true, force: true }) }
 })
 
