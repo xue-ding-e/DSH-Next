@@ -1,0 +1,49 @@
+{
+  "repository": "xue-ding-e/DSH-Next",
+  "repositoryId": "1437727533",
+  "base": "24f874de01c8a035694294fad6516a5d15c28f60",
+  "docs": "4bc8fa62c47fca39ac46192d61b8d87e3217dd24",
+  "source": "774c2c14eb5c546c0c0ef13311fe24d528d7056f",
+  "tree": "f05ac894076153ff3284a91029acb78b2fa79efa",
+  "docsPaths": [
+    ".agents/notes/proposed/feature/2026-10-28-next-desktop-capability-goals.i18n.yaml",
+    ".agents/notes/proposed/feature/2026-10-28-next-desktop-capability-goals.md",
+    ".agents/notes/proposed/feature/2026-10-28-next-desktop-capability-goals.zh.md"
+  ],
+  "productPaths": [
+    "apps/web/tests/row-context-menu.e2e.ts",
+    "packages/client/ui-primitives/src/Menu.tsx",
+    "packages/client/ui-primitives/tests/atoms.client.spec.tsx",
+    "packages/client/ui-workspace/README.i18n.yaml",
+    "packages/client/ui-workspace/README.md",
+    "packages/client/ui-workspace/README.zh.md",
+    "packages/client/ui-workspace/src/client/rows/Rows.tsx",
+    "packages/client/ui-workspace/tests/rows.client.spec.tsx",
+    "tsconfig.host.json"
+  ],
+  "sha256": {
+    ".agents/notes/proposed/feature/2026-10-28-next-desktop-capability-goals.i18n.yaml": "759769a5ccbd1f3104dc763b96666ec1d2f50feafaffbc5b7b8c1276ad67339a",
+    ".agents/notes/proposed/feature/2026-10-28-next-desktop-capability-goals.md": "3138d280bf4db30cee6efb5a59d0b39a717d5a3372895653379c4517f8f416f1",
+    ".agents/notes/proposed/feature/2026-10-28-next-desktop-capability-goals.zh.md": "0cd3b042d5d7cb7783f31d10178d77619682578e910296e406f6abc1d13bee04",
+    "apps/web/tests/row-context-menu.e2e.ts": "c636e6170c6257c3452ef528089eab130bf9cb6951347d1796a6fcee53dc4038",
+    "packages/client/ui-primitives/src/Menu.tsx": "98517f8b310ffb7c9cc3581b8a20a3a2794027d080bbc9c65e4fbd8d009a611e",
+    "packages/client/ui-primitives/tests/atoms.client.spec.tsx": "8df3c401d0c7f824ae00b285944f2a6683d04288caa236335ae33d7c1e21dae6",
+    "packages/client/ui-workspace/README.i18n.yaml": "69ce497fc8ce65091a85dcf83516f49b214b2f1a44dcde3cf274ae6596e23f7b",
+    "packages/client/ui-workspace/README.md": "1e01159df1b784d0c7266796788d614f56161d948127d9c50fcc430b5ea53f1f",
+    "packages/client/ui-workspace/README.zh.md": "9d71c197fcb17e0f6accf2a7415e4f720bd64cb3c6fc649d47d372c97a02861a",
+    "packages/client/ui-workspace/src/client/rows/Rows.tsx": "1203bada4966236944d61c8bfe093563a099360ec1e953e06073656ba0adab36",
+    "packages/client/ui-workspace/tests/rows.client.spec.tsx": "d38cbe7391ca0e6f9cb7d4ba86cbd577d3ef2f11fc2afc2a5807df31d676650e",
+    "tsconfig.host.json": "700276783c8f87d6819b9cab8a9869b41a8423ffadcf5054929bbf0e284ec0a5",
+    "apps/web/tsconfig.json": "66438ca7fea2656236d441a00ba7e2294835374833be93b6a0c50d303573a109"
+  },
+  "redBase": "fa9e0aa9bc3c881a8c8ad804f5fd33e8beae275b",
+  "product": "0d1cdc9ce06b5509b94a162c2482ca0708e1c237",
+  "fixturePaths": [
+    "packages/client/ui-workspace/tests/rows.client.spec.tsx"
+  ],
+  "fixture": "0ca9b499a527164874cf59495344da366be224dd",
+  "fixPaths": [
+    "apps/web/tsconfig.json",
+    "packages/client/ui-workspace/src/client/rows/Rows.tsx"
+  ]
+}
