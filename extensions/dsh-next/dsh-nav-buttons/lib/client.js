@@ -383,8 +383,17 @@ function install(ctx) {
     })
   }
   live()
-  // Re-report on activity so the Host sees progress without a polling timer.
+  // Re-report on activity so the Host sees progress.
   for (const event of ['auxclick', 'mouseup']) window.addEventListener(event, live, true)
+
+  // Also report on a slow timer. Event-only reporting meant that reloading the
+  // Host plugin (which clears its module state) left the route saying "never
+  // reported" until the user happened to move the mouse — indistinguishable from
+  // a dead page half. A 20 s heartbeat keeps the answer truthful without noise.
+  ctx.effect(() => {
+    const timer = setInterval(live, 20_000)
+    return () => { clearInterval(timer) }
+  }, 'dsh-nav-buttons: heartbeat')
 }
 
 return { inject: ['sidebarRight'], apply }

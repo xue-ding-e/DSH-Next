@@ -172,7 +172,12 @@ test('the host half exposes a diagnostics route for the browser half', async () 
   // Before any report, the status must say so rather than pretend all is well.
   const empty = await call(route, 'GET', 'status')
   assert.equal(empty.status, 200)
-  assert.equal(JSON.parse(empty.body).pageHalf, 'never reported')
+  const idle = JSON.parse(empty.body)
+  assert.equal(idle.pageHalf, 'awaiting first report')
+  // The wording matters: after a host reload this half has no state, and a
+  // healthy page is indistinguishable from a missing one until it reports. The
+  // response must say so rather than implying the page is broken.
+  assert.ok(typeof idle.note === 'string' && idle.note.length > 0, 'explains what to do')
 
   // A report from the page flips it to a concrete, countable state.
   const posted = await call(route, 'POST', 'report', {

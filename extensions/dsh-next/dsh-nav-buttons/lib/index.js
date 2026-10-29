@@ -45,8 +45,16 @@ export function apply(ctx) {
       const endpoint = url.pathname.slice(ROUTE.length + 1)
 
       if (endpoint === 'status' && req.method === 'GET') {
+        // "never reported" alone is misleading: after THIS host half reloads its
+        // module state is empty, so a perfectly healthy page looks identical to
+        // a page that never loaded until it next reports. Say which one it is.
         const body = JSON.stringify(report === undefined
-          ? { pageHalf: 'never reported', route: ROUTE }
+          ? {
+            pageHalf: 'awaiting first report',
+            route: ROUTE,
+            note: 'No report since this host half started. Reload the page, then wait up to 20s '
+              + '(the page reports on a heartbeat) or move the mouse once.',
+          }
           : { pageHalf: 'reported', ageMs: Date.now() - reportedAt, ...report })
         res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' })
         res.end(body)
