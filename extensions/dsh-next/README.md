@@ -105,6 +105,37 @@ pwsh -File extensions/dsh-next/check-install.ps1
 注意该脚本**不会**用哈希"证明"链接安装的正确性 —— 链接两边本来就是同一个文件，
 哈希相等不构成证据。它检查的是**链接目标**，这才是真正会出错的地方。
 
+## 客户端 bundle 结构检查
+
+client bundle 以普通 `<script>` 加载，不是模块。三种写法会让 shell 白屏或让
+插件在 `apply` 时抛错，而用户只看得到白屏：
+
+| 错误 | 症状 |
+|---|---|
+| 出现顶层 `export` / `import` | 白屏 |
+| 调用 `require(...)` 但 factory 没接收该参数 | 运行到 factory 时 `require is not defined` |
+| 接收了 `require` 却自带一份 React | hooks 挂到错误的 dispatcher |
+
+```powershell
+pwsh -File extensions/dsh-next/check-bundles.ps1
+```
+
+退出码 0 = 三个 bundle 都是可加载的经典脚本。
+
+## 改 client 半后必须刷新页面
+
+`plugin_manager` 的 `set_plugin` 只重载 **host 半**。client bundle 按 `rev`
+缓存，已加载的页面模块**不会重新执行** —— 改完 `lib/client.js` 后不刷新页面，
+跑的还是旧代码。
+
+`/tool-nav-buttons/status` 用 `shapeStale` 直接标出这种新旧不一致：
+
+```json
+{"pageHalf":"reported","shape":1,"shapeStale":true}
+```
+
+`shapeStale: true` 就是"页面半是旧代码，需要刷新"。
+
 ## 许可
 
 Apache-2.0
