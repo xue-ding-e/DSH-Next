@@ -26,7 +26,11 @@ export async function runDesktopCli(runtimeDir: string, supportDir: string): Pro
   })
 }
 
-if (import.meta.main) {
+/**
+ * Start the installed CLI, including platform signal handling, from either Desktop distribution.
+ * @returns Completion of the selected command; a Next bootstrap invokes this once after mapping its home.
+ */
+export async function runDesktopCliEntry(): Promise<void> {
   if (process.platform === 'win32') {
     const { installWindowsCliSignals } = await import('./windows-cli-signals.ts')
     await installWindowsCliSignals()
@@ -34,3 +38,5 @@ if (import.meta.main) {
   const runtimeDir = resolve(import.meta.dirname, '../../../..')
   await runDesktopCli(runtimeDir, join(dirname(runtimeArchivePath(runtimeDir) ?? runtimeDir), 'runtime'))
 }
+
+if (import.meta.main) await runDesktopCliEntry()

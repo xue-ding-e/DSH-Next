@@ -10,6 +10,14 @@ Function un.RemoveData
 FunctionEnd
 
 Function un.CleanData
+  !ifdef APP_PACKAGE_NAME
+    !if "${APP_PACKAGE_NAME}" == "dsh-next-desktop"
+      ; Next uninstall removes the application only. Preserve its profiles, preferences and caches,
+      ; including an explicit DSH_NEXT_HOME nested in an Electron data directory. Reinstallation is
+      ; non-destructive even when the uninstaller cannot observe a process-local environment override.
+      Return
+    !endif
+  !endif
   ${If} ${isUpdated}
     Return
   ${EndIf}
