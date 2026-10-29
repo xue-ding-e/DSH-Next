@@ -1,0 +1,37 @@
+# Bilingual-pair consistency record for 2026-10-28-next-desktop-capability-goals.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/proposed/feature/2026-10-28-next-desktop-capability-goals.md
+/agent-note-next-desktop-capability-goals:
+  en: 4a9391bf21b7b4eb
+  zh: 60eb9f77c1a4fa52
+/agent-note-next-desktop-capability-goals/problem:
+  en: 3b467373534cf914
+  zh: 4de8d0f6d719d1cf
+/agent-note-next-desktop-capability-goals/proposal:
+  en: 5fccbfa619860a9b
+  zh: d82a15df06b3c1dc
+/agent-note-next-desktop-capability-goals/proposal/survey-before-implementation:
+  en: 21d6bb1a6a1f50fe
+  zh: f90beb2b61d8b8df
+/agent-note-next-desktop-capability-goals/proposal/goal-and-coverage-register:
+  en: 92c9325b22913b6e
+  zh: 66c9a215c54fefc7
+/agent-note-next-desktop-capability-goals/proposal/initial-survey-findings:
+  en: aab10f99bf1b1a35
+  zh: 77a184d25649a23e
+/agent-note-next-desktop-capability-goals/proposal/shared-interactive-acceptance-matrix:
+  en: c4af0bf88ad3e1db
+  zh: 6a94ab5d21f46669
+/agent-note-next-desktop-capability-goals/proposal/safety-and-evidence-ownership:
+  en: 9245077da7a1dc0f
+  zh: 308f704bff3adcf2
+/agent-note-next-desktop-capability-goals/alternatives-considered:
+  en: e4c412902c7f28de
+  zh: ee3a0a199297cf02
+/agent-note-next-desktop-capability-goals/acceptance-criteria:
+  en: c054e1de1ca1649f
+  zh: baac1f2f4fb46637
+/agent-note-next-desktop-capability-goals/risks:
+  en: 84efcad7d6f849c3
+  zh: 2adde60b10363614
