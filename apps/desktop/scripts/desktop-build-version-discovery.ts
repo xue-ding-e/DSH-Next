@@ -21,7 +21,6 @@ import { readdir } from 'node:fs/promises'
 import { parse } from 'semver'
 import { desktopBuildVersionPrefix, validateDesktopBuildVersion } from './desktop-build-version.mjs'
 import { DESKTOP_AUTO_UPDATE_ENV, resolveDesktopUploadConfig } from './desktop-auto-update-environment.mjs'
-import { createDesktopCos, DESKTOP_COS_REGION } from './desktop-cos.ts'
 import type { DesktopPackageTargetName } from './package-target.ts'
 
 /** How long the whole bucket listing may take before the suggestion falls back to local artifacts. */
@@ -42,6 +41,8 @@ export interface DesktopBuildVersionSuggestionOptions {
   readonly date?: string
   /** Directory electron-builder writes installers into for this build. */
   readonly artifactsRoot: string
+  /** Independent distributions never derive numbering from official artifacts or buckets. */
+  readonly artifactPrefix?: 'deepseek-harness' | 'dsh-next'
 }
 
 /**
@@ -73,11 +74,13 @@ function sequenceNumbers(versions: Iterable<string>, prefix: string): number[] {
 /**
  * Read the versions one output directory already holds.
  * @param artifactsRoot - Directory electron-builder wrote installers into.
+ * @param prefix - Explicit distribution artifact identity.
  * @returns Versions parsed from artifact names.
  */
-async function localVersions(artifactsRoot: string): Promise<string[]> {
+async function localVersions(artifactsRoot: string, prefix: 'deepseek-harness' | 'dsh-next'): Promise<string[]> {
+  const artifact = prefix === 'dsh-next' ? /(?:^|\/)dsh-next-(?<version>.+)-(?:mac|win)-(?:arm64|x64)(?:-unsigned|-unnotarized)?\.(?:exe|dmg|zip)$/u : ARTIFACT
   const entries = await readdir(artifactsRoot).catch(() => [])
-  return entries.map(entry => ARTIFACT.exec(entry)?.groups?.version)
+  return entries.map(entry => artifact.exec(entry)?.groups?.version)
     .filter((version): version is string => version !== undefined && parse(version) !== null)
 }
 
@@ -97,6 +100,7 @@ async function remoteVersions(options: DesktopBuildVersionSuggestionOptions): Pr
   const secretKey = options.environment[update.secretKeyEnvName]?.trim()
   if (secretId === undefined || secretId === '' || secretKey === undefined || secretKey === '') return undefined
   // The SDK has no per-request abort, so its own timeout is what releases an unanswered socket.
+  const { createDesktopCos, DESKTOP_COS_REGION } = await import('./desktop-cos.ts')
   const cos = createDesktopCos({ secretId, secretKey }, LISTING_DEADLINE_MS)
   const deadline = Date.now() + LISTING_DEADLINE_MS
   const versions: string[] = []
@@ -145,8 +149,8 @@ async function remoteVersions(options: DesktopBuildVersionSuggestionOptions): Pr
  */
 export async function suggestDesktopBuildVersion(options: DesktopBuildVersionSuggestionOptions): Promise<string> {
   const prefix = `${desktopBuildVersionPrefix(options.productVersion)}${options.date ?? desktopBuildDateSegment()}.`
-  const published = await remoteVersions(options)
-  const taken = published ?? await localVersions(options.artifactsRoot)
+  const published = options.artifactPrefix === 'dsh-next' ? undefined : await remoteVersions(options)
+  const taken = published ?? await localVersions(options.artifactsRoot, options.artifactPrefix ?? 'deepseek-harness')
   const used = sequenceNumbers(taken, prefix)
   const next = used.length === 0 ? 1 : Math.max(...used) + 1
   const suggestion = validateDesktopBuildVersion(`${prefix}${String(next)}`, options.productVersion)

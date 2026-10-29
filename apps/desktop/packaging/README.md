@@ -13,6 +13,7 @@ Build Desktop installers locally or through Windows or macOS Actions, choose dep
 ## Table of Contents
 
 - [Choose a build path](#choose-a-build)
+- [DSH Next installer and manual updates](#next-distribution)
 - [Release versions](#release-versions)
 - [Configuration and local builds](#configuration-and-local-builds)
 - [Windows Actions packaging](#windows-actions)
@@ -33,6 +34,20 @@ Build Desktop installers locally or through Windows or macOS Actions, choose dep
 Run local commands from the repository root after installing locked dependencies. Use platform-specific commands for a local build, or platform Actions for the registered self-hosted runner. Choose test or production deployment independently from signed or unsigned mode. Read [Windows signing and runner operations](../windows-signing/README.md#trust-and-isolation) before any Windows signed build or shared-runner use. Installation is separate from packaging; [publication](../publishing/README.md) is a further explicit operation.
 
 Set `DSH_DESKTOP_PACKAGE_CACHE_DIR` to an absolute build-cache directory for reuse across checkouts; see [cache configuration and lifecycle](#desktop-runtime-preparation).
+
+<a id="next-distribution"></a>
+
+## DSH Next installer and manual updates
+
+`DSH Next` is a separate unsigned distribution for `xue-ding-e/DSH-Next`, not an update of an official Harness installation. Its app ID is `io.github.xue-ding-e.dsh-next`; Windows uses installer GUID `e74d59b9-768b-51ae-bb11-7f24bfbafa5a`. Its package, protocol and optional terminal command are `dsh-next-desktop`, `dsh-next` and `dsh-next`. It does not register the official `dsh` command or copy official profiles. Existing official signing and update configurations remain unchanged.
+
+On a native Windows x64 build host with locked dependencies and the documented installer toolchain, use `pnpm --dir apps/desktop run package:next:win:x64 -- --build-version <approved-version>`. `--next` requires `--unsigned`; signing credentials and upstream update services are excluded. `--build-version auto` scans local Next artifacts only: it cannot reserve a globally unique release version on a clean runner. Confirm that the chosen version is unused before release. Packaging retains `--publish never` and does not create releases, tags or update manifests.
+
+The package checks public releases anonymously and verifies this repository's ID before selecting a newer compatible unsigned installer. Stable packages use non-prerelease `next-v<version>` releases; prerelease packages use prereleases with the same versioned tag convention. Assets must be named `dsh-next-<version>-win-x64-unsigned.exe` or `dsh-next-<version>-mac-<arch>-unsigned.dmg`. Empty channels, missing installers and incomplete listings are reported without requesting a token. The prompt opens the validated release page only after confirmation; it does not download, execute or automatically install unsigned code. Users must review the source commit, artifact checksum and unsigned-platform warning before running an installer. Signed automatic updates require separate signer and manifest qualification; no `latest.yml`, `latest-mac.yml`, `nightly.yml` or `nightly-mac.yml` is fabricated for this manual path.
+
+Next uses `~/.dsh-next` by default, or an absolute `DSH_NEXT_HOME`. It rejects canonical overlap with the official default home, inherited custom `DSH_HOME`, and the application installation directory, including existing symlink or junction ancestors. Same-identity reinstall retains data; Next uninstall removes application files but deliberately keeps profiles, preferences and caches.
+
+Optional profile transfer is explicit and backup-first, not automatic migration: close both applications; choose the source directory yourself; make and verify a separate offline backup; check that the selected tree has no symlinks or junctions; copy into a new, empty, separately located Next root without merging or overwriting anything; set `DSH_NEXT_HOME` to that copy. Keep the source and backup unchanged. Verify sessions and settings in Next before relying on the copy; if startup rejects the data format, retain all copies and continue using the original application rather than forcing a downgrade. Profile backups can contain credentials and must not be uploaded with build artifacts.
 
 <a id="release-versions"></a>
 
