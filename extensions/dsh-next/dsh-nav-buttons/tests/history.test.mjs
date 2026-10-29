@@ -465,3 +465,47 @@ test('a completely failed restore rewinds the stack and the counters', () => {
   assert.equal(backs, 0, 'the counter describes what happened, not what was tried')
   assert.equal(history.snapshot.size, 3, 'no entries were dropped')
 })
+
+test('the two NavHistory copies expose the same members', () => {
+  // `lib/client.js` is a classic script the page loads directly, so it CANNOT
+  // import `lib/history.js`; the class is duplicated and history.js is the copy
+  // only the tests exercise. A member added to one copy is invisible until
+  // something reads it, and then it fails inside the page. That already happened
+  // once: `stack` read `snapshot.keys.map(...)` against a copy without `keys` and
+  // install() threw "Cannot read properties of undefined (reading 'map')".
+  //
+  // This is the same comparison as extensions/dsh-next/check-history-copies.ps1,
+  // but running it here means `npm test` catches drift without anyone remembering
+  // to run a PowerShell script.
+  const clientSource = readFileSync(new URL('../lib/client.js', import.meta.url), 'utf8')
+
+  const bodyOf = (source, label) => {
+    const at = source.indexOf('class NavHistory')
+    assert.notEqual(at, -1, `no NavHistory class in ${label}`)
+    const rest = source.slice(at)
+    // The class ends at the first line that is just `}` in column 0.
+    const end = rest.indexOf('\n}\n')
+    return end < 0 ? rest : rest.slice(0, end)
+  }
+
+  const membersOf = (body) => {
+    const names = new Set()
+    for (const line of body.split('\n')) {
+      const method = line.match(/^\s{2}(get\s+)?([A-Za-z#][A-Za-z0-9_#]*)\s*\(/)
+      if (method !== null) names.add((method[1] + method[2]).trim())
+      const snapshotField = line.match(/^\s+([A-Za-z][A-Za-z0-9_]*):\s/)
+      if (snapshotField !== null) names.add(`snapshot.${snapshotField[1]}`)
+      for (const field of line.matchAll(/this\.#([A-Za-z][A-Za-z0-9_]*)/g)) names.add(`#${field[1]}`)
+    }
+    return names
+  }
+
+  const pageCopy = membersOf(bodyOf(clientSource, 'client.js'))
+  const testCopy = membersOf(bodyOf(readFileSync(new URL('../lib/history.js', import.meta.url), 'utf8'), 'history.js'))
+
+  const onlyPage = [...pageCopy].filter(name => !testCopy.has(name))
+  const onlyTest = [...testCopy].filter(name => !pageCopy.has(name))
+  assert.deepEqual(onlyPage, [], 'members only in the copy that runs')
+  assert.deepEqual(onlyTest, [], 'members only in the copy the tests exercise')
+  assert.ok(pageCopy.size > 10, `sanity: found ${pageCopy.size} members`)
+})
