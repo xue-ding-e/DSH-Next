@@ -284,6 +284,10 @@ function placeParts(ctx) {
     // first match, and if that count is ever >1 the chosen session may not be
     // the one on screen — invisible without this number.
     mainCandidates: mainViewCandidates(sessions).length,
+    // How many sessions the catalog knows at all. The session axis reads
+    // `sessions.list`, so a list that only holds the current session would make
+    // switching invisible no matter how the selection is read.
+    knownSessions: knownSessionCount(sessions),
   }
 }
 
@@ -292,6 +296,16 @@ function placeParts(ctx) {
  * @param sessions - the sessions service, or undefined.
  * @returns the candidate ids, in catalog order.
  */
+/**
+ * How many sessions the catalog currently holds.
+ * @param sessions - the sessions service, or undefined.
+ * @returns the count, or 0 when the list is unavailable.
+ */
+function knownSessionCount(sessions) {
+  const byId = sessions?.list?.getSnapshot?.()?.byId
+  return byId === undefined || byId === null ? 0 : Object.keys(byId).length
+}
+
 function mainViewCandidates(sessions) {
   const byId = sessions?.list?.getSnapshot?.()?.byId
   if (byId === undefined || byId === null) return []
