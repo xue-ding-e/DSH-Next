@@ -216,22 +216,38 @@ function placeParts(ctx) {
 
 /**
  * Show one place, restoring as much of it as the services allow.
+ *
+ * Every step is best-effort. A history entry records where the user WAS; by the
+ * time they walk back to it, that panel may have been unregistered or that tab
+ * closed. `layout.selectPanel` throws on an unknown panel, and one throw here
+ * would abort the rest of the restore and leave the user somewhere arbitrary — so
+ * each axis is attempted independently and a dead one is skipped.
  * @param ctx - client plugin context.
  * @param key - the place to show.
+ * @returns the axes that could not be restored, for the caller's diagnostics.
  */
 function restorePlace(ctx, key) {
   const { sessionId, panel, tabId } = parseKey(key)
+  const failed = []
   const uiWorkspace = ctx.get('uiWorkspace')
   const sessions = ctx.get('sessions')
   if (sessionId !== undefined && mainSessionId(sessions) !== sessionId) {
     // `openSession` is the same entry the workspace list uses, so it re-points the
     // main view without touching the right Sidebar's own session.
-    if (uiWorkspace !== undefined) uiWorkspace.openSession(sessionId)
-    else sessions?.open?.(sessionId)
+    try {
+      if (uiWorkspace !== undefined) uiWorkspace.openSession(sessionId)
+      else sessions?.open?.(sessionId)
+    } catch { failed.push('session') }
   }
   const layout = ctx.get('layout')
-  if (layout !== undefined && panel !== null) layout.selectPanel(panel)
-  if (tabId !== undefined) ctx.get('sidebarRight')?.focus?.(tabId)
+  if (layout !== undefined && panel !== null) {
+    // Throws when the panel is no longer registered; that must not stop the tab.
+    try { layout.selectPanel(panel) } catch { failed.push('panel') }
+  }
+  if (tabId !== undefined) {
+    try { ctx.get('sidebarRight')?.focus?.(tabId) } catch { failed.push('tab') }
+  }
+  return failed
 }
 
 /**
