@@ -241,3 +241,18 @@ test('position tracks truncation and revisit jumps', () => {
   assert.equal(history.position, 0)
   assert.equal(history.snapshot.size, 1)
 })
+
+test('the tab axis reads sidebarRight.active(), not a member that does not exist', () => {
+  // `ctx.sidebarRight` has no `state` and no `getSnapshot`; it exposes `active()`
+  // for "the active tab of the active pane". The earlier code read
+  // `sidebarRight.state.getSnapshot()`, which is undefined forever, so switching
+  // sidebar tabs never produced a new place — while `sources.tab` still reported
+  // healthy because it only checked `mounted.subscribe`.
+  // Strip comments first: the source documents the WRONG accessor it replaced, and
+  // a raw substring check would fail on that documentation rather than on code.
+  const code = clientSource.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '')
+  assert.ok(code.includes('sidebarRight.active()'), 'reads the real accessor')
+  assert.equal(code.includes('sidebarRight.state'), false, 'no phantom member in code')
+  // The health check must cover the reader too, or the axis lies again.
+  assert.ok(code.includes("sidebarRight')?.active === 'function'"), 'health checks active()')
+})

@@ -175,22 +175,22 @@ function layoutPanel(layout) {
 }
 
 /**
- * Read the focused sidebar tab, if the surface exposes one.
+ * Read the focused sidebar tab.
+ *
+ * `ctx.sidebarRight` exposes `active()` — "the active tab of the active pane" —
+ * and that is the only public reader for the selection. The previous version
+ * reached for `sidebarRight.state.getSnapshot()`, which does not exist on the
+ * controller, so this returned undefined forever and the tab axis was silently
+ * dead: switching sidebar tabs never produced a new place.
  * @param ctx - client plugin context.
  * @returns the tab id or undefined.
  */
 function focusedTab(ctx) {
   const sidebarRight = ctx.get('sidebarRight')
-  const state = sidebarRight?.state?.getSnapshot?.() ?? sidebarRight?.getSnapshot?.()
-  const layout = state?.layout
-  if (layout === undefined || layout === null) return undefined
-  for (const [paneId, pane] of Object.entries(layout.panes ?? {})) {
-    if (typeof pane?.activeTabId === 'string' && pane.activeTabId !== '') return pane.activeTabId
-    void paneId
-  }
-  return typeof layout.activeTabId === 'string' && layout.activeTabId !== ''
-    ? layout.activeTabId
-    : undefined
+  if (typeof sidebarRight?.active !== 'function') return undefined
+  const tab = sidebarRight.active()
+  // TabRecord carries `id`; guard the shape rather than trusting a duck type.
+  return typeof tab?.id === 'string' && tab.id !== '' ? tab.id : undefined
 }
 
 /**
@@ -357,7 +357,11 @@ function install(ctx) {
   const sources = {
     session: typeof ctx.get('sessions')?.list?.subscribe === 'function',
     panel: typeof ctx.get('layout')?.panelInfo?.subscribe === 'function',
-    tab: typeof ctx.get('sidebarRight')?.mounted?.subscribe === 'function',
+    // The tab axis needs BOTH: `active()` to read the selection and `mounted`
+    // to hear it change. Checking only `mounted` (as this did) reported the axis
+    // healthy while `focusedTab()` was reading a member that does not exist.
+    tab: typeof ctx.get('sidebarRight')?.active === 'function'
+      && typeof ctx.get('sidebarRight')?.mounted?.subscribe === 'function',
     workspace: typeof ctx.get('uiWorkspace')?.openSession === 'function',
   }
   // Captured once: this is when the page half activated. Reporting `Date.now()`
