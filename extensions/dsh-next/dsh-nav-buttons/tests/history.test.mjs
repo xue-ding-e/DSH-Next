@@ -436,3 +436,32 @@ test('returnTo rewinds the cursor without dropping later entries', () => {
   assert.equal(history.returnTo('nope'), false, 'not in the stack')
   assert.equal(history.returnTo(undefined), false, 'nothing to return to')
 })
+
+test('a completely failed restore rewinds the stack and the counters', () => {
+  // Mirrors step()'s failure path: back() moves the cursor, restorePlace fails on
+  // every axis, and the plugin must leave the user where they were. Otherwise the
+  // stack claims a position the screen is not on, and the counters report a move
+  // that never happened.
+  const SEP = '\u0001'
+  const key = tab => `session-a${SEP}${SEP}${tab}`
+  const history = new NavHistory()
+  let backs = 0
+
+  history.visit(key('t1'))
+  history.visit(key('t2'))
+  history.visit(key('t3'))
+
+  const previousKey = history.snapshot.current.key
+  const entry = history.back()
+  assert.equal(entry.key, key('t2'))
+  backs++
+
+  // restorePlace reports every axis as failed.
+  assert.equal(history.returnTo(previousKey), true, 'the rewind succeeded')
+  backs--
+
+  assert.equal(history.position, 2, 'cursor is back on the newest')
+  assert.equal(history.snapshot.current.key, key('t3'))
+  assert.equal(backs, 0, 'the counter describes what happened, not what was tried')
+  assert.equal(history.snapshot.size, 3, 'no entries were dropped')
+})
