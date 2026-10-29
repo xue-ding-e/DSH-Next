@@ -21,6 +21,9 @@ export const DESKTOP_IPC = {
   browserAcquire: 'dsh-desktop:browser-acquire',
   browserRelease: 'dsh-desktop:browser-release',
   browserOpenRequested: 'dsh-desktop:browser-open-requested',
+  // Side mouse buttons arrive as App Commands in the main process, never as DOM
+  // events in the page. See the note on DesktopNavigationCommand.
+  navigationCommand: 'dsh-desktop:navigation-command',
   directoryPick: 'dsh-desktop:directory-pick',
   fileDragPrepare: 'dsh-desktop:file-drag-prepare',
   fileDragCancel: 'dsh-desktop:file-drag-cancel',
@@ -74,6 +77,17 @@ export interface DesktopUpdatePresentation {
   readonly failure?: DesktopUpdateFailureKind
 }
 
+/**
+ * A history step requested by a side mouse button or a media/browser key.
+ *
+ * On Windows and Linux these never reach the page as DOM events: the OS turns
+ * `APPCOMMAND_BROWSER_BACKWARD` / `..._FORWARD` into the window's `app-command`
+ * event, which only the main process can observe. Listening for `auxclick` in the
+ * renderer therefore works only for the subset Chromium happens to translate,
+ * which is why one button can appear to work while the other does nothing.
+ */
+export type DesktopNavigationCommand = 'back' | 'forward'
+
 /** Product documents cannot supply update versions, package URLs, or installation authorization. */
 export interface DshDesktopProductApi {
   readonly protocolVersion: 1
@@ -81,6 +95,14 @@ export interface DshDesktopProductApi {
   readonly fileDrag: DesktopFileDrag
   readonly keyboard: DesktopKeyboardApi
   readonly shortcuts: DesktopShortcutsApi
+  readonly navigation: {
+    /**
+     * Subscribe to side-button navigation from the main process.
+     * @param listener - receives each requested direction.
+     * @returns the unsubscribe function.
+     */
+    subscribe(listener: (command: DesktopNavigationCommand) => void): () => void
+  }
   /**
    * Local machine description for the feedback questionnaire.
    * @returns `name=value` fields separated by `; `, with no hostname, user name, or serial number.

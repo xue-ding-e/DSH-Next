@@ -2,7 +2,7 @@
 
 import type { DesktopShortcutInput, ShortcutConfigSnapshot, ShortcutSaveResult } from '@deepseek-ai/dsh-client-shortcuts/protocol'
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
-import { DESKTOP_IPC, SCHEME, type DshDesktopProductApi, type DesktopUpdatePresentation } from './ipc.ts'
+import { DESKTOP_IPC, SCHEME, type DesktopNavigationCommand, type DshDesktopProductApi, type DesktopUpdatePresentation } from './ipc.ts'
 import { PLATFORM_IPC } from './platform-ipc.ts'
 import { markDocumentPlatform, syncWindowFullscreen } from './preload-platform.ts'
 import { syncNativeTheme } from './preload-theme.ts'
@@ -15,6 +15,18 @@ function createProductApi(): DshDesktopProductApi {
   return {
     protocolVersion: 1,
     browser: createDesktopBrowserBridge(),
+    navigation: {
+      subscribe: (listener) => {
+        // Side mouse buttons reach the main process as App Commands, so this is the
+        // only reliable delivery path; the page-side DOM listeners stay as a
+        // fallback for embedders that do produce `auxclick`.
+        const handle = (_event: Electron.IpcRendererEvent, command: DesktopNavigationCommand): void => {
+          if (command === 'back' || command === 'forward') listener(command)
+        }
+        ipcRenderer.on(DESKTOP_IPC.navigationCommand, handle)
+        return () => { ipcRenderer.removeListener(DESKTOP_IPC.navigationCommand, handle) }
+      },
+    },
     fileDrag: {
       prepare: (source, requestId) => ipcRenderer.invoke(DESKTOP_IPC.fileDragPrepare, source, requestId) as
         Promise<FileDragHandle | undefined>,

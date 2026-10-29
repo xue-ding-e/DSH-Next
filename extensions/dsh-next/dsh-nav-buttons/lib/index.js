@@ -97,7 +97,7 @@ export function apply(ctx) {
         // the two halves can legitimately disagree about the payload shape. An
         // older page half reports shape 1 (no stack contents); saying so explains
         // a missing field without anyone guessing.
-        const EXPECTED_SHAPE = 2
+        const EXPECTED_SHAPE = 8
         const freshest = freshestReport()
         const body = JSON.stringify(freshest === undefined
           ? {
@@ -216,6 +216,9 @@ export function apply(ctx) {
               listenersInstalled: Number(parsed.listenersInstalled) || 0,
               lastEvent: typeof parsed.lastEvent === 'string' ? parsed.lastEvent : null,
               lastRestoreError: typeof parsed.lastRestoreError === 'string' ? parsed.lastRestoreError : null,
+              buttonLog: Array.isArray(parsed.buttonLog) ? parsed.buttonLog.slice(-10) : [],
+              visitLog: Array.isArray(parsed.visitLog) ? parsed.visitLog.slice(-10) : [],
+              stepTrace: Array.isArray(parsed.stepTrace) ? parsed.stepTrace.slice(-12) : [],
               lastSelftest: parsed.lastSelftest !== null && typeof parsed.lastSelftest === 'object' ? parsed.lastSelftest : null,
               lastPeers: Array.isArray(parsed.lastPeers) ? parsed.lastPeers : null,
               fired: parsed.fired !== null && typeof parsed.fired === 'object' ? parsed.fired : null,

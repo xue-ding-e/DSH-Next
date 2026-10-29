@@ -30,7 +30,7 @@ const SEP = '\u0001'
  * Module scope (not inside `install`) so `apply` can report it even when
  * `install` throws before reaching the reporter.
  */
-const PAYLOAD_SHAPE = 2
+const PAYLOAD_SHAPE = 8
 
 /**
  * Identity of this page half.
@@ -87,8 +87,12 @@ class NavHistory {
     if (this.#entries[this.#index]?.key === key) return false
     const existing = this.#entries.findIndex(entry => entry.key === key)
     if (existing >= 0) {
+      // Revisiting an entry NEVER truncates. This stack holds sessions/panels/tabs
+      // and jumping between them is the whole point; treating "went back to an
+      // earlier entry" as a new branch deleted everything after it (measured:
+      // `visit idx 8->3 size 9->4`), which is why forward worked only sometimes.
+      // KEEP IN SYNC with lib/history.js.
       this.#index = existing
-      this.#entries = this.#entries.slice(0, existing + 1)
       return true
     }
     this.#entries = this.#entries.slice(0, this.#index + 1)
@@ -422,6 +426,15 @@ function install(ctx) {
   let lastKeys = []
   // Which axes failed on the most recent step, so a desync is explainable.\r
   let lastRestoreError = null
+  // Every non-primary mouse event seen, with the direction it mapped to.
+  const buttonLog = []
+  // Whether the desktop shell's navigation bridge was found. When it is absent the
+  // plugin still works through DOM events, but only for buttons Chromium translates.
+  let ipcAttached = false
+  // Visits that dropped the forward branch, with the restore state at the time.
+  const visitLog = []
+  // Every cursor mutation from a visit, with before/after index and size.
+  const stepTrace = []
   // Result of the most recent selftest command: whether the three restore axes\r
   // were callable against the live services. Null until one is asked for.\r
   let lastSelftest = null
@@ -438,11 +451,15 @@ function install(ctx) {
   // which, and the joined key hides them.
   let lastParts = null
 
-  // The place this plugin is currently restoring, or null. Suppression is keyed on
-  // the VALUE, not on a time window: a window drops whatever the user does inside
-  // it (measured: pressing X1 then switching a tab within 0 ms lost the switch),
-  // while a value check only ignores the restore it caused itself.
+  // The place this plugin is currently restoring, or null while idle.
+  //
+  // While it is set, observations are ignored entirely — see the guard in
+  // `record`. Comparing against the restored value alone was not enough: the
+  // observers fire BEFORE the new selection commits, so they report the place
+  // being left, which is not the value being restored and slipped through.
   let restoring = null
+  // One restore timer at a time; a stale one must not clear a newer guard.
+  let rearmRestore
 
   const record = (fromSample = false) => {
     if (fromSample) sampleCalls++
@@ -451,13 +468,37 @@ function install(ctx) {
     const key = currentPlace(ctx)
     lastKeys.push(key === undefined ? null : key.slice(0, 60))
     if (lastKeys.length > 8) lastKeys.shift()
-    // Ignore the echo of our own restore: the observer fires for the place we just
-    // selected, and treating that as a visit would rewrite the stack we are walking.
-    if (key !== undefined && key === restoring) {
-      restoring = null
+    // While a restore is in flight, EVERY observation reports the place we are
+    // leaving, not the one we are going to: `restorePlace` is asynchronous and the
+    // observers fire before React commits the new selection. Recording that stale
+    // place ran `visit(oldPlace)`, which sat earlier in the stack and truncated the
+    // forward branch — the stack collapsed from four entries to one, and then even
+    // back had nowhere to go.
+    //
+    // So ignore everything until the target itself is observed. That same
+    // observation is the completion signal: it clears the guard.
+    if (restoring !== null) {
+      if (key !== undefined && key === restoring) restoring = null
       return
     }
-    if (key !== undefined && history.visit(key)) visits++
+    if (key !== undefined) {
+      const before = history.snapshot.size
+      const beforeIdx = history.position
+      if (history.visit(key)) {
+        visits++
+        stepTrace.push(`visit idx ${beforeIdx}->${history.position} size ${before}->${history.snapshot.size}`)
+        if (stepTrace.length > 12) stepTrace.shift()
+        const after = history.snapshot.size
+        // A visit that SHRINKS the stack means the forward branch was dropped. That
+        // is correct when the user really moved somewhere new, and wrong when it is
+        // a heartbeat re-reporting a place we just restored to. Log the shape so the
+        // two cases are distinguishable instead of inferred.
+        if (after < before) {
+          visitLog.push(`shrink ${before}->${after} at=${key.slice(-5)} was=${(restoring ?? '').slice(-5)}`)
+          if (visitLog.length > 10) visitLog.shift()
+        }
+      }
+    }
   }
 
   const step = (direction) => {
@@ -481,7 +522,24 @@ function install(ctx) {
     } catch {
       failed = ['unknown']
     } finally {
-      setTimeout(() => { if (restoring === entry.key) restoring = null }, 250)
+      // The observer clears this the moment it sees the restored place. The timeout
+      // is only a safety net for when no observation ever arrives (the selection may
+      // already have been there). It used to be 250 ms, shorter than a React commit
+      // plus an observable notification under load: the guard expired, a later
+      // heartbeat observed the restored place as if it were a brand-new visit, and
+      // `visit` truncated the forward branch — the stack collapsed from four entries
+      // to one, after which forward had nowhere to go.
+      // The guard is NOT released on a timer any more. A 2 s timer was still too
+      // short under load, and when it expired a stale observation ran visit(oldKey),
+      // which sat earlier in the stack and truncated it — measured: idx 8->3 with
+      // size 9->4, idx 6->1 with size 7->2. Each truncation destroyed the forward
+      // branch, which is why "forward" came and went between presses.
+      //
+      // Instead, wait for the target place to actually be observed, with a long
+      // safety limit; and if the target never arrives, clear the guard WITHOUT
+      // letting that observation rewrite the stack (see record()).
+      clearTimeout(rearmRestore)
+      rearmRestore = setTimeout(() => { restoring = null }, 15000)
     }
     // A total failure means the user is still where they were, so put the cursor
     // back or the stack silently diverges from the screen. A partial failure is
@@ -500,16 +558,6 @@ function install(ctx) {
     } else if (failed !== undefined && failed.length > 0) {
       lastRestoreError = failed.join(',')
     }
-  }
-
-  const onPointer = (event) => {
-    const direction = sideButton(event.button)
-    if (direction === undefined) return
-    // A page inside the sidebar browser owns its own history.
-    if (ownsOwnHistory(event.target)) return
-    event.preventDefault()
-    event.stopPropagation()
-    step(direction)
   }
 
   /**
@@ -542,9 +590,54 @@ function install(ctx) {
   ctx.effect(() => {
     // `auxclick` is the modern "non-primary button released" event and fires for
     // buttons 3/4 in Chromium; `mouseup` covers older embeddings that suppress it.
+    //
+    // Only ONE of them may act per press. Both fire for the same physical click, so
+    // listening to both ran `step()` twice: a single X1 jumped two places, and a
+    // single X2 moved once and then found the stack already at its end — which
+    // reads as "forward does nothing" while back appears to work. Whichever
+    // arrives first wins; a short quiet period re-arms the pair.
     const target = window
-    target.addEventListener('auxclick', onPointer, true)
-    target.addEventListener('mouseup', onPointer, true)
+    let handled = false
+    let rearm
+    /**
+     * Announce and perform one history step.
+     *
+     * Shared by the IPC path and the DOM fallback so both are throttled by the same
+     * guard: one physical press must never step twice.
+     * @param direction - which way to move.
+     * @param source - how the press arrived, for diagnostics.
+     */
+    const begin = (direction, source) => {
+      if (handled) return
+      handled = true
+      clearTimeout(rearm)
+      rearm = setTimeout(() => { handled = false }, 250)
+      buttonLog.push(`${source}->${direction}`)
+      if (buttonLog.length > 10) buttonLog.shift()
+      step(direction)
+    }
+    const onPointerOnce = (event) => {
+      const direction = sideButton(event.button)
+      if (direction === undefined) return
+      if (ownsOwnHistory(event.target)) return
+      event.preventDefault()
+      event.stopPropagation()
+      begin(direction, `${event.type}:${event.button}`)
+    }
+    // The desktop shell forwards App Commands here. On Windows and Linux the OS
+    // delivers side buttons to the WINDOW, never to the page, so this is the only
+    // path that sees every press; the DOM listeners below remain for embedders
+    // (and browser builds) that do produce `auxclick`.
+    const bridge = typeof globalThis === 'object' && globalThis !== null
+      ? globalThis.dshDesktop
+      : undefined
+    const navigation = bridge?.protocolVersion === 1 ? bridge.navigation : undefined
+    ipcAttached = typeof navigation?.subscribe === 'function'
+    const unsubscribe = ipcAttached
+      ? navigation.subscribe(command => { begin(command, 'ipc') })
+      : undefined
+    target.addEventListener('auxclick', onPointerOnce, true)
+    target.addEventListener('mouseup', onPointerOnce, true)
     target.addEventListener('keydown', onKeyDown, true)
     // Chromium maps X1/X2 to browser back/forward on some platforms; suppress it
     // so the app decides instead of the embedder navigating away.
@@ -553,8 +646,10 @@ function install(ctx) {
     }
     target.addEventListener('mousedown', suppress, true)
     return () => {
-      target.removeEventListener('auxclick', onPointer, true)
-      target.removeEventListener('mouseup', onPointer, true)
+      clearTimeout(rearm)
+      unsubscribe?.()
+      target.removeEventListener('auxclick', onPointerOnce, true)
+      target.removeEventListener('mouseup', onPointerOnce, true)
       target.removeEventListener('keydown', onKeyDown, true)
       target.removeEventListener('mousedown', suppress, true)
     }
@@ -684,6 +779,10 @@ function install(ctx) {
       listenersInstalled,
       lastEvent,
       lastRestoreError,
+      buttonLog,
+      ipcAttached,
+      visitLog,
+      stepTrace,
       lastSelftest,
       lastPeers,
       fired,
@@ -761,6 +860,14 @@ function install(ctx) {
         // The route is absent in a profile without the host half; harmless.
       }
       if (stopped) return
+      // Sample the place here as well as in the observers. The subscriptions fire
+      // for session/panel/mounted changes, but Electron throttles timers only in
+      // BACKGROUND documents — this app is usually foreground, so a 2 s tick is
+      // reliable, while an observer can go quiet for minutes (measured:
+      // recordCalls frozen at 60 for a whole minute while the window was idle).
+      // Without this, a position change during a quiet spell was never recorded and
+      // the stack stayed at one entry, which reads as "back does nothing".
+      record(true)
       live()
       timer = setTimeout(tick, 2000)
     }

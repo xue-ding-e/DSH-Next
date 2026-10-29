@@ -31,7 +31,7 @@ import { installDesktopFileDrag } from './file-drag.ts'
 import { installDesktopDirectoryPicker } from './directory-picker.ts'
 import { installMicrophonePermissions } from './microphone-permissions.ts'
 import { DesktopBackendController } from './backend-controller.ts'
-import { DESKTOP_IPC, SCHEME, assertDesktopSender, type DesktopUpdateState } from './ipc.ts'
+import { DESKTOP_IPC, SCHEME, assertDesktopSender, type DesktopNavigationCommand, type DesktopUpdateState } from './ipc.ts'
 import { readDeviceInfo } from './device-info.ts'
 import { desktopUpdateReadyConfirmation, formatDesktopMessage, resolveDesktopLocale, resolveDesktopStartupLocale } from './locale.ts'
 import { claimDesktopSingleInstance } from './single-instance.ts'
@@ -249,6 +249,22 @@ function createWindow(preload: string, show = false, primary = false): BrowserWi
     if (['http:', 'https:'].includes(new URL(url).protocol)) void shell.openExternal(url)
     return { action: 'deny' }
   })
+  if (process.platform === 'win32' || process.platform === 'linux') {
+    // Side mouse buttons arrive here, not in the page. Windows and Linux turn them
+    // into App Commands (`browser-backward` / `browser-forward`) that carry no DOM
+    // event; only the main process sees them. Chromium translates some of them into
+    // `auxclick` and some not, which is why listening in the renderer made one
+    // button work and the other appear broken. Forwarding from here is the only
+    // route that sees every press.
+    const forward = (command: DesktopNavigationCommand): void => {
+      if (window.isDestroyed() || window.webContents.isDestroyed()) return
+      window.webContents.send(DESKTOP_IPC.navigationCommand, command)
+    }
+    window.on('app-command', (_event, command: string) => {
+      if (command === 'browser-backward') forward('back')
+      else if (command === 'browser-forward') forward('forward')
+    })
+  }
   if (process.platform === 'darwin' || process.platform === 'win32') {
     // Fullscreen hides native window controls; overlays drop their caption clearance.
     const sendFullscreen = (): void => {

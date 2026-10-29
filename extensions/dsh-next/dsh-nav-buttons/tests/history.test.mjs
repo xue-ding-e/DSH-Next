@@ -72,12 +72,12 @@ test('a new visit after going back drops the forward branch', () => {
   assert.deepEqual(history.back(), { key: 'a' })
 })
 
-test('revisiting a place already in the stack jumps to it and truncates', () => {
+test('revisiting a place already in the stack jumps to it without truncating', () => {
   const history = new NavHistory()
   for (const key of ['a', 'b', 'c', 'd']) history.visit(key)
   history.visit('b')
-  assert.deepEqual(history.snapshot, { current: { key: 'b' }, canGoBack: true, canGoForward: false, size: 2, keys: ['a', 'b'] })
-  assert.deepEqual(history.forward(), undefined)
+  assert.deepEqual(history.snapshot, { current: { key: 'b' }, canGoBack: true, canGoForward: true, size: 4, keys: ['a', 'b', 'c', 'd'] })
+  assert.deepEqual(history.forward(), { key: 'c' })
 })
 
 test('the stack is bounded and keeps the newest entries', () => {
@@ -234,17 +234,20 @@ test('position reports the real cursor, not a placeholder', () => {
   assert.equal(history.position, 2, 'forward moves it back')
 })
 
-test('position tracks truncation and revisit jumps', () => {
+test('position tracks revisit jumps without dropping the tail', () => {
   const history = new NavHistory()
   for (const key of ['a', 'b', 'c', 'd']) history.visit(key)
   history.back()
   history.back()
   assert.equal(history.position, 1)
 
-  // Revisiting an earlier place keeps the cursor on it.
+  // Revisiting an earlier place moves the cursor there and keeps every entry:
+  // the stack holds sessions/panels/tabs and hopping between them is the point,
+  // so deleting the tail here would destroy the forward branch the user needs.
   history.visit('a')
   assert.equal(history.position, 0)
-  assert.equal(history.snapshot.size, 1)
+  assert.equal(history.snapshot.size, 4, 'the tail survived')
+  assert.equal(history.snapshot.canGoForward, true)
 })
 
 test('the tab axis reads sidebarRight.active(), not a member that does not exist', () => {
@@ -327,9 +330,10 @@ test('snapshot.keys exposes the entries, so a stuck cursor is diagnosable', () =
   assert.deepEqual(history.snapshot.keys, ['a', 'b', 'c'], 'moving does not drop entries')
   assert.equal(history.position, 1)
 
-  // Revisiting truncates, and the keys follow.
+  // Revisiting moves the cursor but keeps every key.
   history.visit('a')
-  assert.deepEqual(history.snapshot.keys, ['a'])
+  assert.deepEqual(history.snapshot.keys, ['a', 'b', 'c'])
+  assert.equal(history.position, 0)
 })
 
 test('walks a real session+tab key stream the way X1/X2 must', () => {
@@ -570,4 +574,99 @@ test('reports from several page halves do not overwrite each other', async () =>
   const again = JSON.parse((await call(route, 'GET', 'status')).body)
   assert.equal(again.instance, 'instance-a')
   assert.equal(again.visits, 60)
+})
+
+test('one physical side-button press must step exactly once', () => {
+  // `auxclick` and `mouseup` BOTH fire for the same non-primary click. Listening
+  // to both ran step() twice per press. Back looked fine (two steps back are still
+  // "back") but forward moved once and then found the stack already at its end, so
+  // a single X2 appeared to do nothing. Whatever arrives first must win.
+  const history = new NavHistory()
+  for (const key of ['a', 'b', 'c']) history.visit(key)
+  assert.equal(history.position, 2)
+
+  let handled = false
+  let steps = 0
+  const press = () => {
+    if (handled) return
+    handled = true
+    steps++
+    history.back()
+  }
+  press()   // auxclick
+  press()   // mouseup, same physical click
+  assert.equal(steps, 1, 'only one step per press')
+  assert.equal(history.position, 1, 'moved exactly one entry')
+})
+
+test('visiting a place that is already ahead must not truncate the stack', () => {
+  // Observed in the field: the stack collapsed from four entries to one, after
+  // which "forward" had nowhere to go and the user reported that forward was
+  // broken while back appeared to work.
+  //
+  // The cause was `visit(key)` truncating whenever the key already existed. But
+  // arriving at an entry that is ALREADY AHEAD of the cursor is navigation along
+  // the existing history, not a new branch — cutting the tail there deletes the
+  // entries a subsequent forward step needs.
+  const history = new NavHistory()
+  for (const key of ['a', 'b', 'c', 'd']) history.visit(key)
+  assert.equal(history.position, 3)
+
+  history.back()
+  history.back()
+  assert.equal(history.position, 1, 'cursor is on b, c/d are ahead')
+
+  // Something observes the place we are already on: no change, no truncation.
+  assert.equal(history.visit('b'), false)
+  assert.equal(history.snapshot.size, 4)
+
+  // Moving FORWARD onto c is navigation, not a detour: c and d must survive.
+  assert.equal(history.visit('c'), true)
+  assert.equal(history.position, 2)
+  assert.equal(history.snapshot.size, 4, 'the tail survived')
+  assert.equal(history.snapshot.canGoForward, true, 'forward is still possible')
+
+  // A genuine detour — going back and then somewhere NEW — does drop the tail.
+  history.back()
+  history.visit('x')
+  assert.deepEqual(history.snapshot.keys, ['a', 'b', 'x'])
+})
+
+test('a restore must ignore every observation until its target arrives', () => {
+  // The observers fire BEFORE the new selection commits, so during a restore they
+  // report the place being LEFT. Filtering only on "is this the restored value"
+  // let those stale observations through: each one ran visit(oldPlace), which sat
+  // earlier in the stack and truncated the forward branch. In the field the stack
+  // collapsed 4 -> 1 and then even back had nowhere to go.
+  //
+  // The guard is therefore "ignore everything while restoring", and the target
+  // observation is itself the completion signal.
+  const history = new NavHistory()
+  for (const key of ['a', 'b', 'c', 'd']) history.visit(key)
+  assert.equal(history.position, 3)
+
+  let restoring = null
+  const observe = (key) => {
+    if (restoring !== null) {
+      if (key === restoring) restoring = null
+      return false          // ignored
+    }
+    return history.visit(key)
+  }
+
+  // Press X1: the plugin starts restoring 'c'.
+  const entry = history.back()          // cursor -> 2 ('c')
+  assert.equal(entry.key, 'c')
+  restoring = entry.key
+
+  // Two stale observations of places we are passing through or leaving.
+  assert.equal(observe('a'), false, 'old place a ignored')
+  assert.equal(observe('b'), false, 'old place b ignored')
+  assert.equal(history.snapshot.size, 4, 'nothing was truncated')
+
+  // The target finally arrives: guard clears, no truncation, forward survives.
+  assert.equal(observe('c'), false, 'target observation clears the guard only')
+  assert.equal(restoring, null)
+  assert.equal(history.position, 2)
+  assert.equal(history.snapshot.canGoForward, true, 'd is still reachable')
 })

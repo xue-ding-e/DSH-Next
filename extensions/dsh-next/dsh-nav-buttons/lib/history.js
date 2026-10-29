@@ -69,6 +69,14 @@ export class NavHistory {
 
   /**
    * Record a visit.
+   *
+   * The forward branch is dropped only when the user moves to a place that is NOT
+   * already ahead of the cursor. Moving forward onto an entry that is already
+   * there is navigation along the existing history, not a new branch — truncating
+   * it would delete the very entries a later "forward" step needs. That bug showed
+   * up in practice: a heartbeat observed a place that sat earlier in the stack,
+   * `visit` jumped the cursor back and cut everything after it, and the stack
+   * collapsed from four entries to one, so forward then had nowhere to go.
    * @param key - stable identity of the place now shown.
    * @returns true when the history changed.
    */
@@ -77,9 +85,14 @@ export class NavHistory {
     if (this.#entries[this.#index]?.key === key) return false
     const existing = this.#entries.findIndex(entry => entry.key === key)
     if (existing >= 0) {
-      // Revisiting a place drops whatever forward branch it replaced.
+      // Moving to a place that is ALREADY in the stack never truncates.
+      //
+      // The stack holds sessions/panels/tabs, and jumping between them is exactly
+      // what this feature is for. Treating "went back to an earlier entry" as a
+      // new branch deleted the entries after it — measured as `visit idx 8->3
+      // size 9->4` — so the forward branch vanished mid-session and forward
+      // appeared to work only sometimes. Only a genuinely NEW place truncates.
       this.#index = existing
-      this.#entries = this.#entries.slice(0, existing + 1)
       return true
     }
     this.#entries = this.#entries.slice(0, this.#index + 1)
