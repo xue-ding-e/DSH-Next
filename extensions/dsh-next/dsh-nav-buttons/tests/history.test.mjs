@@ -326,3 +326,32 @@ test('snapshot.keys exposes the entries, so a stuck cursor is diagnosable', () =
   history.visit('a')
   assert.deepEqual(history.snapshot.keys, ['a'])
 })
+
+test('walks a real session+tab key stream the way X1/X2 must', () => {
+  // Mirrors the exact key format the page half builds (session, panel, tab joined
+  // by U+0001) with the tab axis active and the panel axis empty — the shape this
+  // workspace actually reports. Proves the navigation logic is sound on its own,
+  // independent of whether the running page has the latest code.
+  const SESSION = 'session-1717371d-adf4-4c37-8d02-0d61ee5e23ac'
+  const key = tab => `${SESSION}\u0001\u0001${tab}`
+  const tabOf = entry => entry.key.split('\u0001').pop()
+
+  const history = new NavHistory()
+  history.visit(key('tab5'))
+  history.visit(key('tab7'))
+  assert.equal(history.position, 1, 'two places, cursor at the newest')
+
+  // X1
+  assert.equal(tabOf(history.back()), 'tab5')
+  assert.equal(history.position, 0)
+  assert.equal(history.snapshot.canGoBack, false, 'at the oldest end')
+
+  // X2
+  assert.equal(tabOf(history.forward()), 'tab7')
+  assert.equal(history.position, 1)
+
+  // Walking back past the start yields nothing rather than wrapping or throwing.
+  assert.equal(tabOf(history.back()), 'tab5')
+  assert.equal(history.back(), undefined)
+  assert.equal(history.position, 0)
+})
