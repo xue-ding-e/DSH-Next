@@ -11,7 +11,7 @@
  * session and workspace hover cards are suppressed while a menu is open.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { RefObject } from 'react'
+import type { Dispatch, RefObject, SetStateAction } from 'react'
 import clsx from 'clsx'
 import type { PropsRenderSlots } from '@deepseek-ai/dsh-client-ui-slots'
 import {
@@ -37,7 +37,7 @@ type RowMenuAnchor =
 /** Keep the open state and its anchor together; action entries retain their boolean close API. */
 function useRowMenu() {
   const [anchor, setAnchor] = useState<RowMenuAnchor | null>(null)
-  const setMenuOpen = useCallback<MenuOpenState[1]>((next) => {
+  const setMenuOpen = useCallback<Dispatch<SetStateAction<boolean>>>((next) => {
     setAnchor(current => {
       const open = typeof next === 'function' ? next(current !== null) : next
       return open ? current ?? { kind: 'trigger' } : null
