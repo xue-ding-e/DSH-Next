@@ -92,6 +92,23 @@ try {
     Require ((UserPath) -eq ($desktop + ';' + $invalidPath)) 'a notification failure changed the committed PATH'
     [void](Apply 'remove' $desktop)
     Require ((UserPath) -eq $invalidPath) 'removal changed invalid user PATH entries'
+    $next = Join-Path $Root 'Next Desktop'
+    New-Item -ItemType Directory -Force $next | Out-Null
+    [IO.File]::WriteAllText((Join-Path $next 'dsh-next.cmd'), 'next fixture')
+    $nextOptions = @{ EnvironmentKey=$environmentKey; OwnerKey=($keyRoot + '\NextOwner'); MachinePath=''; MutexName=$options.MutexName }
+    [void](Apply 'install' $desktop)
+    $officialPath = UserPath
+    $nextState = Invoke-DshCommandPath @nextOptions -Request @{ operation='inspect'; directory=$next; commandName='dsh-next' }
+    Require (-not $nextState.managed) 'Next adopted official ownership'
+    [void](Invoke-DshCommandPath @nextOptions -Request @{ operation='install'; directory=$next; commandName='dsh-next'; expected=$nextState.fingerprint })
+    $nextState = Invoke-DshCommandPath @nextOptions -Request @{ operation='inspect'; directory=$next; commandName='dsh-next' }
+    Require ($nextState.managed -and $nextState.available) 'Next command was not registered'
+    Require ($nextState.activeCommand -eq (Join-Path $nextState.directory 'dsh-next.cmd')) 'Next command lookup selected the official command'
+    Require ((State $desktop).managed) 'Next replaced official ownership'
+    [void](Invoke-DshCommandPath @nextOptions -Request @{ operation='remove'; directory=$next; commandName='dsh-next'; expected=$nextState.fingerprint })
+    Require ((UserPath) -eq $officialPath) 'Next removal changed the official PATH entry'
+    Require ((State $desktop).managed) 'Next removal deleted official ownership'
+    Require ([IO.File]::ReadAllText((Join-Path $desktop 'dsh.cmd')) -eq 'fixture') 'Next changed the official launcher'
     'WINDOWS_COMMAND_PATH_OK'
 } finally {
     [Microsoft.Win32.Registry]::CurrentUser.DeleteSubKeyTree($keyRoot, $false)

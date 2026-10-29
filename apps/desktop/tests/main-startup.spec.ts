@@ -10,8 +10,10 @@ import { DESKTOP_IPC, type DesktopUpdateState } from '../src/ipc.ts'
 import { MANDATORY_IPC } from '../src/mandatory-update-ipc.ts'
 import { DesktopHostFatalError, DesktopHostUncleanExitError } from '../src/host-process.ts'
 import { en, zh } from '../src/locale.ts'
+import { NEXT_DESKTOP_IDENTITY } from '../src/next-distribution.ts'
 import { DesktopUpdatePreparationError } from '../src/update-error.ts'
 import { writeCrashReport } from '../src/crash-report.ts'
+import type { readDesktopLoginShellEnvironment } from '../src/login-shell-environment.ts'
 
 type InvokeEvent = { sender?: unknown; senderFrame: { url: string } }
 type InvokeHandler = (event: InvokeEvent, ...args: unknown[]) => unknown
@@ -51,6 +53,7 @@ const harness = await vi.hoisted(async () => {
   let dialogShown = deferred()
   let quitCompleted = deferred()
   let policyBlocked = deferred()
+  let packagedMetadata: Record<string, unknown> = {}
   let embeddedPolicy: unknown
   let closeWindowsOnQuit = false
   let updateState: DesktopUpdateState = { phase: 'idle' }
@@ -63,7 +66,7 @@ const harness = await vi.hoisted(async () => {
   const readLoginShell = async (base: NodeJS.ProcessEnv) => ({
     environment: { ...base, DSH_TEST_LOGIN_SHELL: 'login' }, failures: [{ shell: '/account/shell', reason: 'timeout' }],
   })
-  const loginShell = vi.fn((base: NodeJS.ProcessEnv, _config: unknown, _options: { signal?: AbortSignal }) => readLoginShell(base))
+  const loginShell = vi.fn<typeof readDesktopLoginShellEnvironment>(base => readLoginShell(base))
   const updateCheck = vi.fn(async (_manual?: boolean): Promise<DesktopUpdateState> => updateState)
   const updateDownload = vi.fn(async (_version: string): Promise<DesktopUpdateState> => updateState)
   const updateInstall = vi.fn(async (_version: string): Promise<DesktopUpdateState> => updateState)
@@ -243,6 +246,8 @@ const harness = await vi.hoisted(async () => {
     get hostStarted() { return hostStarted }, get navigated() { return navigated },
     get dialogShown() { return dialogShown }, get quitCompleted() { return quitCompleted },
     get policyBlocked() { return policyBlocked },
+    get packagedMetadata() { return packagedMetadata },
+    set packagedMetadata(value: Record<string, unknown>) { packagedMetadata = value },
     get embeddedPolicy() { return embeddedPolicy },
     set embeddedPolicy(value: unknown) { embeddedPolicy = value },
     nextNavigation() { navigated = deferred(); return navigated.promise },
@@ -276,6 +281,7 @@ const harness = await vi.hoisted(async () => {
       navigated = deferred(); dialogShown = deferred(); quitCompleted = deferred()
       policyBlocked = deferred()
       embeddedPolicy = undefined
+      packagedMetadata = {}
       fileDrag.install.mockReset()
       fileDrag.dispose.mockReset().mockResolvedValue(undefined)
       platformDisposeDeferred = undefined
@@ -327,7 +333,7 @@ vi.mock('node:fs/promises', async (importOriginal) => {
   const original = await importOriginal<typeof import('node:fs/promises')>()
   return { ...original, readFile: vi.fn((path: Parameters<typeof original.readFile>[0], encoding?: 'utf8') => {
     if (path === join('desktop-test-app', 'package.json')) {
-      return Promise.resolve(JSON.stringify({ dshDesktopAppId: 'com.deepseek.dsh', dshMandatoryUpdatePolicy: harness.embeddedPolicy }))
+      return Promise.resolve(JSON.stringify({ dshDesktopAppId: 'com.deepseek.dsh', dshMandatoryUpdatePolicy: harness.embeddedPolicy, ...harness.packagedMetadata }))
     }
     return encoding === undefined ? original.readFile(path) : original.readFile(path, encoding)
   }) }
@@ -1207,6 +1213,78 @@ describe('desktop main startup', () => {
     await harness.navigated.promise
     return harness.hosts[0]!
   }
+
+
+  function configureNext() {
+    harness.packagedMetadata = { productName: NEXT_DESKTOP_IDENTITY.productName, name: NEXT_DESKTOP_IDENTITY.packageName, dshDesktopAppId: NEXT_DESKTOP_IDENTITY.appId,
+      dshDesktopUpdateChannel: 'latest', dshNext: { schemaVersion: 1, repository: NEXT_DESKTOP_IDENTITY.repository,
+        repositoryId: NEXT_DESKTOP_IDENTITY.repositoryId, updateMode: 'manual' } }
+    vi.stubEnv('DSH_NEXT_HOME', join(harness.app.getPath('userData'), 'next-home'))
+    vi.stubEnv('DSH_HOME', undefined)
+    vi.stubEnv('DSH_NEXT_ACTIVE_HOME', undefined)
+    vi.stubEnv('DSH_NEXT_UPSTREAM_HOME', undefined)
+  }
+
+  function nextReleaseResponse() {
+    const root = `https://github.com/${NEXT_DESKTOP_IDENTITY.repository}`
+    const tag = 'next-v1.0.1', file = 'dsh-next-1.0.1-win-x64-unsigned.exe'
+    return Response.json([{ draft: false, prerelease: false, tag_name: tag, html_url: `${root}/releases/tag/${tag}`,
+      assets: [{ name: file, state: 'uploaded', size: 123, browser_download_url: `${root}/releases/download/${tag}/${file}` }] }])
+  }
+
+  it('reconstructs Next renderer status from its own coordinator and opens only its manual release prompt', async () => {
+    configureNext()
+    const request = vi.fn<typeof fetch>().mockImplementation(async url => String(url).includes('/releases?')
+      ? nextReleaseResponse() : Response.json({ id: NEXT_DESKTOP_IDENTITY.repositoryId,
+        full_name: NEXT_DESKTOP_IDENTITY.repository, private: false }))
+    vi.stubGlobal('fetch', request)
+    harness.loginShell.mockImplementation(async base => ({ environment: { ...base, DSH_HOME: '/synthetic-official-shell-home' }, failures: [] }))
+    const host = await readyForUpdate()
+    expect(host.environment?.DSH_HOME).toBe(join(harness.app.getPath('userData'), 'next-home'))
+    await vi.waitFor(() => { expect(invoke(DESKTOP_IPC.updatesStatus, 'app')).toMatchObject({ phase: 'available', version: '1.0.1' }) })
+    const calls = request.mock.calls.length
+    harness.dialog.showMessageBox.mockResolvedValue({ response: 0 })
+    await invoke(DESKTOP_IPC.updatesOpen, 'app')
+    expect(request).toHaveBeenCalledTimes(calls)
+    expect(harness.openExternal).toHaveBeenCalledExactlyOnceWith(`https://github.com/${NEXT_DESKTOP_IDENTITY.repository}/releases/tag/next-v1.0.1`)
+    expect(harness.dialog.showMessageBox).toHaveBeenLastCalledWith(expect.objectContaining({ detail: expect.stringContaining(en.nextUpdateManualDetail) }))
+    expect(harness.updateCheck).not.toHaveBeenCalled()
+    expect(harness.updateDownload).not.toHaveBeenCalled()
+    expect(harness.updateInstall).not.toHaveBeenCalled()
+  })
+
+  it('reopens a dismissed Next check using the same lookup without late or duplicate dialogs', async () => {
+    configureNext()
+    const response = Promise.withResolvers<Response>()
+    const request = vi.fn<typeof fetch>().mockImplementation(async url => String(url).includes('/releases?')
+      ? response.promise : Response.json({ id: NEXT_DESKTOP_IDENTITY.repositoryId,
+        full_name: NEXT_DESKTOP_IDENTITY.repository, private: false }))
+    vi.stubGlobal('fetch', request)
+    await readyForUpdate()
+    harness.dialog.showMessageBox.mockResolvedValue({ response: 0 })
+    const prompt = Promise.resolve(invoke(DESKTOP_IPC.updatesOpen, 'app'))
+    await vi.waitFor(() => { expect(harness.dialog.showMessageBox).toHaveBeenCalledWith(expect.objectContaining({ message: en.updateChecking })) })
+    // The old UI must finish before the request does; otherwise a second click silently joins it.
+    await prompt
+    expect(harness.dialog.showMessageBox).toHaveBeenCalledTimes(1)
+    expect(harness.openExternal).not.toHaveBeenCalled()
+    const calls = request.mock.calls.length
+    let newSignal: AbortSignal | undefined
+    harness.dialog.showMessageBox.mockImplementationOnce(({ signal }: { signal: AbortSignal }) => {
+      newSignal = signal
+      return new Promise(resolve => { signal.addEventListener('abort', () => { resolve({ response: 0 }) }, { once: true }) })
+    }).mockResolvedValueOnce({ response: 0 })
+    const reopened = Promise.resolve(invoke(DESKTOP_IPC.updatesOpen, 'app'))
+    await vi.waitFor(() => { expect(harness.dialog.showMessageBox).toHaveBeenCalledTimes(2) })
+    expect(newSignal?.aborted).toBe(false)
+    expect(request).toHaveBeenCalledTimes(calls)
+    response.resolve(nextReleaseResponse())
+    await reopened
+    expect(harness.dialog.showMessageBox).toHaveBeenCalledTimes(3)
+    expect(harness.openExternal).toHaveBeenCalledExactlyOnceWith(`https://github.com/${NEXT_DESKTOP_IDENTITY.repository}/releases/tag/next-v1.0.1`)
+    expect(newSignal?.aborted).toBe(true)
+    expect(invoke(DESKTOP_IPC.updatesStatus, 'app')).toMatchObject({ phase: 'available', version: '1.0.1' })
+  })
 
   it.each([
     ['win32', ['--updated'], true],
@@ -2367,7 +2445,7 @@ describe('desktop main startup', () => {
     expect(harness.hosts[0]!.environment?.DSH_TEST_LOGIN_SHELL).toBe('login')
     harness.hosts[0]!.ready.resolve()
     await Promise.all([boot, harness.navigated.promise])
-    const { signal } = harness.loginShell.mock.calls[0]![2]
+    const signal = harness.loginShell.mock.calls[0]![2]?.signal
     expect(signal?.aborted).toBe(false)
     harness.app.emit('will-quit')
     expect(signal?.aborted).toBe(true)

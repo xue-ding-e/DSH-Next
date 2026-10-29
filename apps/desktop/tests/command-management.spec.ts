@@ -2,7 +2,7 @@
 
 import { expect, it } from 'vitest'
 import { en, zh } from '../src/locale.ts'
-import { presentCommandManagement } from '../src/command-management.ts'
+import { commandMessages, presentCommandManagement } from '../src/command-management.ts'
 
 it.each([en, zh])('shows installation, repair/removal and shadowed command locations', (messages) => {
   const destination = '/usr/local/bin/dsh'
@@ -36,4 +36,14 @@ it.each([
   await expect(JSON.stringify({
     dialogs: states.map(state => presentCommandManagement(state, messages, platform)),
   }, null, 2) + '\n').toMatchFileSnapshot(`./expected/command-management-${platform}-${language}.json`)
+})
+
+it.each([['en-US', en], ['zh-CN', zh]] as const)('uses the separate Next command in locale-owned labels in %s', async (language, messages) => {
+  expect(commandMessages(messages)).toBe(messages)
+  const next = commandMessages(messages, 'next')
+  const command = Object.fromEntries(Object.entries(next).filter(([key]) => key.startsWith('cliCommand')))
+  await expect(JSON.stringify(command, null, 2) + '\n').toMatchFileSnapshot(`./expected/command-next-${language}.json`)
+  for (const key of Object.keys(messages) as Array<keyof typeof messages>) {
+    if (!key.startsWith('cliCommand')) expect(next[key]).toBe(messages[key])
+  }
 })

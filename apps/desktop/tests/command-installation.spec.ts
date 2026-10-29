@@ -52,6 +52,23 @@ describe.skipIf(process.platform === 'win32')('macOS command entry ownership', (
     if (process.platform === 'darwin') prepareCommandLink(compiled, process.arch === 'arm64' ? 'arm64' : 'x64', '13.0')
   })
   afterAll(async () => { if (compiled !== undefined) await rm(compiled, { recursive: true, force: true }) })
+  it('keeps Next links, receipts and backups separate from the official command', async () => {
+    const f = await fixture()
+    const official = await installFileCommand(f.options, (await inspectFileCommand(f.options)).fingerprint)
+    const receipt = join(f.root, '.dsh-desktop-command.json')
+    const before = await readFile(receipt, 'utf8')
+    const next = { ...f.options, distribution: 'next' as const, destination: join(f.root, 'dsh-next') }
+    await writeFile(next.destination, 'previous next command\n', { mode: 0o755 })
+    const installed = await installFileCommand(next, (await inspectFileCommand(next)).fingerprint)
+    expect(installed.backup).toContain('.dsh-next-command-backup-')
+    expect(await readFile(join(f.root, '.dsh-next-desktop-command.json'), 'utf8')).toContain(f.options.launcher)
+    expect(await readFile(receipt, 'utf8')).toBe(before)
+    await removeFileCommand(next, installed.fingerprint)
+    expect(await readFile(next.destination, 'utf8')).toBe('previous next command\n')
+    expect(await inspectFileCommand(f.options)).toEqual(official)
+    expect(await readFile(receipt, 'utf8')).toBe(before)
+  })
+
   it('installs and removes only its own link', async () => {
     const f = await fixture()
     const before = await inspectFileCommand(f.options)

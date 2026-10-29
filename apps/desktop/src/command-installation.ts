@@ -7,12 +7,15 @@ import { access, link, lstat, mkdir, readFile, readlink, rename, stat, symlink, 
 import { basename, dirname, isAbsolute, join } from 'node:path'
 import { promisify } from 'node:util'
 import { withFileLock, writeFileAtomic } from '@deepseek-ai/dsh-atomic-write'
+import { desktopCommandIdentity, type DesktopCommandDistribution } from './command-identity.ts'
 
 /** Fixed installation locations supplied by the Desktop shell. */
 export interface FileCommandInstallation {
   readonly destination: string
   readonly launcher: string
   readonly linkHelper: string
+  /** Omission retains the official receipt; Next never reads or replaces it. */
+  readonly distribution?: DesktopCommandDistribution
 }
 
 type Entry = { readonly kind: 'symlink'; readonly fingerprint: string; readonly target: string }
@@ -53,7 +56,7 @@ function digest(value: unknown): string {
 }
 
 function receiptPath(options: FileCommandInstallation): string {
-  return join(dirname(options.destination), '.dsh-desktop-command.json')
+  return join(dirname(options.destination), desktopCommandIdentity(options.distribution).receiptName)
 }
 
 async function readEntry(path: string): Promise<Entry> {
@@ -96,7 +99,8 @@ async function readReceipt(options: FileCommandInstallation): Promise<Receipt | 
   if (record.backup !== undefined) {
     if (typeof record.backup !== 'object' || record.backup === null) throw new CommandInstallationError('EOWNERSHIP', 'Invalid command backup record.')
     const candidate = record.backup as Record<string, unknown>
-    if (typeof candidate.name !== 'string' || !/^\.dsh-command-backup-[a-f0-9-]{36}$/u.test(candidate.name)
+    if (typeof candidate.name !== 'string' || !candidate.name.startsWith(desktopCommandIdentity(options.distribution).backupPrefix)
+      || !/^[a-f0-9-]{36}$/u.test(candidate.name.slice(desktopCommandIdentity(options.distribution).backupPrefix.length))
       || typeof candidate.fingerprint !== 'string' || !/^[a-f0-9]{64}$/u.test(candidate.fingerprint)) {
       throw new CommandInstallationError('EOWNERSHIP', 'Invalid command backup record.')
     }
@@ -165,7 +169,7 @@ async function linkEntry(options: FileCommandInstallation, source: string, desti
 async function withdraw(options: FileCommandInstallation, destination: string, expected: Entry): Promise<string | undefined> {
   if (expected.kind === 'missing') return undefined
   if (expected.kind === 'unsupported') throw new CommandInstallationError('EUNSUPPORTED', 'The command path is not a file or symbolic link.')
-  const path = join(dirname(destination), '.dsh-command-backup-' + randomUUID())
+  const path = join(dirname(destination), desktopCommandIdentity(options.distribution).backupPrefix + randomUUID())
   await rename(destination, path)
   if ((await readEntry(path)).fingerprint !== expected.fingerprint) {
     try { await restoreEntry(options, path, destination) } catch (error) {
@@ -189,7 +193,7 @@ export async function installFileCommand(options: FileCommandInstallation, expec
     if (state.fingerprint !== expected) throw new CommandInstallationError('ESTALE', 'The command changed after confirmation.')
     if (!await available(options.launcher)) throw new CommandInstallationError('ENOENT', 'The installed launcher is unavailable.')
     const moved = await withdraw(options, options.destination, entry)
-    const pending = join(dirname(options.destination), '.dsh-command-new-' + randomUUID())
+    const pending = join(dirname(options.destination), desktopCommandIdentity(options.distribution).pendingPrefix + randomUUID())
     let created: Entry | undefined
     try {
       await symlink(options.launcher, pending)
