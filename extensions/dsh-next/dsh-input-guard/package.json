@@ -29,7 +29,9 @@
     "client": {
       "platform": "web",
       "immediately": false,
-      "inject": []
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-layout"
+      ]
     },
     "engines": {
       "dsh": ">=0.2.0-rc.1"

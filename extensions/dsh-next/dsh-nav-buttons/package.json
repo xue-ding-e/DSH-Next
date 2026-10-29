@@ -29,7 +29,12 @@
     "client": {
       "platform": "web",
       "immediately": false,
-      "inject": []
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-layout",
+        "@deepseek-ai/dsh-client-ui-session",
+        "@deepseek-ai/dsh-client-ui-sidebar-right",
+        "@deepseek-ai/dsh-api-workspace-controller"
+      ]
     },
     "engines": {
       "dsh": ">=0.2.0-rc.1"
