@@ -123,6 +123,28 @@ class NavHistory {
   }
 }
 
+/**
+ * Whether a keyboard event asks for a history step. KEEP IN SYNC with
+ * lib/history.js — see the note on NavHistory.snapshot for why this is duplicated.
+ * @param event - object with `key`, `altKey`, `ctrlKey`, `shiftKey`, `metaKey`.
+ * @param mac - whether the platform uses the Meta/bracket bindings.
+ * @returns 'back', 'forward', or undefined.
+ */
+function historyShortcut(event, mac) {
+  if (event === null || typeof event !== 'object') return undefined
+  const modifier = mac === true ? event.metaKey === true : event.altKey === true
+  if (!modifier) return undefined
+  if (event.ctrlKey === true || event.shiftKey === true) return undefined
+  if (mac === true && event.metaKey === true && event.altKey === true) return undefined
+  switch (event.key) {
+    case 'ArrowLeft': return 'back'
+    case 'ArrowRight': return 'forward'
+    default: return mac === true && event.key === '[' ? 'back'
+      : mac === true && event.key === ']' ? 'forward'
+        : undefined
+  }
+}
+
 /** @param button - `MouseEvent.button`. @returns 'back', 'forward', or undefined. */
 function sideButton(button) {
   if (button === 3) return 'back'
@@ -460,12 +482,40 @@ function install(ctx) {
     step(direction)
   }
 
+  /**
+   * Alt+Left / Alt+Right as a keyboard equivalent of X1/X2.
+   *
+   * The package description promised this from the start and the code never had
+   * it, so the shortcut silently did nothing. Alt+Arrow is the conventional
+   * back/forward binding on Windows and Linux, while Cmd+[ / Cmd+] is the macOS
+   * one; both are matched here because the same bundle ships everywhere.
+   * @param event - KeyboardEvent.
+   */
+  const onKeyDown = (event) => {
+    if (event.defaultPrevented) return
+    if (ownsOwnHistory(event.target)) return
+    const mac = typeof navigator === 'object' && /Mac|iPhone|iPad/.test(navigator.platform ?? '')
+    const direction = historyShortcut(event, mac)
+    if (direction === undefined) return
+    // Never steal the key from a text field, and never act twice for one press.
+    const target = event.target
+    if (typeof target === 'object' && target !== null) {
+      const tag = typeof target.tagName === 'string' ? target.tagName.toLowerCase() : ''
+      if (tag === 'input' || tag === 'textarea' || tag === 'select') return
+      if (target.isContentEditable === true) return
+    }
+    event.preventDefault()
+    event.stopPropagation()
+    step(direction)
+  }
+
   ctx.effect(() => {
     // `auxclick` is the modern "non-primary button released" event and fires for
     // buttons 3/4 in Chromium; `mouseup` covers older embeddings that suppress it.
     const target = window
     target.addEventListener('auxclick', onPointer, true)
     target.addEventListener('mouseup', onPointer, true)
+    target.addEventListener('keydown', onKeyDown, true)
     // Chromium maps X1/X2 to browser back/forward on some platforms; suppress it
     // so the app decides instead of the embedder navigating away.
     const suppress = (event) => {
@@ -475,6 +525,7 @@ function install(ctx) {
     return () => {
       target.removeEventListener('auxclick', onPointer, true)
       target.removeEventListener('mouseup', onPointer, true)
+      target.removeEventListener('keydown', onKeyDown, true)
       target.removeEventListener('mousedown', suppress, true)
     }
   }, 'dsh-nav-buttons: pointer')

@@ -140,6 +140,33 @@ export class NavHistory {
 }
 
 /**
+ * Whether a keyboard event asks for a history step, independent of any DOM.
+ *
+ * Alt+Arrow is the Windows/Linux back/forward binding; on macOS the same two
+ * directions are Cmd+[ and Cmd+]. The package promised Alt+Arrow from the start
+ * and the code never implemented it, so the shortcut silently did nothing —
+ * keeping the decision pure makes that promise testable.
+ * @param event - object with `key`, `altKey`, `ctrlKey`, `shiftKey`, `metaKey`.
+ * @param mac - whether the platform uses the Meta/bracket bindings.
+ * @returns 'back', 'forward', or undefined.
+ */
+export function historyShortcut(event, mac) {
+  if (event === null || typeof event !== 'object') return undefined
+  const modifier = mac === true ? event.metaKey === true : event.altKey === true
+  if (!modifier) return undefined
+  // Alt+Ctrl and Alt+Shift are other applications' shortcuts; leave them alone.
+  if (event.ctrlKey === true || event.shiftKey === true) return undefined
+  if (mac === true && event.metaKey === true && event.altKey === true) return undefined
+  switch (event.key) {
+    case 'ArrowLeft': return 'back'
+    case 'ArrowRight': return 'forward'
+    default: return mac === true && event.key === '[' ? 'back'
+      : mac === true && event.key === ']' ? 'forward'
+        : undefined
+  }
+}
+
+/**
  * Whether a DOM `MouseEvent.button` names a browser back/forward side button.
  *
  * Chromium reports the two thumb buttons as `3` (back) and `4` (forward) on every

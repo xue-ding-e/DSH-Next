@@ -509,3 +509,24 @@ test('the two NavHistory copies expose the same members', () => {
   assert.deepEqual(onlyTest, [], 'members only in the copy the tests exercise')
   assert.ok(pageCopy.size > 10, `sanity: found ${pageCopy.size} members`)
 })
+
+test('every module-level history helper exists in both copies', () => {
+  // The page bundle cannot import, so the helpers beside NavHistory are duplicated
+  // too. The class-member comparison above does not see them: it only walks the
+  // class body. `historyShortcut` was added for Alt+Arrow and would have been
+  // silently missing from the page copy without this check.
+  const clientSource = readFileSync(new URL('../lib/client.js', import.meta.url), 'utf8')
+  const namesOf = (source) => new Set(
+    [...source.matchAll(/^(?:export )?function ([A-Za-z][A-Za-z0-9_]*)/gm)].map(m => m[1]),
+  )
+  const pageCopy = namesOf(clientSource)
+  const moduleCopy = namesOf(readFileSync(new URL('../lib/history.js', import.meta.url), 'utf8'))
+
+  const onlyModule = [...moduleCopy].filter(name => !pageCopy.has(name))
+  assert.deepEqual(onlyModule, [], 'helpers exported by history.js but missing from client.js')
+
+  // The three that must exist on both sides for the feature to work at all.
+  for (const required of ['historyShortcut', 'sideButton', 'ownsOwnHistory']) {
+    assert.ok(pageCopy.has(required), `client.js is missing ${required}`)
+  }
+})
