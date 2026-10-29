@@ -444,9 +444,15 @@ function install(ctx) {
   // on every event made the Host believe the page had just loaded whenever the
   // mouse moved, which hid genuinely stale pages.
   const activatedAt = Date.now()
+  // Bumped whenever the reported shape changes. `set_plugin` reloads the host half
+  // but does NOT re-execute a page that is already loaded, so the two halves can
+  // legitimately disagree about the payload. Comparing this against the host's
+  // expectation turns "the new field is mysteriously missing" into one glance.
+  const SHAPE = 2
   const live = () => {
     const snapshot = history.snapshot
     report({
+      shape: SHAPE,
       loadedAt: activatedAt,
       visits, backs, forwards,
       entries: snapshot.size,
@@ -463,6 +469,10 @@ function install(ctx) {
       lastEvent,
       fired,
       lastParts,
+      // The stack itself, not the observation log. `entries: 2, index: 0` cannot
+      // say whether that is two distinct places or one place recorded twice, and
+      // only the contents answer whether a back/forward step has anywhere to go.
+      stack: snapshot.keys.map(key => key.slice(0, 60)),
       lastKeys,
       current: snapshot.current === undefined ? null : snapshot.current.key,
     })
@@ -471,37 +481,42 @@ function install(ctx) {
   // Re-report on activity so the Host sees progress.
   for (const event of ['auxclick', 'mouseup']) window.addEventListener(event, live, true)
 
-  // Also report on a slow timer. Event-only reporting meant that reloading the
-  // Host plugin (which clears its module state) left the route saying "never
-  // reported" until the user happened to move the mouse — indistinguishable from
-  // a dead page half. A 20 s heartbeat keeps the answer truthful without noise.
-  ctx.effect(() => {
-    const timer = setInterval(live, 20_000)
-    return () => { clearInterval(timer) }
-  }, 'dsh-nav-buttons: heartbeat')
-
-  // Drain the diagnostics command mailbox. This is how the navigation logic gets
-  // exercised without synthesizing real mouse or keyboard input — the operator
-  // asks for `back`/`forward` over HTTP and reads the resulting counters.
-  // Deliberately not a user-facing feature: nothing routes to it but the route.
+  // One timer, two jobs: report the current state, and drain the diagnostics
+  // command mailbox that lets the navigation path be exercised without
+  // synthesizing real mouse or keyboard input.
+  //
+  // These were two timers and both were unreliable, for the reason a 750 ms
+  // sampler was abandoned earlier: Chromium throttles timers in a backgrounded
+  // document, and this one is backgrounded whenever the operator is reading the
+  // terminal instead of the app. Measured a 1 s drain being consumed only every
+  // 16–24 s. One timer halves the loss and keeps the code honest about it; while
+  // the window is actually in front, these run at full rate.
+  //
+  // Chained rather than overlapped: a fetch that outlives its interval must not
+  // start stacking requests.
   ctx.effect(() => {
     let stopped = false
-    const drain = async () => {
+    let timer
+    const tick = async () => {
       try {
         const response = await fetch('/tool-nav-buttons/command', { cache: 'no-store' })
-        if (!response.ok) return
-        const body = await response.json()
-        if (stopped || typeof body?.command !== 'string') return
-        if (body.command === 'back') step('back')
-        else if (body.command === 'forward') step('forward')
-        live()
+        if (response.ok && !stopped) {
+          const body = await response.json()
+          if (typeof body?.command === 'string') {
+            if (body.command === 'back') step('back')
+            else if (body.command === 'forward') step('forward')
+          }
+        }
       } catch {
         // The route is absent in a profile without the host half; harmless.
       }
+      if (stopped) return
+      live()
+      timer = setTimeout(tick, 2000)
     }
-    const timer = setInterval(drain, 1000)
-    return () => { stopped = true; clearInterval(timer) }
-  }, 'dsh-nav-buttons: command drain')
+    void tick()
+    return () => { stopped = true; clearTimeout(timer) }
+  }, 'dsh-nav-buttons: heartbeat and command drain')
 }
 
 return { inject: ['sidebarRight'], apply }

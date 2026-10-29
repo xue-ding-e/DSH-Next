@@ -54,6 +54,12 @@ export function apply(ctx) {
         // "never reported" alone is misleading: after THIS host half reloads its
         // module state is empty, so a perfectly healthy page looks identical to
         // a page that never loaded until it next reports. Say which one it is.
+        //
+        // A reload of the host half does NOT re-execute an already-loaded page, so
+        // the two halves can legitimately disagree about the payload shape. An
+        // older page half reports shape 1 (no stack contents); saying so explains
+        // a missing field without anyone guessing.
+        const EXPECTED_SHAPE = 2
         const body = JSON.stringify(report === undefined
           ? {
             pageHalf: 'awaiting first report',
@@ -61,7 +67,12 @@ export function apply(ctx) {
             note: 'No report since this host half started. Reload the page, then wait up to 20s '
               + '(the page reports on a heartbeat) or move the mouse once.',
           }
-          : { pageHalf: 'reported', ageMs: Date.now() - reportedAt, ...report })
+          : {
+            pageHalf: 'reported',
+            ageMs: Date.now() - reportedAt,
+            shapeStale: (report.shape ?? 1) < EXPECTED_SHAPE,
+            ...report,
+          })
         res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' })
         res.end(body)
         return
@@ -112,6 +123,8 @@ export function apply(ctx) {
           try {
             const parsed = JSON.parse(Buffer.concat(chunks).toString('utf8'))
             report = {
+              // Which payload shape the page half speaks; compared in `status`.
+              shape: Number(parsed.shape) || 1,
               loadedAt: Number(parsed.loadedAt) || 0,
               visits: Number(parsed.visits) || 0,
               backs: Number(parsed.backs) || 0,
@@ -134,6 +147,7 @@ export function apply(ctx) {
               lastEvent: typeof parsed.lastEvent === 'string' ? parsed.lastEvent : null,
               fired: parsed.fired !== null && typeof parsed.fired === 'object' ? parsed.fired : null,
               lastParts: parsed.lastParts !== null && typeof parsed.lastParts === 'object' ? parsed.lastParts : null,
+              stack: Array.isArray(parsed.stack) ? parsed.stack : [],
               lastKeys: Array.isArray(parsed.lastKeys) ? parsed.lastKeys.slice(-8) : [],
             }
             reportedAt = Date.now()

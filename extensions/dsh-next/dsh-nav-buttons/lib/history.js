@@ -50,6 +50,10 @@ export class NavHistory {
       canGoBack: this.#index > 0,
       canGoForward: this.#index >= 0 && this.#index < this.#entries.length - 1,
       size: this.#entries.length,
+      // The entries themselves, oldest first. `size` alone cannot distinguish
+      // "two different places" from "one place recorded twice", which is exactly
+      // the question when a back step reports there is nowhere to go.
+      keys: this.#entries.map(entry => entry.key),
     }
   }
 

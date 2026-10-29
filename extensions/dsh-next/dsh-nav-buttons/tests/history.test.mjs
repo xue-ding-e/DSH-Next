@@ -29,7 +29,7 @@ test('the client bundle is a classic script with no ESM syntax', () => {
 
 test('a fresh history cannot move in either direction', () => {
   const history = new NavHistory()
-  assert.deepEqual(history.snapshot, { current: undefined, canGoBack: false, canGoForward: false, size: 0 })
+  assert.deepEqual(history.snapshot, { current: undefined, canGoBack: false, canGoForward: false, size: 0, keys: [] })
   assert.equal(history.back(), undefined)
   assert.equal(history.forward(), undefined)
 })
@@ -39,7 +39,7 @@ test('visits accumulate and back/forward walk them', () => {
   history.visit('a')
   history.visit('b')
   history.visit('c')
-  assert.deepEqual(history.snapshot, { current: { key: 'c' }, canGoBack: true, canGoForward: false, size: 3 })
+  assert.deepEqual(history.snapshot, { current: { key: 'c' }, canGoBack: true, canGoForward: false, size: 3, keys: ['a', 'b', 'c'] })
   assert.deepEqual(history.back(), { key: 'b' })
   assert.deepEqual(history.back(), { key: 'a' })
   assert.equal(history.back(), undefined)
@@ -63,7 +63,7 @@ test('a new visit after going back drops the forward branch', () => {
   history.back()
   history.back()
   history.visit('d')
-  assert.deepEqual(history.snapshot, { current: { key: 'd' }, canGoBack: true, canGoForward: false, size: 2 })
+  assert.deepEqual(history.snapshot, { current: { key: 'd' }, canGoBack: true, canGoForward: false, size: 2, keys: ['a', 'd'] })
   assert.deepEqual(history.back(), { key: 'a' })
 })
 
@@ -71,7 +71,7 @@ test('revisiting a place already in the stack jumps to it and truncates', () => 
   const history = new NavHistory()
   for (const key of ['a', 'b', 'c', 'd']) history.visit(key)
   history.visit('b')
-  assert.deepEqual(history.snapshot, { current: { key: 'b' }, canGoBack: true, canGoForward: false, size: 2 })
+  assert.deepEqual(history.snapshot, { current: { key: 'b' }, canGoBack: true, canGoForward: false, size: 2, keys: ['a', 'b'] })
   assert.deepEqual(history.forward(), undefined)
 })
 
@@ -96,7 +96,7 @@ test('clear forgets everything', () => {
   history.visit('a')
   history.visit('b')
   history.clear()
-  assert.deepEqual(history.snapshot, { current: undefined, canGoBack: false, canGoForward: false, size: 0 })
+  assert.deepEqual(history.snapshot, { current: undefined, canGoBack: false, canGoForward: false, size: 0, keys: [] })
 })
 
 test('only the two thumb buttons are claimed', () => {
@@ -306,4 +306,23 @@ test('the command mailbox lets navigation be exercised without real input', asyn
     const bad = await call(route, 'POST', 'command', { command: 'explode' })
     assert.equal(bad.status, 400)
   }
+})
+
+test('snapshot.keys exposes the entries, so a stuck cursor is diagnosable', () => {
+  // `size` alone cannot distinguish "two distinct places" from "one place recorded
+  // twice", and when a back step reports there is nowhere to go that is exactly
+  // the question. The contents answer it.
+  const history = new NavHistory()
+  assert.deepEqual(history.snapshot.keys, [])
+
+  for (const key of ['a', 'b', 'c']) history.visit(key)
+  assert.deepEqual(history.snapshot.keys, ['a', 'b', 'c'])
+
+  history.back()
+  assert.deepEqual(history.snapshot.keys, ['a', 'b', 'c'], 'moving does not drop entries')
+  assert.equal(history.position, 1)
+
+  // Revisiting truncates, and the keys follow.
+  history.visit('a')
+  assert.deepEqual(history.snapshot.keys, ['a'])
 })
