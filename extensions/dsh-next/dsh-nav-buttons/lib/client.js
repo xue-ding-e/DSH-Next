@@ -436,9 +436,14 @@ function install(ctx) {
     // left alone: part of the place did change, and rewinding would fight it.
     if (failed !== undefined && failed.length === 3) {
       restoring = null
-      history.returnTo(previousKey)
-      if (direction === 'back') backs--
-      else forwards--
+      // `returnTo` returns false when the entry it wants is no longer in the stack
+      // (new visits can evict it while the restore is in flight). Undo the counter
+      // only when the cursor really went back, so the counters keep describing what
+      // actually happened rather than what was attempted.
+      if (history.returnTo(previousKey)) {
+        if (direction === 'back') backs--
+        else forwards--
+      }
       lastRestoreError = failed.join(',')
     } else if (failed !== undefined && failed.length > 0) {
       lastRestoreError = failed.join(',')
