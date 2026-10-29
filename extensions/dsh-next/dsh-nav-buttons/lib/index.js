@@ -29,17 +29,46 @@ const ROUTE = '/tool-nav-buttons'
  * @property {number} index Current position in the stack.
  */
 
-/** Latest report from the page; undefined until the browser half posts one. */
-let report
+/**
+ * Latest report per page-half instance.
+ *
+ * Electrons runs more than one renderer for one app, and every renderer that
+ * loads the plugin runs its own page half. A single slot let them overwrite each
+ * other, so `status` returned whichever reported last — the counters appeared to
+ * jump backwards and a back/forward step looked like it did nothing. Keying by
+ * instance keeps them apart; `status` then reports the freshest one.
+ */
+const reports = new Map()
 
-/** When the last report arrived, so a stale page is distinguishable from none. */
-let reportedAt
+/** Cap the map so a reload loop cannot grow it without bound. */
+const MAX_REPORTED_INSTANCES = 8
 
 /** Keys the last page report actually carried; empty until one arrives. */
 let lastRawKeys = []
 
 /** First bytes of the last page report, for reading the real payload. */
 let lastRawSample = ''
+
+/** Monotonic counter so reports inside the same millisecond still order. */
+let reportSeq = 0
+
+/** Ids of every instance that has reported since this host half started. */
+let seenInstances = []
+
+/**
+ * The most recently reporting instance.
+ *
+ * Several renderers can each run a page half, so "the current state" is the one
+ * that reported last rather than "whatever landed in a single slot".
+ * @returns {{id: string, at: number, data: object}|undefined} the freshest entry.
+ */
+function freshestReport() {
+  let best
+  for (const [id, entry] of reports) {
+    if (best === undefined || entry.seq > best.seq) best = { id, at: entry.at, seq: entry.seq, data: entry.data }
+  }
+  return best
+}
 
 /** Commands the page half accepts from the diagnostics mailbox. */
 const COMMANDS = new Set(['back', 'forward', 'probe', 'selftest', 'peers', 'switch'])
@@ -69,7 +98,8 @@ export function apply(ctx) {
         // older page half reports shape 1 (no stack contents); saying so explains
         // a missing field without anyone guessing.
         const EXPECTED_SHAPE = 2
-        const body = JSON.stringify(report === undefined
+        const freshest = freshestReport()
+        const body = JSON.stringify(freshest === undefined
           ? {
             pageHalf: 'awaiting first report',
             route: ROUTE,
@@ -78,14 +108,21 @@ export function apply(ctx) {
           }
           : {
             pageHalf: 'reported',
-            ageMs: Date.now() - reportedAt,
-            shapeStale: (report.shape ?? 1) < EXPECTED_SHAPE,
+            ageMs: Date.now() - freshest.at,
+            shapeStale: (freshest.data.shape ?? 1) < EXPECTED_SHAPE,
             // What the page actually sent. `shape: 1` says the loaded bundle is
             // old, but only the key list says whether the field is absent or the
             // whole payload is from a different build.
             reportKeys: lastRawKeys,
             reportSample: lastRawSample,
-            ...report,
+            // Every renderer that loaded the plugin runs its own page half. With
+            // one slot they overwrote each other, so the counters appeared to move
+            // backwards and a back/forward step looked like it did nothing. Naming
+            // them makes that condition visible instead of mysterious.
+            instance: freshest.id,
+            instances: seenInstances,
+            instanceCount: seenInstances.length,
+            ...freshest.data,
           })
         res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' })
         res.end(body)
@@ -146,7 +183,14 @@ export function apply(ctx) {
             // which page version is running.
             lastRawKeys = Object.keys(parsed).sort()
             lastRawSample = raw.slice(0, 300)
-            report = {
+            // The instance id lets several renderers coexist instead of overwriting.
+            const instance = typeof parsed.instance === 'string' && parsed.instance !== ''
+              ? parsed.instance
+              : 'unknown'
+            if (!seenInstances.includes(instance)) {
+              seenInstances = [...seenInstances, instance].slice(-MAX_REPORTED_INSTANCES)
+            }
+            const report = {
               // Which payload shape the page half speaks; compared in `status`.
               shape: Number(parsed.shape) || 1,
               installed: parsed.installed === true,
@@ -179,7 +223,16 @@ export function apply(ctx) {
               stack: Array.isArray(parsed.stack) ? parsed.stack : [],
               lastKeys: Array.isArray(parsed.lastKeys) ? parsed.lastKeys.slice(-8) : [],
             }
-            reportedAt = Date.now()
+            // Date.now() alone cannot order two reports inside one millisecond,
+            // which made status answer with an arbitrary one of them. A monotonic
+            // counter makes 'freshest' unambiguous.
+            reportSeq += 1
+            reports.set(instance, { at: Date.now(), seq: reportSeq, data: report })
+            // Drop the oldest instances once the cap is reached.
+            if (reports.size > MAX_REPORTED_INSTANCES) {
+              const oldest = [...reports.entries()].sort((a, b) => a[1].seq - b[1].seq)[0]
+              if (oldest !== undefined) reports.delete(oldest[0])
+            }
             res.writeHead(204).end()
           } catch {
             res.writeHead(400).end('bad report')

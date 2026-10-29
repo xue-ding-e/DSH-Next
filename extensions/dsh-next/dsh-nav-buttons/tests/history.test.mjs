@@ -530,3 +530,44 @@ test('every module-level history helper exists in both copies', () => {
     assert.ok(pageCopy.has(required), `client.js is missing ${required}`)
   }
 })
+
+test('reports from several page halves do not overwrite each other', async () => {
+  // Electron runs more than one renderer for a single app, and every renderer
+  // that loads the plugin runs its own page half against this one route. With a
+  // single slot they overwrote each other, so `status` returned whichever landed
+  // last: the counters appeared to jump backwards and a back/forward step looked
+  // like it did nothing. Each instance now keeps its own slot and `status` answers
+  // with the freshest one.
+  const routes = new Map()
+  const webServer = { register(route) { routes.set(route.path, route); return () => {} } }
+  const ctx = { webServer, effect(install) { install(); return () => {} } }
+  const { apply } = await import('../lib/index.js')
+  apply(ctx)
+  const route = routes.get('/tool-nav-buttons')
+
+  const post = (instance, visits, entries) => call(route, 'POST', 'report', {
+    shape: 2, instance, loadedAt: Date.now(), visits, backs: 0, forwards: 0, entries, index: 0,
+  })
+
+  await post('instance-a', 59, 5)
+  await post('instance-b', 1, 1)
+
+  const state = JSON.parse((await call(route, 'GET', 'status')).body)
+  // The freshest report wins, and both instances are visible by name.
+  assert.equal(state.instance, 'instance-b', 'the newest report answers')
+  assert.equal(state.visits, 1)
+  assert.ok(Array.isArray(state.instances), 'instance list is exposed')
+  assert.ok(state.instances.includes('instance-a'))
+  assert.ok(state.instances.includes('instance-b'))
+  // The report map is module state, so an earlier test in this file may already
+  // have registered an instance. Assert the two we posted are present rather than
+  // pinning the total, which would couple this test to execution order.
+  assert.ok(state.instanceCount >= 2, `expected at least 2 instances, saw ${state.instanceCount}`)
+
+  // A later report from the other instance takes over again, rather than the
+  // counters being stuck on whichever wrote last forever.
+  await post('instance-a', 60, 5)
+  const again = JSON.parse((await call(route, 'GET', 'status')).body)
+  assert.equal(again.instance, 'instance-a')
+  assert.equal(again.visits, 60)
+})

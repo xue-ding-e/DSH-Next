@@ -32,6 +32,17 @@ const SEP = '\u0001'
  */
 const PAYLOAD_SHAPE = 2
 
+/**
+ * Identity of this page half.
+ *
+ * Electron runs several renderers for one app, and each one that loads this
+ * plugin runs its own page half against the same host route. Without an id the
+ * host cannot tell them apart: they overwrite one slot, so the counters appear to
+ * jump backwards and a back/forward step looks like it did nothing. A per-load id
+ * lets the host report the freshest one instead of an arbitrary mixture.
+ */
+const INSTANCE_ID = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
+
 /** A bounded back/forward history of visited places. */
 class NavHistory {
   #entries = []
@@ -363,11 +374,11 @@ function apply(ctx) {
     // Proof of a successful INSTALL (not just of a loaded module). Without this,
     // "the module never ran" and "install threw and the error report also failed"
     // both leave the host with no report at all and look identical.
-    report({ shape: PAYLOAD_SHAPE, installed: true, loadedAt: Date.now() })
+    report({ shape: PAYLOAD_SHAPE, instance: INSTANCE_ID, installed: true, loadedAt: Date.now() })
   } catch (error) {
     const message = error instanceof Error ? `${error.name}: ${error.message}` : String(error)
     window.dshNavButtonsError = message
-    report({ shape: PAYLOAD_SHAPE, installed: false, loadedAt: Date.now(), error: message })
+    report({ shape: PAYLOAD_SHAPE, instance: INSTANCE_ID, installed: false, loadedAt: Date.now(), error: message })
     throw error
   }
 }
@@ -645,8 +656,19 @@ function install(ctx) {
   // expectation turns "the new field is mysteriously missing" into one glance.
   const live = () => {
     const snapshot = history.snapshot
+    // Only the instance that actually owns the on-screen session reports.
+    //
+    // Electron runs a renderer per window/webview, and every one that loads this
+    // bundle runs a complete page half with its own history stack. When all of
+    // them reported, `status` answered with whichever landed last: counters ran
+    // backwards and a back/forward step appeared to do nothing because the reply
+    // came from an instance whose stack was empty. The others still work — they
+    // just do not speak for the window.
+    const owns = placeParts(ctx).mainCandidates > 0
+    if (!owns) return
     report({
       shape: PAYLOAD_SHAPE,
+      instance: INSTANCE_ID,
       loadedAt: activatedAt,
       visits, backs, forwards,
       entries: snapshot.size,
