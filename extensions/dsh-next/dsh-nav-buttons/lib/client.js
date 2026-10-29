@@ -267,6 +267,10 @@ function install(ctx) {
   let recordCalls = 0
   let sampleCalls = 0
   let lastKeys = []
+  // Proof the interaction listener is attached and firing. Without these two, a
+  // zero sample count is ambiguous between "not installed" and "nobody clicked".
+  let listenersInstalled = 0
+  let lastEvent = null
 
   const record = (fromSample = false) => {
     if (replaying) return
@@ -359,10 +363,19 @@ function install(ctx) {
     // Deferred one macrotask: the click that switches the tab is still travelling
     // through React when the pointer handler runs, so reading the place
     // synchronously would see the old one. `record()` ignores repeats anyway.
-    const onPointer = () => { setTimeout(() => record(true), 0) }
+    const onPointer = (event) => {
+      // Recorded so "the listener never ran" is distinguishable from "it ran and
+      // found nothing new" — the counters alone cannot tell those apart.
+      lastEvent = event.type
+      setTimeout(() => record(true), 0)
+    }
     const events = ['pointerdown', 'mouseup', 'keydown', 'focusin']
     for (const event of events) window.addEventListener(event, onPointer, true)
-    return () => { for (const event of events) window.removeEventListener(event, onPointer, true) }
+    listenersInstalled = events.length
+    return () => {
+      for (const event of events) window.removeEventListener(event, onPointer, true)
+      listenersInstalled = 0
+    }
   }, 'dsh-nav-buttons: sample on interaction')
 
   // A diagnostic handle for the operating console (`window.dshNavButtons`): the
@@ -411,6 +424,8 @@ function install(ctx) {
       // means the place simply is not moving.
       recordCalls,
       sampleCalls,
+      listenersInstalled,
+      lastEvent,
       lastKeys,
       current: snapshot.current === undefined ? null : snapshot.current.key,
     })

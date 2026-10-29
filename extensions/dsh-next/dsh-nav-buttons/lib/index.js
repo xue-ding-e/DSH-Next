@@ -88,6 +88,8 @@ export function apply(ctx) {
               // dead", which look identical in the counters alone.
               recordCalls: Number(parsed.recordCalls) || 0,
               sampleCalls: Number(parsed.sampleCalls) || 0,
+              listenersInstalled: Number(parsed.listenersInstalled) || 0,
+              lastEvent: typeof parsed.lastEvent === 'string' ? parsed.lastEvent : null,
               lastKeys: Array.isArray(parsed.lastKeys) ? parsed.lastKeys.slice(-8) : [],
             }
             reportedAt = Date.now()
