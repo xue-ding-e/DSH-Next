@@ -1,0 +1,37 @@
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write extensions/dsh-next/README.md
+/dsh-next-extension-plugins:
+  en: 94e5b984c7fa6ae6
+  zh: 156403e89f72b3bf
+/dsh-next-extension-plugins/contents:
+  en: 582de2f723e72601
+  zh: 0cbc89e92ca7691f
+/dsh-next-extension-plugins/upgrade-versus-uninstall-will-sign-in-state-be-lost:
+  en: 95733bb5ebcd2d4a
+  zh: 84178c7f21a320e7
+/dsh-next-extension-plugins/dsh-browser-control:
+  en: e1e401698ac4e0d3
+  zh: 803884515bebf913
+/dsh-next-extension-plugins/dsh-nav-buttons:
+  en: a82e267fb2ccad55
+  zh: 84890d1b50c5f5d2
+/dsh-next-extension-plugins/dsh-input-guard:
+  en: 23eebf55cdecd8bc
+  zh: 5a63a0a672284856
+/dsh-next-extension-plugins/tests:
+  en: a27966e20a02b7e1
+  zh: 82b7a652bcb3b930
+/dsh-next-extension-plugins/installation-consistency-check:
+  en: e2363fbccd8552c1
+  zh: 0c32fdf6bcf16cc9
+/dsh-next-extension-plugins/client-bundle-structure-check:
+  en: 674a88505cae6ef2
+  zh: 3793db5f9c097675
+/dsh-next-extension-plugins/refresh-the-page-after-changing-the-client-half:
+  en: 117173b571205707
+  zh: 0de9b22d345eb97a
+/dsh-next-extension-plugins/license:
+  en: e1ab17fe41b86709
+  zh: 25ef74e158d5d9f3

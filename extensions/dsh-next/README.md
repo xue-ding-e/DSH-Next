@@ -1,43 +1,40 @@
-# DSH-Next 扩展插件
+# DSH-Next extension plugins
 
-本目录是本仓库自有的社区插件，**不属于上游 DeepSeek Harness**。它们以
-profile bundle 的形式安装（`file:` 自包含安装 + `dsh.bundle.patch`），
-不修改已安装的 DSH 产物。
+English | [中文](README.zh.md)
 
-安装方式（在 DSH 里让 agent 执行，或自行调用 plugin_manager）：
+This directory contains this repository's own community plugins; they are **not part of upstream DeepSeek Harness**. They install as profile bundles (`file:` self-contained installation + `dsh.bundle.patch`) without modifying the installed DSH artifacts.
+
+Installation (ask the agent in DSH to run this, or call plugin_manager yourself):
 
 ```
 install_bundle(target: <本目录下的绝对路径>)
 ```
 
-## 目录
+## Contents
 
-| 插件 | 作用 | 需要重启 |
+| Plugin | Purpose | Restart required |
 |---|---|---|
-| `dsh-browser-control` | 让模型直接操作内置浏览器 tab：导航、快照、点击、填表、读文本、求值。**复用该 tab 已登录的 Cookie** | 是（client 半） |
-| `dsh-nav-buttons` | 鼠标侧键 X1/X2 在「会话 / 面板 / 侧栏标签」的统一历史里后退前进 | 是（client 半） |
-| `dsh-input-guard` | 当有程序要操作你真实鼠标键盘时，在页面顶部显示常驻、可停止的提示条 | 是（client 半） |
+| `dsh-browser-control` | Lets the model operate the built-in browser tab directly: navigate, take snapshots, click, fill forms, read text, and evaluate code. **Reuses that tab's signed-in Cookie** | Yes (client half) |
+| `dsh-nav-buttons` | Uses mouse side buttons X1/X2 to go back and forward through a unified history of sessions, panels, and sidebar tabs | Yes (client half) |
+| `dsh-input-guard` | Shows a persistent, stoppable banner at the top of the page when a program wants to operate your real mouse and keyboard | Yes (client half) |
 
-三者都**默认可用**；`dsh-browser-control` 的截图能力在本版 DSH 中不可用（见下）。
+All three are **available by default**; `dsh-browser-control` screenshots are unavailable in this DSH version (see below).
 
-## 升级 vs 卸载：登录态会不会丢
+## Upgrade versus uninstall: will sign-in state be lost?
 
-浏览器 Cookie 存在 **userData**，不是 `~/.dsh`：
+Browser Cookies are stored in **userData**, not `~/.dsh`:
 
-| 位置 | 内容 | 卸载时 | 升级时 |
+| Location | Contents | On uninstall | On upgrade |
 |---|---|---|---|
-| `~/.dsh` | profile、插件安装、会话索引 | **保留** | 保留 |
-| `%APPDATA%\@deepseek-ai\dsh-desktop` | **Cookie、缓存、Local State** | **删除** | 保留 |
-| 安装目录 | 程序本体 | 删除 | 替换 |
+| `~/.dsh` | Profiles, plugin installations, session index | **Preserved** | Preserved |
+| `%APPDATA%\@deepseek-ai\dsh-desktop` | **Cookies, cache, Local State** | **Deleted** | Preserved |
+| Installation directory | Application files | Deleted | Replaced |
 
-- **升级安装**：`un.CleanData` 开头就是 `${If} ${isUpdated} Return` 与
-  `/KEEP_APP_DATA` 两条早退，什么都不清。日常更新安全。
-- **真正的卸载**：会执行 `RemoveData "$APPDATA\@deepseek-ai"`，把
-  `Partitions\` 一起删掉 —— **登录态随之消失**。
-- `~/.dsh` 之所以安全，是因为卸载器只读得到"系统环境变量级别"的 `DSH_HOME`，
-  而它实际只存在于进程环境，所以 `$UnHome` 为空、不在删除范围。
+- **Upgrade installation**: `un.CleanData` starts with two early returns, `${If} ${isUpdated} Return` and `/KEEP_APP_DATA`, and clears nothing. Routine updates are safe.
+- **Actual uninstall**: runs `RemoveData "$APPDATA\@deepseek-ai"`, deleting `Partitions\` too — **sign-in state is lost with it**.
+- `~/.dsh` is safe because the uninstaller can only read `DSH_HOME` at the system environment-variable level, while it actually exists only in the process environment. `$UnHome` is therefore empty and outside the deletion scope.
 
-卸载前想保住登录态，先把分区目录复制走，重装后放回：
+To keep sign-in state, copy the partition directory before uninstalling and restore it after reinstalling:
 
 ```powershell
 Copy-Item "$env:APPDATA\@deepseek-ai\dsh-desktop\Partitions" "$env:USERPROFILE\dsh-partitions-backup" -Recurse
@@ -45,50 +42,41 @@ Copy-Item "$env:APPDATA\@deepseek-ai\dsh-desktop\Partitions" "$env:USERPROFILE\d
 Copy-Item "$env:USERPROFILE\dsh-partitions-backup\*" "$env:APPDATA\@deepseek-ai\dsh-desktop\Partitions\" -Recurse
 ```
 
-分区名由工作区路径确定性派生（`sha256("cwd:<path>")[:32]`），所以复制回去仍然对得上。
+Partition names are derived deterministically from the workspace path (`sha256("cwd:<path>")[:32]`), so they still match after being copied back.
 
 ## dsh-browser-control
 
-注册 7 个模型可见工具，全部作用于**用户可见的那个内置浏览器 tab**，因此
-Cookie / localStorage / 登录态就是用户自己的那份，不需要重新登录。
+Registers seven model-visible tools, all operating on **the built-in browser tab visible to the user**. Its Cookie / localStorage / sign-in state is therefore the user's existing state, without another login.
 
-| 工具 | 说明 | 状态 |
+| Tool | Description | Status |
 |---|---|---|
-| `browser_goto` | 导航到 http(s) URL | 实测可用 |
-| `browser_snapshot` | 返回可交互元素 + 文本，带稳定 `ref` | 实测可用 |
-| `browser_click` | 按 ref 或 CSS 选择器点击 | 实测可用 |
-| `browser_fill` | 填表单并派发 input/change | 实测可用 |
-| `browser_read_text` | 读可见文本 | 实测可用 |
-| `browser_eval` | 页面内求值并回传 JSON | 实测可用 |
-| `browser_screenshot` | **不可用** | 见下 |
+| `browser_goto` | Navigate to an http(s) URL | Tested and working |
+| `browser_snapshot` | Return interactive elements and text with stable `ref` values | Tested and working |
+| `browser_click` | Click by ref or CSS selector | Tested and working |
+| `browser_fill` | Fill a form and dispatch input/change | Tested and working |
+| `browser_read_text` | Read visible text | Tested and working |
+| `browser_eval` | Evaluate code in the page and return JSON | Tested and working |
+| `browser_screenshot` | **Unavailable** | See below |
 
-**为什么截图不可用**：`<webview>` 不向 renderer 暴露任何捕获方法
-（`capturePage` / `getWebContents` 都经 Electron 的 guest IPC 代理，
-在隔离世界读到 `null` 并抛 `GUEST_VIEW_MANAGER_CALL`）；Desktop 的 preload 桥
-（`apps/desktop/src/preload-browser.ts`）只导出 `acquire` / `release` /
-`onOpenRequested`。这是 DSH 本体的能力边界，插件层面无法绕过。
-工具已改为返回明确说明，并建议改用 `browser_snapshot` / `browser_read_text`。
+**Why screenshots are unavailable**: `<webview>` exposes no capture methods to the renderer (`capturePage` / `getWebContents` both go through Electron's guest IPC proxy, which reads `null` in the isolated world and throws `GUEST_VIEW_MANAGER_CALL`). The Desktop preload bridge (`apps/desktop/src/preload-browser.ts`) exports only `acquire` / `release` / `onOpenRequested`. This is a limitation of DSH itself that plugins cannot bypass. The tool now returns an explicit explanation and suggests `browser_snapshot` / `browser_read_text` instead.
 
-**只读诊断**：`GET /tool-sidebar-browser-diagnostics` 返回
-`{pageAttached, polls, resolves, toolsRegistered}`，用于判断页面半是否连通，
-不含页面内容、URL，也无法驱动任何东西。
+**Read-only diagnostics**: `GET /tool-sidebar-browser-diagnostics` returns `{pageAttached, polls, resolves, toolsRegistered}` to show whether the page half is connected. It contains no page content or URL and cannot drive any actions.
 
 ## dsh-nav-buttons
 
-一个统一历史栈，一个"位置"是 `session|panel|tab`：
+One unified history stack, where a "location" is `session|panel|tab`:
 
-- **会话**轴读 `sessions.list` 里 `retainedBy.mainView > 0` 的那一项
-- **面板**轴读 `layout.panelInfo.activePanelId`
-- **标签**轴读 `sidebarRight.mounted`
+- The **session** axis reads the entry in `sessions.list` with `retainedBy.mainView > 0`.
+- The **panel** axis reads `layout.panelInfo.activePanelId`.
+- The **tab** axis reads `sidebarRight.mounted`.
 
-侧键在侧栏浏览器 `<webview>` 内**不劫持** —— 那里是真实网页，保留它自己的历史。
+Side buttons are **not intercepted** inside the sidebar browser `<webview>`: that is a real web page, so its own history is preserved.
 
-**只读诊断**：`GET /tool-nav-buttons/status` 返回 `pageHalf`（是否执行）、
-`visits` / `backs` / `forwards`、以及 `sources`（四个轴是否可达）。
+**Read-only diagnostics**: `GET /tool-nav-buttons/status` returns `pageHalf` (whether it ran), `visits` / `backs` / `forwards`, and `sources` (whether the four axes are reachable).
 
 ## dsh-input-guard
 
-操作真实键鼠的**可见授权**。Host 半维护一个 15 秒 TTL 的租约：
+**Visible authorization** to operate the real mouse and keyboard. The Host half maintains a lease with a 15-second TTL:
 
 ```
 POST /tool-input-guard/request   → 申请（附 purpose）
@@ -98,15 +86,14 @@ POST /tool-input-guard/release   → 归还
 GET  /tool-input-guard/state     → 当前状态
 ```
 
-Client 半在 `shell.overlay` 渲染常驻横幅：琥珀圆点、用途说明、已用时长、
-**Stop 按钮**。`shell.overlay` 在所有栏之上、不在任何滚动容器内，滚不走也遮不住。
+The Client half renders a persistent banner in `shell.overlay`: an amber dot, purpose, elapsed time, and a **Stop button**. `shell.overlay` sits above all panes and outside every scroll container, so it cannot be scrolled away or obscured.
 
-**它保证什么**：程序无法通过本插件**悄悄**操作键鼠，且用户随时能停。
-**它不保证什么**：绕过本插件的脚本仍能动鼠标 —— 这是同意界面，不是沙箱。
+**What it guarantees**: programs cannot operate the mouse and keyboard **silently** through this plugin, and the user can stop them at any time.
+**What it does not guarantee**: scripts that bypass this plugin can still move the mouse — this is a consent UI, not a sandbox.
 
-## 测试
+## Tests
 
-每个插件自带 Node 测试（无需安装依赖）：
+Each plugin includes Node tests (no dependency installation needed):
 
 ```powershell
 cd extensions/dsh-next/dsh-browser-control; node --test tests/*.test.mjs
@@ -114,55 +101,50 @@ cd extensions/dsh-next/dsh-nav-buttons;     node --test tests/*.test.mjs
 cd extensions/dsh-next/dsh-input-guard;     node --test tests/*.test.mjs
 ```
 
-当前：6 / 15 / 12 项，全部通过。
+Currently: 6 / 15 / 12 tests, all passing.
 
-## 安装一致性检查
+## Installation consistency check
 
-profile 用 `link:` 安装这些插件，所以 *安装副本就是本目录*。但链接可能指向
-错误位置（例如指向一个旧的源码副本），那样跑的就是过期代码且毫无提示。
+The profile installs these plugins using `link:`, so *the installed copy is this directory*. However, a link may point to the wrong location (such as an old source copy), silently running outdated code.
 
 ```powershell
 pwsh -File extensions/dsh-next/check-install.ps1
 ```
 
-- 退出码 0：三个插件的链接都指向本目录
-- 退出码 1：列出具**体**问题（链接指向别处 / 链接已断 / 未安装）
-- 退出码 2：profile 目录不存在
+- Exit code 0: all three plugin links point to this directory.
+- Exit code 1: lists **specific** problems (link points elsewhere / broken link / not installed).
+- Exit code 2: the profile directory does not exist.
 
-注意该脚本**不会**用哈希"证明"链接安装的正确性 —— 链接两边本来就是同一个文件，
-哈希相等不构成证据。它检查的是**链接目标**，这才是真正会出错的地方。
+This script **does not** use hashes to "prove" a linked installation is correct: both ends of the link are the same file, so equal hashes are not evidence. It checks the **link target**, which is what can actually be wrong.
 
-## 客户端 bundle 结构检查
+## Client bundle structure check
 
-client bundle 以普通 `<script>` 加载，不是模块。三种写法会让 shell 白屏或让
-插件在 `apply` 时抛错，而用户只看得到白屏：
+Client bundles load as ordinary `<script>` elements, not modules. Three patterns cause a blank shell or an exception when the plugin calls `apply`, while the user sees only a blank page:
 
-| 错误 | 症状 |
+| Error | Symptom |
 |---|---|
-| 出现顶层 `export` / `import` | 白屏 |
-| 调用 `require(...)` 但 factory 没接收该参数 | 运行到 factory 时 `require is not defined` |
-| 接收了 `require` 却自带一份 React | hooks 挂到错误的 dispatcher |
+| Top-level `export` / `import` | Blank page |
+| Calls `require(...)` but the factory does not accept that parameter | `require is not defined` when the factory runs |
+| Accepts `require` but bundles its own React | Hooks attach to the wrong dispatcher |
 
 ```powershell
 pwsh -File extensions/dsh-next/check-bundles.ps1
 ```
 
-退出码 0 = 三个 bundle 都是可加载的经典脚本。
+Exit code 0 means all three bundles are loadable classic scripts.
 
-## 改 client 半后必须刷新页面
+## Refresh the page after changing the client half
 
-`plugin_manager` 的 `set_plugin` 只重载 **host 半**。client bundle 按 `rev`
-缓存，已加载的页面模块**不会重新执行** —— 改完 `lib/client.js` 后不刷新页面，
-跑的还是旧代码。
+`plugin_manager`'s `set_plugin` reloads only the **host half**. Client bundles are cached by `rev`, and loaded page modules **do not execute again**. Without refreshing after changing `lib/client.js`, the page still runs the old code.
 
-`/tool-nav-buttons/status` 用 `shapeStale` 直接标出这种新旧不一致：
+`/tool-nav-buttons/status` exposes this mismatch directly through `shapeStale`:
 
 ```json
 {"pageHalf":"reported","shape":1,"shapeStale":true}
 ```
 
-`shapeStale: true` 就是"页面半是旧代码，需要刷新"。
+`shapeStale: true` means "the page half is old code and needs a refresh".
 
-## 许可
+## License
 
 Apache-2.0
