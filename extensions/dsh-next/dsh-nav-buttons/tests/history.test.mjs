@@ -204,3 +204,35 @@ test('the browser half reads the services that actually move for each axis', () 
   assert.ok(clientSource.includes("ctx.get('sidebarRight')?.mounted"), 'tab axis reads sidebarRight.mounted')
   assert.ok(clientSource.includes('retainedBy?.mainView'), 'session axis keys off mainView retention')
 })
+
+test('position reports the real cursor, not a placeholder', () => {
+  // The plugin reports `index` to the Host so an operator can see where the stack
+  // stands. It previously sent a constant 0/-1, which made every stack look empty
+  // however deep it actually was.
+  const history = new NavHistory()
+  assert.equal(history.position, -1, 'empty stack is -1')
+
+  history.visit('a')
+  assert.equal(history.position, 0)
+  history.visit('b')
+  history.visit('c')
+  assert.equal(history.position, 2)
+
+  history.back()
+  assert.equal(history.position, 1, 'back moves the cursor')
+  history.forward()
+  assert.equal(history.position, 2, 'forward moves it back')
+})
+
+test('position tracks truncation and revisit jumps', () => {
+  const history = new NavHistory()
+  for (const key of ['a', 'b', 'c', 'd']) history.visit(key)
+  history.back()
+  history.back()
+  assert.equal(history.position, 1)
+
+  // Revisiting an earlier place keeps the cursor on it.
+  history.visit('a')
+  assert.equal(history.position, 0)
+  assert.equal(history.snapshot.size, 1)
+})

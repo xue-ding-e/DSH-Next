@@ -352,15 +352,25 @@ function install(ctx) {
     tab: typeof ctx.get('sidebarRight')?.mounted?.subscribe === 'function',
     workspace: typeof ctx.get('uiWorkspace')?.openSession === 'function',
   }
-  const live = () => report({
-    loadedAt: Date.now(), visits, backs, forwards,
-    entries: history.snapshot.size,
-    index: history.snapshot.current === undefined ? -1 : 0,
-    sources,
-    current: history.snapshot.current === undefined ? null : history.snapshot.current.key,
-  })
+  // Captured once: this is when the page half activated. Reporting `Date.now()`
+  // on every event made the Host believe the page had just loaded whenever the
+  // mouse moved, which hid genuinely stale pages.
+  const activatedAt = Date.now()
+  const live = () => {
+    const snapshot = history.snapshot
+    report({
+      loadedAt: activatedAt,
+      visits, backs, forwards,
+      entries: snapshot.size,
+      // The true cursor position, not a placeholder: `canGoBack`/`canGoForward`
+      // and any future UI depend on where the stack actually stands.
+      index: history.position,
+      sources,
+      current: snapshot.current === undefined ? null : snapshot.current.key,
+    })
+  }
   live()
-  // Keep the Host's view current without a polling timer in the page.
+  // Re-report on activity so the Host sees progress without a polling timer.
   for (const event of ['auxclick', 'mouseup']) window.addEventListener(event, live, true)
 }
 

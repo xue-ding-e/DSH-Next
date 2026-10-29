@@ -54,6 +54,16 @@ export class NavHistory {
   }
 
   /**
+   * Cursor position in the stack: -1 when empty, otherwise the index of the entry
+   * currently shown. Exposed because `canGoBack`/`canGoForward` are derived from
+   * it, and a caller reporting history state needs the number rather than a guess.
+   * @returns {number} the zero-based index, or -1 when there is no current entry.
+   */
+  get position() {
+    return this.#index
+  }
+
+  /**
    * Record a visit.
    * @param key - stable identity of the place now shown.
    * @returns true when the history changed.
