@@ -20,6 +20,33 @@ install_bundle(target: <本目录下的绝对路径>)
 
 三者都**默认可用**；`dsh-browser-control` 的截图能力在本版 DSH 中不可用（见下）。
 
+## 升级 vs 卸载：登录态会不会丢
+
+浏览器 Cookie 存在 **userData**，不是 `~/.dsh`：
+
+| 位置 | 内容 | 卸载时 | 升级时 |
+|---|---|---|---|
+| `~/.dsh` | profile、插件安装、会话索引 | **保留** | 保留 |
+| `%APPDATA%\@deepseek-ai\dsh-desktop` | **Cookie、缓存、Local State** | **删除** | 保留 |
+| 安装目录 | 程序本体 | 删除 | 替换 |
+
+- **升级安装**：`un.CleanData` 开头就是 `${If} ${isUpdated} Return` 与
+  `/KEEP_APP_DATA` 两条早退，什么都不清。日常更新安全。
+- **真正的卸载**：会执行 `RemoveData "$APPDATA\@deepseek-ai"`，把
+  `Partitions\` 一起删掉 —— **登录态随之消失**。
+- `~/.dsh` 之所以安全，是因为卸载器只读得到"系统环境变量级别"的 `DSH_HOME`，
+  而它实际只存在于进程环境，所以 `$UnHome` 为空、不在删除范围。
+
+卸载前想保住登录态，先把分区目录复制走，重装后放回：
+
+```powershell
+Copy-Item "$env:APPDATA\@deepseek-ai\dsh-desktop\Partitions" "$env:USERPROFILE\dsh-partitions-backup" -Recurse
+# 重装后
+Copy-Item "$env:USERPROFILE\dsh-partitions-backup\*" "$env:APPDATA\@deepseek-ai\dsh-desktop\Partitions\" -Recurse
+```
+
+分区名由工作区路径确定性派生（`sha256("cwd:<path>")[:32]`），所以复制回去仍然对得上。
+
 ## dsh-browser-control
 
 注册 7 个模型可见工具，全部作用于**用户可见的那个内置浏览器 tab**，因此
