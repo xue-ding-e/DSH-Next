@@ -87,6 +87,7 @@ export function apply(ctx) {
               // they resolved to. Distinguishes "nothing moved" from "record is
               // dead", which look identical in the counters alone.
               recordCalls: Number(parsed.recordCalls) || 0,
+              sampleCalls: Number(parsed.sampleCalls) || 0,
               lastKeys: Array.isArray(parsed.lastKeys) ? parsed.lastKeys.slice(-8) : [],
             }
             reportedAt = Date.now()

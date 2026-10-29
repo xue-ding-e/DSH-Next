@@ -256,3 +256,21 @@ test('the tab axis reads sidebarRight.active(), not a member that does not exist
   // The health check must cover the reader too, or the axis lies again.
   assert.ok(code.includes("sidebarRight')?.active === 'function'"), 'health checks active()')
 })
+
+test('the tab axis is sampled, because no observable reports it', () => {
+  // `ISidebarRight` exposes exactly one observable, `mounted`, and its contract is
+  // "moves only when the on-screen Session changes; the Session's own store
+  // commits are silent". A tab switch therefore emits no event at all. The tab
+  // axis must be sampled or every tab change is lost — which is what happened.
+  const code = clientSource.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '')
+  // Interaction-driven, not timer-driven: Chromium throttles background-tab
+  // timers and this document is usually backgrounded (measured 1 tick per 10 s).
+  assert.ok(code.includes("record(true), 0"), 'records on the interaction, deferred a task')
+  assert.equal(code.includes('setInterval(() => record(true)'), false, 'no throttled timer')
+
+  // Samples must not be counted as observer firings, or the diagnostic that
+  // distinguishes "record is dead" from "nothing moved" stops meaning anything.
+  assert.ok(code.includes('if (fromSample) sampleCalls++'), 'samples counted apart')
+  assert.ok(code.includes('recordCalls++'), 'observer firings still counted')
+  assert.ok(code.includes('sampleCalls,'), 'sample count is reported')
+})

@@ -260,15 +260,18 @@ function install(ctx) {
   let visits = 0
   let backs = 0
   let forwards = 0
-  // Diagnostics: `recordCalls` proves the subscriptions fire, and `lastKeys`
-  // shows what the place actually resolved to. Without these, "visits stayed at
-  // 1" is ambiguous between "nothing moved" and "record never ran".
+  // Diagnostics. `recordCalls` proves record() runs; `lastKeys` shows what the
+  // place resolved to. Without them, "visits stayed at 1" is ambiguous between
+  // "nothing moved" and "record never ran". Kept apart from the sampler below so
+  // a 750 ms tick does not drown the signal an operator is looking for.
   let recordCalls = 0
+  let sampleCalls = 0
   let lastKeys = []
 
-  const record = () => {
+  const record = (fromSample = false) => {
     if (replaying) return
-    recordCalls++
+    if (fromSample) sampleCalls++
+    else recordCalls++
     const key = currentPlace(ctx)
     lastKeys.push(key === undefined ? null : key.slice(0, 60))
     if (lastKeys.length > 8) lastKeys.shift()
@@ -319,10 +322,16 @@ function install(ctx) {
     }
   }, 'dsh-nav-buttons: pointer')
 
-  // Record on every settled selection change rather than polling. Three sources,
+  // Record on every settled selection change rather than polling. Two sources,
   // each the one that actually moves for its axis: `sessions.list` for a session
-  // switch, `layout.panelInfo` for a main-panel switch, `sidebarRight.mounted`
-  // for a sidebar-tab switch.
+  // switch and `layout.panelInfo` for a main-panel switch.
+  //
+  // `sidebarRight.mounted` is NOT a tab source, despite its name: its contract is
+  // explicitly "moves only when the on-screen Session changes; the Session's own
+  // store commits are silent". Subscribing to it caught sidebar *session* changes
+  // and never a tab switch, so the tab axis would still have missed every click.
+  // The interface exposes no observable for the active tab, so that axis is
+  // sampled below instead.
   ctx.effect(() => {
     record()
     const disposers = []
@@ -336,6 +345,25 @@ function install(ctx) {
     }
     return () => { for (const dispose of disposers) dispose() }
   }, 'dsh-nav-buttons: record')
+
+  // The active tab has no observable on the public sidebar face, so a tab switch
+  // emits no event we can subscribe to. Record on the interactions that can cause
+  // one instead: a tab switch IS a click, and a keyboard-driven one arrives right
+  // after a key on the focused tab strip.
+  //
+  // A timer was tried first and is not enough: Chromium throttles background-tab
+  // timers, and this document is usually backgrounded. Measured 1 tick in 10 s
+  // against a 750 ms interval, so the tab axis would still have missed most
+  // switches. Pointer events are not throttled.
+  ctx.effect(() => {
+    // Deferred one macrotask: the click that switches the tab is still travelling
+    // through React when the pointer handler runs, so reading the place
+    // synchronously would see the old one. `record()` ignores repeats anyway.
+    const onPointer = () => { setTimeout(() => record(true), 0) }
+    const events = ['pointerdown', 'mouseup', 'keydown', 'focusin']
+    for (const event of events) window.addEventListener(event, onPointer, true)
+    return () => { for (const event of events) window.removeEventListener(event, onPointer, true) }
+  }, 'dsh-nav-buttons: sample on interaction')
 
   // A diagnostic handle for the operating console (`window.dshNavButtons`): the
   // service face is reachable only to other plugins, and the first thing an
@@ -382,6 +410,7 @@ function install(ctx) {
       // means the subscriptions are dead; a growing one with an unchanging `key`
       // means the place simply is not moving.
       recordCalls,
+      sampleCalls,
       lastKeys,
       current: snapshot.current === undefined ? null : snapshot.current.key,
     })
