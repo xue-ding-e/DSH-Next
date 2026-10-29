@@ -260,10 +260,18 @@ function install(ctx) {
   let visits = 0
   let backs = 0
   let forwards = 0
+  // Diagnostics: `recordCalls` proves the subscriptions fire, and `lastKeys`
+  // shows what the place actually resolved to. Without these, "visits stayed at
+  // 1" is ambiguous between "nothing moved" and "record never ran".
+  let recordCalls = 0
+  let lastKeys = []
 
   const record = () => {
     if (replaying) return
+    recordCalls++
     const key = currentPlace(ctx)
+    lastKeys.push(key === undefined ? null : key.slice(0, 60))
+    if (lastKeys.length > 8) lastKeys.shift()
     if (key !== undefined && history.visit(key)) visits++
   }
 
@@ -366,6 +374,11 @@ function install(ctx) {
       // and any future UI depend on where the stack actually stands.
       index: history.position,
       sources,
+      // How often the observers fired and what they saw. A stuck `recordCalls`
+      // means the subscriptions are dead; a growing one with an unchanging `key`
+      // means the place simply is not moving.
+      recordCalls,
+      lastKeys,
       current: snapshot.current === undefined ? null : snapshot.current.key,
     })
   }

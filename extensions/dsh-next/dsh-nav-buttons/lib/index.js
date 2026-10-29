@@ -75,6 +75,11 @@ export function apply(ctx) {
               // The place key the history currently holds: session/panel/tab,
               // separated by U+0001. Diagnostics only — it carries ids, not text.
               current: typeof parsed.current === 'string' ? parsed.current : null,
+              // Proves whether the page half's observers actually fire, and what
+              // they resolved to. Distinguishes "nothing moved" from "record is
+              // dead", which look identical in the counters alone.
+              recordCalls: Number(parsed.recordCalls) || 0,
+              lastKeys: Array.isArray(parsed.lastKeys) ? parsed.lastKeys.slice(-8) : [],
             }
             reportedAt = Date.now()
             res.writeHead(204).end()
