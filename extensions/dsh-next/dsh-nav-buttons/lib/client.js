@@ -194,6 +194,27 @@ function focusedTab(ctx) {
 }
 
 /**
+ * Read the three axis inputs separately.
+ *
+ * `currentPlace` joins them into one opaque key, which is exactly the wrong shape
+ * for diagnosis: a key that never changes cannot say whether all three axes are
+ * stuck or just the one being noticed. Reported alongside the key so a stuck axis
+ * is identifiable instead of inferred.
+ * @param ctx - client plugin context.
+ * @returns the raw per-axis values.
+ */
+function placeParts(ctx) {
+  const sessions = ctx.get('sessions')
+  const layout = ctx.get('layout')
+  const sessionId = mainSessionId(sessions)
+  return {
+    session: sessionId === undefined ? null : sessionId,
+    panel: layout === undefined ? null : layoutPanel(layout),
+    tab: focusedTab(ctx) ?? null,
+  }
+}
+
+/**
  * Show one place, restoring as much of it as the services allow.
  * @param ctx - client plugin context.
  * @param key - the place to show.
@@ -271,11 +292,16 @@ function install(ctx) {
   // zero sample count is ambiguous between "not installed" and "nobody clicked".
   let listenersInstalled = 0
   let lastEvent = null
+  // The raw per-axis inputs behind the last key. A key that never changes can mean
+  // "one axis is stuck" or "the axes are all stuck together"; only the parts say
+  // which, and the joined key hides them.
+  let lastParts = null
 
   const record = (fromSample = false) => {
     if (replaying) return
     if (fromSample) sampleCalls++
     else recordCalls++
+    lastParts = placeParts(ctx)
     const key = currentPlace(ctx)
     lastKeys.push(key === undefined ? null : key.slice(0, 60))
     if (lastKeys.length > 8) lastKeys.shift()
@@ -426,6 +452,7 @@ function install(ctx) {
       sampleCalls,
       listenersInstalled,
       lastEvent,
+      lastParts,
       lastKeys,
       current: snapshot.current === undefined ? null : snapshot.current.key,
     })
