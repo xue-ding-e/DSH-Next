@@ -38,6 +38,7 @@ async function fixture(options: {
   shadowed?: boolean
   elevate?: boolean
   messages?: DesktopMessages
+  distribution?: 'official' | 'next'
 } = {}) {
   const root = await mkdtemp(join(tmpdir(), 'dsh-command-dialog-'))
   onTestFinished(() => rm(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }))
@@ -50,11 +51,12 @@ async function fixture(options: {
   if (process.platform === 'win32') await copyFile(process.execPath, node)
   else await symlink(process.execPath, node)
   await writeFile(join(worker, 'package.json'), '{"type":"module"}\n')
+  const commandName = options.distribution === 'next' ? 'dsh-next' : 'dsh'
   const state = {
     fingerprint: 'a'.repeat(64), managed: options.managed ?? false, available: true, kind: options.managed ? 'symlink' : 'file',
-    destination: join(root, process.platform === 'win32' ? 'dsh.cmd' : 'dsh'),
+    destination: join(root, process.platform === 'win32' ? `${commandName}.cmd` : commandName),
     directory: root, launcher: join(root, 'desktop-dsh'),
-    activeCommand: options.managed && !options.shadowed ? join(root, process.platform === 'win32' ? 'dsh.cmd' : 'dsh') : join(root, 'other-dsh'),
+    activeCommand: options.managed && !options.shadowed ? join(root, process.platform === 'win32' ? `${commandName}.cmd` : commandName) : join(root, 'other-dsh'),
   }
   if (process.platform === 'darwin') {
     const shell = join(root, 'lookup-shell')
@@ -70,7 +72,7 @@ async function fixture(options: {
     'const operation = process.argv[2]',
     "const calls = join(import.meta.dirname, 'calls.jsonl')",
     "const attempted = existsSync(calls) && readFileSync(calls, 'utf8').includes('install')",
-    "appendFileSync(join(import.meta.dirname, 'calls.jsonl'), JSON.stringify({operation, expected:process.argv[3]})+'\\n')",
+    "appendFileSync(join(import.meta.dirname, 'calls.jsonl'), JSON.stringify({operation, expected:process.argv[3], ...process.argv[4] === 'next' ? { distribution: 'next' } : {}})+'\\n')",
     "if (operation === 'install' && elevate && !attempted) {",
     "  process.stdout.write(JSON.stringify({ok:false,code:'EACCES',message:'authorization required'}))",
     "} else if (operation === 'install' && failure) {",
@@ -82,7 +84,7 @@ async function fixture(options: {
   ].join('\n'))
   const show = vi.fn<(options: MessageBoxOptions) => Promise<MessageBoxReturnValue>>()
   const manager = new DesktopCommandManager({
-    resources, isPackaged: true, isInstalledLocation: () => true, isInstalling: () => false, isQuitting: () => false,
+    resources, distribution: options.distribution ?? 'official', isPackaged: true, isInstalledLocation: () => true, isInstalling: () => false, isQuitting: () => false,
     messages: () => options.messages ?? en, show,
   })
   const calls = async (): Promise<Array<{ operation: string; expected?: string }>> =>
@@ -159,4 +161,17 @@ it('coalesces repeated menu clicks and keeps update preparation waiting for the 
   await Promise.all([first, waiting])
   expect(idle).toBe(true)
   expect(await f.calls()).toEqual([{ operation: 'inspect' }])
+})
+
+it('passes the explicit Next identity to the worker and presents the separate command', async () => {
+  const f = await fixture({ distribution: 'next', managed: true })
+  f.show.mockResolvedValueOnce({ response: 1, checkboxChecked: false }).mockResolvedValue({ response: 0, checkboxChecked: false })
+  await f.manager.show()
+  expect(await f.calls()).toEqual([
+    { operation: 'inspect', expected: '', distribution: 'next' },
+    { operation: 'install', expected: 'a'.repeat(64), distribution: 'next' },
+    { operation: 'inspect', expected: '', distribution: 'next' },
+  ])
+  expect(f.show.mock.calls[0]![0].title).toBe('Manage dsh-next Command')
+  expect(f.show.mock.lastCall![0].detail).toContain('dsh-next --version')
 })

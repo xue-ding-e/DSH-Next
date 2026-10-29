@@ -3,19 +3,22 @@
 import { spawn } from 'node:child_process'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { CommandInstallationError, inspectFileCommand, installFileCommand, removeFileCommand } from './command-installation.ts'
+import { CommandInstallationError, inspectFileCommand, installFileCommand, removeFileCommand, type FileCommandInstallation } from './command-installation.ts'
+import { desktopCommandIdentity } from './command-identity.ts'
 
-const [operation, expected] = process.argv.slice(2)
+const [operation, expected, distribution = 'official'] = process.argv.slice(2)
 const fingerprint = expected ?? ''
 const resources = resolve(dirname(fileURLToPath(import.meta.url)), '../..')
 // This dedicated worker writes public command ownership metadata, not user secrets.
 if (process.platform === 'darwin') process.umask(0o022)
 
 try {
+  if (distribution !== 'official' && distribution !== 'next') throw new CommandInstallationError('EINVAL', 'Invalid command distribution.')
+  const identity = desktopCommandIdentity(distribution)
   if (!['inspect', 'install', 'remove'].includes(operation ?? '')) throw new CommandInstallationError('EINVAL', 'Invalid command-management operation.')
   if (operation !== 'inspect' && !/^[a-f0-9]{64}$/u.test(fingerprint)) throw new CommandInstallationError('EINVAL', 'Missing command confirmation.')
   if (process.platform === 'darwin') {
-    const options = { destination: '/usr/local/bin/dsh', launcher: join(resources, 'runtime', 'cli', 'bin', 'dsh'),
+    const options: FileCommandInstallation = { distribution, destination: join('/usr/local/bin', identity.name), launcher: join(resources, 'runtime', 'cli', 'bin', identity.name),
       linkHelper: join(resources, 'runtime', 'cli', 'link-entry') }
     const state = operation === 'inspect' ? await inspectFileCommand(options)
       : operation === 'install' ? await installFileCommand(options, fingerprint) : await removeFileCommand(options, fingerprint)
@@ -31,7 +34,7 @@ try {
       child.once('error', reject)
       child.once('close', accept)
     })
-    child.stdin.end(JSON.stringify({ operation, expected, directory: join(resources, 'runtime', 'cli', 'bin') }))
+    child.stdin.end(JSON.stringify({ operation, expected, commandName: identity.name, directory: join(resources, 'runtime', 'cli', 'bin') }))
     process.exitCode = await exited ?? 1
   } else {
     throw new CommandInstallationError('EUNSUPPORTED', 'Command installation is supported on macOS and Windows.')

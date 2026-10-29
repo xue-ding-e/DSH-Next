@@ -7,6 +7,7 @@ import { promisify } from 'node:util'
 import type { MessageBoxOptions, MessageBoxReturnValue } from 'electron'
 import type { DesktopMessages } from './locale.ts'
 import type { UpdateDialogOptions } from './update-dialog.ts'
+import { desktopCommandIdentity, type DesktopCommandDistribution } from './command-identity.ts'
 
 interface CommandState {
   fingerprint: string
@@ -35,6 +36,8 @@ export interface CommandPresentation {
 /** Shell-owned access to installed resources, locale and native dialogs. */
 export interface CommandManagerOptions {
   readonly resources: string
+  /** Explicit packaged identity; omission retains the official command. */
+  readonly distribution?: DesktopCommandDistribution
   readonly isPackaged: boolean
   readonly isInstalledLocation: () => boolean
   readonly isInstalling: () => boolean
@@ -51,11 +54,11 @@ function object(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
-function parseState(value: unknown, platform: NodeJS.Platform): CommandState {
+function parseState(value: unknown, platform: NodeJS.Platform, distribution?: DesktopCommandDistribution): CommandState {
   if (!object(value) || typeof value.fingerprint !== 'string' || !/^[a-f0-9]{64}$/u.test(value.fingerprint)
     || typeof value.managed !== 'boolean' || typeof value.available !== 'boolean') throw new Error('Invalid command-manager response.')
   const destination = platform === 'win32' && typeof value.directory === 'string'
-    ? join(value.directory, 'dsh.cmd') : value.destination
+    ? join(value.directory, desktopCommandIdentity(distribution).windowsName) : value.destination
   const launcher = platform === 'win32' ? destination : value.launcher
   if (typeof destination !== 'string' || !isAbsolute(destination) || typeof launcher !== 'string' || !isAbsolute(launcher)) {
     throw new Error('Invalid command-manager locations.')
@@ -72,6 +75,18 @@ function parseState(value: unknown, platform: NodeJS.Platform): CommandState {
     ...typeof value.backup === 'string' ? { backup: value.backup } : {},
     ...typeof value.preservedBackup === 'string' ? { preservedBackup: value.preservedBackup } : {},
   }
+}
+
+/**
+ * Keep locale-owned command copy aligned with the separately installed Next command.
+ * @param messages - Selected Desktop locale.
+ * @param distribution - Explicit distribution; omission leaves official copy unchanged.
+ * @returns A dictionary with only command labels specialized for the selected command.
+ */
+export function commandMessages(messages: DesktopMessages, distribution: DesktopCommandDistribution = 'official'): DesktopMessages {
+  if (distribution === 'official') return messages
+  return Object.fromEntries(Object.entries(messages).map(([key, value]) =>
+    [key, key.startsWith('cliCommand') ? value.replace(/\bdsh\b/gu, desktopCommandIdentity(distribution).name) : value])) as DesktopMessages
 }
 
 function format(text: string, path: string): string { return text.replace('{path}', path) }
@@ -109,10 +124,10 @@ export function presentCommandManagement(
   }
 }
 
-async function shellCommand(): Promise<{ activeCommand?: string; selectionUnknown?: boolean }> {
+async function shellCommand(distribution?: DesktopCommandDistribution): Promise<{ activeCommand?: string; selectionUnknown?: boolean }> {
   const shell = userInfo().shell
   if (shell === null) return { selectionUnknown: true }
-  const script = "printf '\\0DSH_COMMAND\\0'; command -v dsh; printf '\\0'"
+  const script = `printf '\\0DSH_COMMAND\\0'; command -v ${desktopCommandIdentity(distribution).name}; printf '\\0'`
   const { stdout } = await promisify(execFile)(shell, ['-ilc', script], { timeout: 5000, maxBuffer: 65536 })
   const value = stdout.split('\0DSH_COMMAND\0')[1]?.split('\0')[0]?.trim()
   if (value === undefined) return { selectionUnknown: true }
@@ -141,13 +156,13 @@ export class DesktopCommandManager {
     let stdout: string
     try {
       if (elevated) {
-        const appleScript = 'on run argv\nset cmd to "/usr/bin/env -i " & quoted form of (item 1 of argv) & " " & quoted form of (item 2 of argv) & " " & quoted form of (item 3 of argv) & " " & quoted form of (item 4 of argv)\ndo shell script cmd with administrator privileges\nend run'
-        stdout = (await promisify(execFile)('/usr/bin/osascript', ['-e', appleScript, node, entry, operation, expected ?? ''],
+        const appleScript = 'on run argv\nset cmd to "/usr/bin/env -i " & quoted form of (item 1 of argv) & " " & quoted form of (item 2 of argv) & " " & quoted form of (item 3 of argv) & " " & quoted form of (item 4 of argv) & " " & quoted form of (item 5 of argv)\ndo shell script cmd with administrator privileges\nend run'
+        stdout = (await promisify(execFile)('/usr/bin/osascript', ['-e', appleScript, node, entry, operation, expected ?? '', this.options.distribution ?? 'official'],
           { maxBuffer: 65536 })).stdout
       } else {
         const env = Object.fromEntries(Object.entries(process.env)
           .filter(([name]) => !/KEY|SECRET|TOKEN|PASSWORD|^NODE_OPTIONS$|^NODE_PATH$/iu.test(name)))
-        stdout = (await promisify(execFile)(node, [entry, operation, ...expected === undefined ? [] : [expected]],
+        stdout = (await promisify(execFile)(node, [entry, operation, ...this.options.distribution === 'next' ? [expected ?? '', 'next'] : expected === undefined ? [] : [expected]],
           { timeout: 30000, maxBuffer: 65536, windowsHide: true, env })).stdout
       }
     } catch (error) {
@@ -166,14 +181,14 @@ export class DesktopCommandManager {
       }
       throw new CommandWorkerError(code, typeof response.message === 'string' ? response.message : 'Command management failed.')
     }
-    return parseState(response.state, process.platform)
+    return parseState(response.state, process.platform, this.options.distribution)
   }
 
   private async inspect(): Promise<CommandState> {
     const state = await this.worker('inspect')
     if (process.platform !== 'darwin') return state
     try {
-      return { ...state, ...await shellCommand() }
+      return { ...state, ...await shellCommand(this.options.distribution) }
     } catch {
       // A custom login shell can fail or wait for interaction; its output is not a diagnostic.
       return { ...state, selectionUnknown: true }
@@ -181,7 +196,7 @@ export class DesktopCommandManager {
   }
 
   private async run(): Promise<void> {
-    const messages = this.options.messages()
+    const messages = commandMessages(this.options.messages(), this.options.distribution)
     if (!this.options.isPackaged || !this.options.isInstalledLocation()) {
       await this.options.show({ type: 'info', title: messages.cliCommandTitle, message: messages.cliCommandInstallApp, buttons: [messages.cliCommandClose] })
       return
