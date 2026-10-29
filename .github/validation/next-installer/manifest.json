@@ -1,0 +1,754 @@
+{
+  "schemaVersion": 1,
+  "repository": "xue-ding-e/DSH-Next",
+  "repositoryId": "1437727533",
+  "controlRef": "refs/heads/validation/next-installer-long-path-20261029",
+  "source": "51c24a29f50809bea71b0ce0b6f0550fe50bbd20",
+  "parent": "07c5aba2260cc75fd8b862e7eb06951f962ade6c",
+  "tree": "99ddc0db302f0f8812b1e041633eee95998a87f2",
+  "version": "0.2.1-rc.3.20261029.1",
+  "upgradeVersion": "0.2.1-rc.3.20261029.2",
+  "node": "v24.19.0",
+  "pnpm": "11.28.5",
+  "candidatePaths": [
+    ".github/validation/next-desktop.test.mjs",
+    "apps/desktop-host/src/cli.ts",
+    "apps/desktop/cli/dsh-next",
+    "apps/desktop/cli/dsh-next.cmd",
+    "apps/desktop/electron-builder.config.d.mts",
+    "apps/desktop/installer/uninstall.nsh",
+    "apps/desktop/package.json",
+    "apps/desktop/packaging/README.i18n.yaml",
+    "apps/desktop/packaging/README.md",
+    "apps/desktop/packaging/README.zh.md",
+    "apps/desktop/scripts/command-path.ps1",
+    "apps/desktop/scripts/desktop-build-version-discovery.ts",
+    "apps/desktop/scripts/desktop-package-environment.mjs",
+    "apps/desktop/scripts/electron-builder-config.mjs",
+    "apps/desktop/scripts/next-package-environment.d.mts",
+    "apps/desktop/scripts/next-package-environment.mjs",
+    "apps/desktop/scripts/package-target.ts",
+    "apps/desktop/scripts/prepare-cli.ts",
+    "apps/desktop/scripts/prepare-runtime.ts",
+    "apps/desktop/scripts/smoke-packaged-runtime.ts",
+    "apps/desktop/scripts/smoke-runtime.ts",
+    "apps/desktop/src/command-identity.ts",
+    "apps/desktop/src/command-installation.ts",
+    "apps/desktop/src/command-management.ts",
+    "apps/desktop/src/command-manager-entry.ts",
+    "apps/desktop/src/locale.ts",
+    "apps/desktop/src/main.ts",
+    "apps/desktop/src/next-cli-entry.ts",
+    "apps/desktop/src/next-distribution.ts",
+    "apps/desktop/src/next-manual-update.ts",
+    "apps/desktop/src/next-profile.ts",
+    "apps/desktop/tests/command-installation.spec.ts",
+    "apps/desktop/tests/command-management.spec.ts",
+    "apps/desktop/tests/command-manager-flow.spec.ts",
+    "apps/desktop/tests/desktop-build-version-discovery.spec.ts",
+    "apps/desktop/tests/expected/command-next-en-US.json",
+    "apps/desktop/tests/expected/command-next-zh-CN.json",
+    "apps/desktop/tests/fixtures/command-path.ps1",
+    "apps/desktop/tests/main-startup.spec.ts",
+    "apps/desktop/tests/next-cli.spec.ts",
+    "apps/desktop/tests/next-distribution.spec.ts",
+    "apps/desktop/tests/package-target.spec.ts",
+    "apps/desktop/tests/prepared-runtime-smoke.spec.ts",
+    "apps/desktop/tsdown.config.ts"
+  ],
+  "files": {
+    ".github/validation/next-desktop.test.mjs": {
+      "blob": "352f35bce7cd9d3d4d166e9b07c5fff8c0e3a5cd",
+      "sha256": "61d71079e97f23b50f2ea55f622cae8e0098ca8ed6611e15099b9cb595348e94"
+    },
+    "apps/desktop-host/src/cli.ts": {
+      "blob": "75809ff232c6fa61b69d627d1f79786453b501ac",
+      "sha256": "97695182ca0bd5014e97bd5a4cda08b9da7d9a07b5c853b74ce4c2e9615d54be"
+    },
+    "apps/desktop/cli/dsh-next": {
+      "blob": "e94afe0b105176bf8ab387304f4de6618903d316",
+      "sha256": "260fbd72b321d6a8926b0d2d655271a7ac795b3c7abc322b4a24e16759f209c1"
+    },
+    "apps/desktop/cli/dsh-next.cmd": {
+      "blob": "7327c6081060eac153dfa54d0ea47b4dbc7a153f",
+      "sha256": "4ee8e029981e41ed2f44d47c4e394668e45f1e1a01fab659ed2d3d1ed7db1f00"
+    },
+    "apps/desktop/electron-builder.config.d.mts": {
+      "blob": "c49b1d28d70cc091280a08c31a44ce43110865a9",
+      "sha256": "05bc97ceb8dbd0c9b52a801277959ef336716a067a47966a9fac62a04ee2b4a1"
+    },
+    "apps/desktop/installer/uninstall.nsh": {
+      "blob": "17380076ee92dcbae510134bfdf30ace3996c8de",
+      "sha256": "901cfc80a3c9cdfd37efb913362a21828e9379e1463aa6c8675ec28486d7a75e"
+    },
+    "apps/desktop/package.json": {
+      "blob": "acbd400b3ca0df9bbbd167b325d74ec1194785f9",
+      "sha256": "47c7428b80105a93152e8a850b6765304a2cd195a3dd92deefc9c32ecfb585f7"
+    },
+    "apps/desktop/packaging/README.i18n.yaml": {
+      "blob": "548d8c7dd021c2adc6ef65ba92cfb1849026b880",
+      "sha256": "cc07c3c183ad9436b5206e30eeea4db89e2e40e6fb9b7d7ac1e0ff95d6f12697"
+    },
+    "apps/desktop/packaging/README.md": {
+      "blob": "bf4a9c9951419fc6b0f650c2a33906796303c075",
+      "sha256": "ea7b7c61dd777f74f6f408c1acd1bcaeca34dfcce2d64cd5667ea703921472c5"
+    },
+    "apps/desktop/packaging/README.zh.md": {
+      "blob": "dd13e54412fab5d09dbdb1bfa1c9c1e6039dd064",
+      "sha256": "cd0042ce8fbea1c0bc35412d57f0e4df4506964324fcef047b373eca2b5a003c"
+    },
+    "apps/desktop/scripts/command-path.ps1": {
+      "blob": "20ad255c93a59f130a827fe57f9f5bc9c705bfc4",
+      "sha256": "479e023bae37af4c92bb14588c7851d07317c2d863e1a0280a773c8b9da7d94c"
+    },
+    "apps/desktop/scripts/desktop-build-commit.mjs": {
+      "blob": "28d7cda5136c576a0134f41071740ba7b6687e39",
+      "sha256": "6de20f78a614f15588b1888dc710ca29ba9269257696a9f8def5b72d7b15d36b"
+    },
+    "apps/desktop/scripts/desktop-build-version-discovery.ts": {
+      "blob": "caf2cca9c16eacec092d6849c6de9898a6c5a3dd",
+      "sha256": "f2b892ed37ed1a7996d67a55b40bcc5ff7256a526ecf7acd0b2d52a74b1e6949"
+    },
+    "apps/desktop/scripts/desktop-package-environment.mjs": {
+      "blob": "6bef87c1783b338498dfbd7452be316af00a3ae6",
+      "sha256": "ea9f87bc85d2e2f571c4001e4269bc76be2cd12a1ba3f29ee8e0bdd89a6bd485"
+    },
+    "apps/desktop/scripts/electron-builder-config.mjs": {
+      "blob": "7192ce77eaeff3ce0367f1d98c07ae222186cce3",
+      "sha256": "b5faf4e1329f637fca6d25bd8e91546edc9db416bb6a02d5a9c66fbc266ddbc4"
+    },
+    "apps/desktop/scripts/installer.nsh": {
+      "blob": "43c6a4c7d7d5862489e7ad5c24fee0c60949cc95",
+      "sha256": "ac6fe5da94c56679f0a39ab69ec683268f93df519f6843be21be1eb5b1e7afdf"
+    },
+    "apps/desktop/scripts/next-package-environment.d.mts": {
+      "blob": "c79244cea12badc109dd7963e38ed93e619cfea7",
+      "sha256": "767d4e658e4c45a3144b1ffeccb55176365c36f07ebafbe0131070f9d9918200"
+    },
+    "apps/desktop/scripts/next-package-environment.mjs": {
+      "blob": "50ec5ad1ef24bc00fa51a40142937d5f4c5b3b63",
+      "sha256": "703bf4c669361ea78ff611163dd1ae13d492982ff4fdbf4c67ceeb467f019043"
+    },
+    "apps/desktop/scripts/package-target.ts": {
+      "blob": "24dc7ef53a7014793c858d29e84f6498cd559df0",
+      "sha256": "39017805173f4884f6cdcb430949681fd8ccd7e3ffa216bd7edaa287eaf0de39"
+    },
+    "apps/desktop/scripts/prepare-cli.ts": {
+      "blob": "49aa7ef3d2d594de049b66b5efc9bf396fb77e50",
+      "sha256": "2e6ce3a1dc077e3291f7fbd1c3e49b21e37f5c7de31554c7b25f424195c92eff"
+    },
+    "apps/desktop/scripts/prepare-runtime.ts": {
+      "blob": "2e7766ff146038fc2ede88f7fa48078dfa28d9fb",
+      "sha256": "df58b1d3ced7c72bbdbfbe52a5fd97eeea64cc42fa2081c178d6264bd9dd7b42"
+    },
+    "apps/desktop/scripts/smoke-packaged-runtime.ts": {
+      "blob": "df5cda9b6214353ef0b1382e869f0ad21722c8f3",
+      "sha256": "16a395b842ac98e54c0c1808b6154d394458d7b85fe13320adfcefe10afc2c56"
+    },
+    "apps/desktop/scripts/smoke-runtime.ts": {
+      "blob": "c35fea475cf17440d88ac5b2251621c3ce8760b5",
+      "sha256": "7394558f35bff337428fc341e215891b084e701ab376d4d6dd11d18d276eba1a"
+    },
+    "apps/desktop/src/command-identity.ts": {
+      "blob": "531a552f7ae8202e99aa01114a8088fecd2586d9",
+      "sha256": "489417a97280760fbd7b2e48217f119331ee623f56e89ce4618803336f4e61c0"
+    },
+    "apps/desktop/src/command-installation.ts": {
+      "blob": "dc9f1e58b9e1981033fd7d23d62f274bb4117a66",
+      "sha256": "b894d010df8ac39226953ee1468a7df807e0e7839971cc07aa7a840c2dc92f27"
+    },
+    "apps/desktop/src/command-management.ts": {
+      "blob": "b20cb52e3950e2ed02b9b37a31576a8563f7171a",
+      "sha256": "ee63654dd5a9a22d24a18d59a3d7bebbdbb39d135fb6109748e04c5463137af1"
+    },
+    "apps/desktop/src/command-manager-entry.ts": {
+      "blob": "afa5b1204ac9ad61582eaac5d874013f4c1c6f22",
+      "sha256": "4f60ea3c41f858bc022a7beb584444c9c9ddca7f49b8c55ddb657b78ea72c305"
+    },
+    "apps/desktop/src/locale.ts": {
+      "blob": "620179ddc8336a31a7f2ca3b8213ea11ef769f16",
+      "sha256": "5a2e99008cf2b6d313282c7e72fa7810081a889c2fa0c7f428c5bea8305dee21"
+    },
+    "apps/desktop/src/main.ts": {
+      "blob": "10e7cda68f5481f11993d5f3c507b5e6a2dd8363",
+      "sha256": "732763ae58129a2fd6b49c09e76b49641db918d5cf913cf0d7f17173733df9d9"
+    },
+    "apps/desktop/src/next-cli-entry.ts": {
+      "blob": "05b224182c47f27b3fbb204956c4ccf5b50e624e",
+      "sha256": "5689710dcbeef7d56bee9e1d5ac169b9b9a98e6c2e661ffbd2c9dd123ebe0b47"
+    },
+    "apps/desktop/src/next-distribution.ts": {
+      "blob": "2e5b77bccd72bb229b3a8bf74cce067f19d3b02a",
+      "sha256": "e6c98d30a316e41a941d5c3957705445a3d9fb305a847e49489131b074db1722"
+    },
+    "apps/desktop/src/next-manual-update.ts": {
+      "blob": "0ef5838cfd4be4173c514d4684cce025adae8d98",
+      "sha256": "b8359db4ce3c8d54919011b078017ea56403781992fd5b11c4f3d3240f7cdd48"
+    },
+    "apps/desktop/src/next-profile.ts": {
+      "blob": "e70bac4f4112e873c51155bf88743d3a53cee4bb",
+      "sha256": "0282a58101b66f5009488a69c2c9ce6c9486c4b8bd508eed8c531c7b3bfdaa25"
+    },
+    "apps/desktop/tests/cli-launcher.spec.ts": {
+      "blob": "67e38da2564361c971d82f75248f49bcafdfed6e",
+      "sha256": "86db8465e3c720f00a5a621e599fff6fad5831642b2e99ed9c5d6245f2b3fcc0"
+    },
+    "apps/desktop/tests/command-installation.spec.ts": {
+      "blob": "f6b26ea80cc73476a08d69d3734b856d501e4f85",
+      "sha256": "d95f1c77f64df4714b6a5cc90c93db386c6203100d0704e187543f897b6aafbd"
+    },
+    "apps/desktop/tests/command-management.spec.ts": {
+      "blob": "a99f90618cfb6424366c169d25ffd97478de853a",
+      "sha256": "b06d3b0d316c2ac568f1f7b47a2a02feb88f0205c0adfb1d76ae48ae015f5d49"
+    },
+    "apps/desktop/tests/command-manager-flow.spec.ts": {
+      "blob": "de87c8517a9632ae2944714f1066a4420d4323ce",
+      "sha256": "83b1230d982b3fbec5292693a856a7a191e0e20ca2a6dbc7fbbe0fef4869b2f8"
+    },
+    "apps/desktop/tests/command-path.spec.ts": {
+      "blob": "0b6612fdd0d76b887d02e037ab463ff406315982",
+      "sha256": "000c1c24c3b3078164b144834c3b8dc0c6b327e18d384773c6f4c090b9fe3f10"
+    },
+    "apps/desktop/tests/desktop-build-version-discovery.spec.ts": {
+      "blob": "56d695ec7daa85bfbaade0aa16068210750f8bea",
+      "sha256": "86f707ba014c8c60595840b037acf9f68899a4f50e0f44f0c36d2a906b221b20"
+    },
+    "apps/desktop/tests/expected/command-next-en-US.json": {
+      "blob": "babef1164d53e32d8c3e0c27216cadbaaeb7fd1d",
+      "sha256": "a29be244f2b287d2c13d2566149d795adcbb2ef54b5415726326bc67565c0266"
+    },
+    "apps/desktop/tests/expected/command-next-zh-CN.json": {
+      "blob": "a089dad9b9ec2d53681fececcd65e0804a15bd61",
+      "sha256": "7d52361d653ccfcc631b3c712848f79ca166cf610cb0bd011a83159d785db636"
+    },
+    "apps/desktop/tests/fixtures/command-path.ps1": {
+      "blob": "74211cb85fbf54c110d8f80d9b19144b6506fbd7",
+      "sha256": "c33bee04f0ecc61a486488ed0f9028b75b63f57b43eb8a86c5ca2e8af1852ac3"
+    },
+    "apps/desktop/tests/main-startup.spec.ts": {
+      "blob": "16f694c440c635ac72de701ec905c677aedf17a0",
+      "sha256": "5cdf688bc79bd4f4211d4563cdb789ef8d9865b31e3dff7bb3c26f26fdca93f1"
+    },
+    "apps/desktop/tests/next-cli.spec.ts": {
+      "blob": "c6593c460e025e56e5ab15df716d405e69aa83b1",
+      "sha256": "c8e59d9c689f37a62b20c8ef6fab9001b6e533582a8d2c74094bc37179fa1a62"
+    },
+    "apps/desktop/tests/next-distribution.spec.ts": {
+      "blob": "552dd79f4ad0f4f040ea663476222259ec956f2f",
+      "sha256": "9877bf5e63ab92a2c325860cc6985190cc4f3e051109664a671ef19a4ca19175"
+    },
+    "apps/desktop/tests/package-target.spec.ts": {
+      "blob": "4248458710ecb18cd7f34301e11ba4aad9a5e6b6",
+      "sha256": "8a84e743f87e20fc57afa7d5dbc6ba73f755e48a1a331958c2fcdfff74d0bbd0"
+    },
+    "apps/desktop/tests/prepared-runtime-smoke.spec.ts": {
+      "blob": "e1629ad92e0a8e61b344101ec8e76cfa6174036e",
+      "sha256": "56cdca2291e5c9b7455103b8d9221f8ca8b18c5f9dc125560e981a098d4833f6"
+    },
+    "apps/desktop/tests/windows-cli-signals.spec.ts": {
+      "blob": "1387bae7fbb94331312350e1a58141006df876ea",
+      "sha256": "d1cf112dc7f64a15ca49005aa4d6f19ffebe9fb46993ab90c6d99caa8147a928"
+    },
+    "apps/desktop/tsdown.config.ts": {
+      "blob": "414de9492703192839d9ecfd22e5ca79d22327f1",
+      "sha256": "f137d89846178449e2ccdba872a48a7583fc90ae32d42ef1df7a68113d36df5c"
+    },
+    "apps/web/tests/row-context-menu.e2e.ts": {
+      "blob": "e3059b186e6778392a454d2898b97162d1e9135f",
+      "sha256": "a9d2a57cc5c9867a47d0da640f46da9f56d0cfce6c266b2cdc14a851acec216e"
+    },
+    "package.json": {
+      "blob": "01e6ce1bad2b6e332a652071a4d31278d09391f1",
+      "sha256": "66198aca0bdd771b052545470137723bcf30a53fb92a1da611d9bb2f490952ff"
+    },
+    "packages/client/ui-primitives/src/Menu.tsx": {
+      "blob": "e350eb5b293a857ac3aa1570c1188c09595dc9ff",
+      "sha256": "98517f8b310ffb7c9cc3581b8a20a3a2794027d080bbc9c65e4fbd8d009a611e"
+    },
+    "packages/client/ui-primitives/tests/atoms.client.spec.tsx": {
+      "blob": "f409139b51f8a962bd8c5bce630719b3d5893879",
+      "sha256": "8df3c401d0c7f824ae00b285944f2a6683d04288caa236335ae33d7c1e21dae6"
+    },
+    "packages/client/ui-workspace/src/client/rows/Rows.tsx": {
+      "blob": "cc291bd99faa211862a1bd51890772888dc6db6d",
+      "sha256": "1203bada4966236944d61c8bfe093563a099360ec1e953e06073656ba0adab36"
+    },
+    "packages/client/ui-workspace/tests/rows.client.spec.tsx": {
+      "blob": "45be9d036fb0e6c56297eda1aafda9b1fd1d3ad7",
+      "sha256": "d38cbe7391ca0e6f9cb7d4ba86cbd577d3ef2f11fc2afc2a5807df31d676650e"
+    },
+    "pnpm-lock.yaml": {
+      "blob": "5698f63cd921f6163e1910b8a0ddd148fbfcf385",
+      "sha256": "359977689bf8b756e4c9ebe227b1ad5df98e28befbd1fa3b21f6983596d55cee"
+    },
+    "pnpm-workspace.yaml": {
+      "blob": "e9f3c19f4489ffb84bae17686e3879375fd983aa",
+      "sha256": "de115ba271b69d90470791124529424c88ebf2c13049f8946dd44ec5aed8fd4a"
+    },
+    "scripts/build.ts": {
+      "blob": "6dcd73590b268907093b487059411bcac6d8bbf3",
+      "sha256": "c210b92fd300f1f122619cefc57ee3a7dcdc1b924c3c0bdf5e2cfbd6bf82325b"
+    },
+    "vitest.config.ts": {
+      "blob": "87ead1a62aeaf45f07a20d2c22c0b259f339de77",
+      "sha256": "e927e8da804ad66ffabd6e09359da754c8b289c12e77be789f5cbe98c11b1a68"
+    }
+  },
+  "desktopTests": [
+    "apps/desktop/tests/main-startup.spec.ts",
+    "apps/desktop/tests/desktop-build-version-discovery.spec.ts",
+    "apps/desktop/tests/package-target.spec.ts",
+    "apps/desktop/tests/next-distribution.spec.ts",
+    "apps/desktop/tests/next-cli.spec.ts",
+    "apps/desktop/tests/command-installation.spec.ts",
+    "apps/desktop/tests/command-manager-flow.spec.ts",
+    "apps/desktop/tests/command-path.spec.ts",
+    "apps/desktop/tests/cli-launcher.spec.ts",
+    "apps/desktop/tests/windows-cli-signals.spec.ts"
+  ],
+  "pointerTests": [
+    "packages/client/ui-workspace/tests/rows.client.spec.tsx",
+    "packages/client/ui-primitives/tests/atoms.client.spec.tsx"
+  ],
+  "pointerBrowser": "apps/web/tests/row-context-menu.e2e.ts",
+  "testInventory": {
+    "apps/desktop/tests/main-startup.spec.ts": {
+      "total": 136,
+      "requiredTitles": [
+        "starts the Host with authentication popups disabled when local settings are invalid",
+        "routes shell update documents and assets through the registered main protocol handler",
+        "serves shell dialogs and their assets without forwarding them to the Host",
+        "installs hidden native DevTools shortcuts in the macOS application menu",
+        "checks updates from the application menu without offering disabled test authentication",
+        "keeps a received mandatory decision when test cookies expire with popups disabled",
+        "shows one explained startup login before Host readiness and joins concurrent checks without reopening it",
+        "does not open Feishu when the user declines test login",
+        "does not require gateway login to download an already available ordinary update",
+        "retains the embedded block and running Host after expired test login is cancelled",
+        "persists opt-in update evidence from the real main entry without private diagnostics",
+        "accepts product IPC only from the current application top frame in the owned main window",
+        "serves packaged shell documents instead of rejecting the shell origin",
+        "covers the macOS vibrancy reattach gap with an opaque base while minimized or hidden",
+        "follows the Windows primary document language and palette without trusting other frames",
+        "maps Windows caption menus to localized native commands and rejects foreign popup requests",
+        "shares login key discovery with onboarding and rejects foreign renderers",
+        "enlarges only an active onboarding window and keeps its size after completion",
+        "registers the window-owned directory picker during startup and rejects foreign callers",
+        "holds boot injections until the Host is ready and rejects foreign boot callers",
+        "retains macOS native editing actions on right-click and only copy for selected read-only text",
+        "opens message links externally while retaining same-origin application navigation",
+        "reconstructs Next renderer status from its own coordinator and opens only its manual release prompt",
+        "reopens a dismissed Next check using the same lookup without late or duplicate dialogs",
+        "hides the workspace before intentional Host shutdown can look like reconnection",
+        "routes closing through the tray confirmation and keeps the Host running",
+        "hides a macOS owner with a mandatory view without quitting or stopping the Host",
+        "keeps the workspace visible while acknowledgement is pending and ignores a destroyed window",
+        "focuses an existing shell dialog instead of replacing it with a close confirmation",
+        "leaves macOS fullscreen before hiding on close and reopens the hidden window on activate",
+        "skips the confirmation during a macOS shutdown but asks again once a cancelled shutdown returns focus",
+        "drops a pending confirmation when a bypassing quit starts first",
+        "asks before quitting when the Host reports interruptible work and cancels without stopping anything",
+        "warns about running tasks when the inspection fails and quits directly on session end or a development restart",
+        "does not block a Windows session end on the quit confirmation",
+        "defers the downloaded-update confirmation until the hidden window is shown again",
+        "waits for Platform view storage cleanup before an ordinary quit completes",
+        "reports a Platform cleanup failure without ending the Host shutdown early",
+        "reports file cleanup failure without ending Host shutdown early",
+        "waits for image cleanup before stopping the Host for installation",
+        "continues installation after reporting file cleanup failure",
+        "finishes quitting when the native window is destroyed before its closed listener clears ownership",
+        "shares the failed-check deadline across focus and resume, while explicit checks reset polling",
+        "blocks subsequent product operations without stopping the Host and clears only on a fresh no-force policy",
+        "keeps one checking dialog open until the manual check settles, then reports the current version",
+        "reports a manual check failure without offering a download",
+        "reports a stale download confirmation as a download failure",
+        "keeps policy failures silent while an ordinary update proceeds",
+        "does not wait for a pending policy request before proceeding with an ordinary update",
+        "lets a confirmed mandatory policy preempt an ordinary result dialog",
+        "downloads on the first click and opens installation confirmation only after readiness",
+        "does not lock or stop tasks when restart confirmation is dismissed",
+        "rechecks admission after approval and rejects work that started during confirmation",
+        "warns about active tasks and waits for a graceful Host exit after approval",
+        "unlocks admission without stopping the Host when request draining fails",
+        "keeps the Host running after a fullscreen timeout and accepts a later retry",
+        "waits for Platform storage cleanup before the installer takes over",
+        "reports a Platform storage cleanup failure as preparation failure without stopping the Host",
+        "does not replace a Host whose failed stop has not confirmed process exit",
+        "reports replacement startup failure without authorizing installation or retrying automatically",
+        "opens fatal recovery when the replacement page cannot reload",
+        "reports a window construction failure without requiring a window",
+        "accepts Web fatal reports only from the primary application frame",
+        "ignores subresource failures and navigation cancellation but reports a failed main document",
+        "offers all recovery choices when resources fail before the Host starts",
+        "ignores clean renderer exits and exits of a destroyed window",
+        "reports a rejected document load without navigating to a recovery page",
+        "writes the Host's own diagnostic into a startup-phase crash report when the Host reports a fatal error before ready",
+        "attaches the primary window's error-level console output to a running-phase Host crash report",
+        "creates the Host only after the login-shell read and ends the read on quit",
+        "prepares recovery offscreen and starts one Host before choosing the first visible window",
+        "prepares an independent plugin profile for the unpackaged Host",
+        "fails an unpackaged launch that receives no primary runtime directory",
+        "keeps startup errors in the existing window without a retry handler",
+        "keeps recovery visible when the backend fails during the welcome preference read",
+        "waits for a pending child to exit on quit without late window navigation",
+        "disables native product events for a disabled Desktop launch"
+      ],
+      "platformSkips": {}
+    },
+    "apps/desktop/tests/desktop-build-version-discovery.spec.ts": {
+      "total": 9,
+      "requiredTitles": [
+        "numbers Next artifacts independently without consulting the official bucket",
+        "formats the date segment in the build host time zone",
+        "starts at one when nothing is taken",
+        "numbers a stable product version under the documented test prerelease",
+        "numbers after the highest local artifact for the same date",
+        "ignores artifacts from another date or product version",
+        "reads macOS artifact names too",
+        "numbers after existing unnotarized DMG and ZIP artifacts",
+        "counts unsigned Windows artifacts written under their own suffix"
+      ],
+      "platformSkips": {}
+    },
+    "apps/desktop/tests/package-target.spec.ts": {
+      "total": 14,
+      "requiredTitles": [
+        "requires explicit unsigned mode for the independently identified Next installer",
+        "selects matching runtime and electron-builder architectures",
+        "allows an Apple Silicon host to build the Intel target through Rosetta",
+        "rejects unsupported targets and hosts before building",
+        "parses installer and unpacked-directory invocations",
+        "parses a build version, including the separator a pnpm run script forwards",
+        "keeps electron-builder publishing disabled for the separate validated upload",
+        "accepts unsigned supported targets and rejects preparation-only use",
+        "removes ambient certificate inputs for unsigned builds and overrides an inherited signing mode",
+        "keeps Windows signing fields out of build and runtime preparation subprocesses",
+        "keeps COS credentials out of every packaging subprocess",
+        "allows skipping notarization only for signed macOS packages"
+      ],
+      "platformSkips": {}
+    },
+    "apps/desktop/tests/next-distribution.spec.ts": {
+      "total": 4,
+      "requiredTitles": [
+        "leaves wholly unmarked official packages unchanged, but refuses partially marked Next packages"
+      ],
+      "platformSkips": {}
+    },
+    "apps/desktop/tests/next-cli.spec.ts": {
+      "total": 9,
+      "requiredTitles": [
+        "prepares only dsh-next.cmd for Next while keeping the official launcher unchanged",
+        "dispatches once through the actual bootstrap and shared entry with separate home and terminal streams",
+        "keeps nested Next CLI invocations isolated while retaining the original upstream root",
+        "propagates a shared CLI failure instead of reporting successful bootstrap completion",
+        "preserves the official launcher entry and inherited home without Next mapping"
+      ],
+      "platformSkips": {}
+    },
+    "apps/desktop/tests/command-installation.spec.ts": {
+      "total": 18,
+      "requiredTitles": [
+        "keeps Next links, receipts and backups separate from the official command",
+        "installs and removes only its own link",
+        "preserves the raw target of an existing relative npm link and restores it",
+        "restores a regular executable with its bytes and permission bits",
+        "rejects a changed confirmation without moving the replacement",
+        "repairs a moved application without replacing the original backup",
+        "leaves a command installed by someone else after Desktop registration intact",
+        "refuses to restore a modified backup",
+        "retains ownership and the original inode when receipt publication fails during repair",
+        "preserves a backup replaced after the removal decision and restores the Desktop link",
+        "retains both removal and restoration failures with the preserved link location",
+        "cleans the obsolete Desktop link after backup restoration even when receipt removal fails",
+        "leaves a replacement at the original backup path after restoration has claimed its source",
+        "rejects directories and non-executable launcher resources",
+        "rejects linked receipts and backup paths outside the command directory",
+        "serializes simultaneous choices so only one stale snapshot can install"
+      ],
+      "platformSkips": {
+        "win32": [
+          "keeps Next links, receipts and backups separate from the official command",
+          "installs and removes only its own link",
+          "preserves the raw target of an existing relative npm link and restores it",
+          "restores a regular executable with its bytes and permission bits",
+          "rejects a changed confirmation without moving the replacement",
+          "repairs a moved application without replacing the original backup",
+          "leaves a command installed by someone else after Desktop registration intact",
+          "refuses to restore a modified backup",
+          "retains ownership and the original inode when receipt publication fails during repair",
+          "preserves a backup replaced after the removal decision and restores the Desktop link",
+          "retains both removal and restoration failures with the preserved link location",
+          "cleans the obsolete Desktop link after backup restoration even when receipt removal fails",
+          "leaves a replacement at the original backup path after restoration has claimed its source",
+          "rejects directories and non-executable launcher resources",
+          "rejects linked receipts and backup paths outside the command directory",
+          "serializes simultaneous choices so only one stale snapshot can install",
+          "preserves a replacement arriving during install after the approved entry was read",
+          "preserves a replacement arriving during remove after the approved entry was read"
+        ]
+      }
+    },
+    "apps/desktop/tests/command-manager-flow.spec.ts": {
+      "total": 9,
+      "requiredTitles": [
+        "requires confirmation before replacing an existing command",
+        "passes the displayed fingerprint and reports a stale worker refusal",
+        "keeps confirmation when repairing a command shadowed by another installation",
+        "coalesces repeated menu clicks and keeps update preparation waiting for the active decision",
+        "passes the explicit Next identity to the worker and presents the separate command"
+      ],
+      "platformSkips": {
+        "linux": [
+          "keeps a declined worker response through the AppleScript transport",
+          "returns without an error dialog when administrator authorization is cancelled"
+        ],
+        "win32": [
+          "keeps a declined worker response through the AppleScript transport",
+          "returns without an error dialog when administrator authorization is cancelled"
+        ]
+      }
+    },
+    "apps/desktop/tests/command-path.spec.ts": {
+      "total": 1,
+      "requiredTitles": [],
+      "platformSkips": {
+        "linux": [
+          "preserves unrelated PATH entries and rejects stale or foreign removal"
+        ]
+      }
+    },
+    "apps/desktop/tests/cli-launcher.spec.ts": {
+      "total": 2,
+      "requiredTitles": [
+        "preserves common arguments, cwd, environment, binary input, stderr and exit status"
+      ],
+      "platformSkips": {
+        "win32": [
+          "resolves chained command symlinks without expanding argument contents"
+        ]
+      }
+    },
+    "apps/desktop/tests/windows-cli-signals.spec.ts": {
+      "total": 2,
+      "requiredTitles": [],
+      "platformSkips": {
+        "linux": [
+          "delivers SIGINT before process exit",
+          "delivers SIGBREAK before process exit"
+        ]
+      }
+    },
+    "packages/client/ui-primitives/tests/atoms.client.spec.tsx": {
+      "total": 55,
+      "requiredTitles": [
+        "classifies 'iPhone'",
+        "classifies 'iPad'",
+        "classifies 'iPod'",
+        "classifies 'Android phone'",
+        "classifies 'Android tablet'",
+        "classifies 'desktop-mode iPad'",
+        "classifies 'Mac'",
+        "classifies 'Windows touchscreen'",
+        "classifies 'native networking UA'",
+        "classifies 'unknown UA'",
+        "shares a cached true result between callers until the module reloads",
+        "shares a cached false result between callers until the module reloads",
+        "retains automatic focus styling while typing and restores it for keyboard navigation",
+        "exposes its native button for focus and releases the ref on unmount",
+        "renders children, icon, and forwards clicks",
+        "disabled blocks interaction",
+        "selects the outline stylesheet for outlined actions only",
+        "keeps the native element and focus when the variant changes",
+        "is a span when static, a button when clickable",
+        "active and className land on both static and interactive forms",
+        "exposes its native input for focus and releases the ref on unmount",
+        "forwards value/onChange and renders the leading icon",
+        "exposes the current page without preventing activation and clears it when selection moves",
+        "shows items only while open; select fires onSelect",
+        "walks component rows with the data rows and returns focus to the trigger after one is activated",
+        "disabled item does not select; Escape and outside pointerdown close",
+        "inside pointerdown does not close",
+        "window blur closes only when focus moved into an iframe",
+        "selected item shows the trailing check; align=end, side=top, and className apply",
+        "fill selection holds the row fill instead of a trailing check",
+        "renders a leading icon and a separator between groups",
+        "Tab settles the focused row; Shift+Tab closes back to the anchor",
+        "Tab from the trigger enters the open list, and elsewhere on the page stays native",
+        "walks the list with the arrows without autoFocus, wrapping at both ends",
+        "enters at the last enabled row on ↑ and steps over a disabled one",
+        "renders a non-interactive heading label and a danger row",
+        "closeOnPointerLeave closes a grace after the pointer leaves trigger and list; default never does",
+        "disarms a pending grace close when pointer-leave dismissal is disabled while open",
+        "coming back inside the grace keeps the list open (trigger and list are one region)",
+        "a close from selection disarms the pending grace close",
+        "leaving a closed list arms nothing",
+        "a list click does not bubble to the anchor row (portal synthetic-event path)",
+        "closes an open submenu when the pointer or focus reaches a component row",
+        "opens a submenu on hover and selects a nested item",
+        "portal mode prefers getAnchorRect over measuring its own wrapper",
+        "portal mode skips the frame when getAnchorRect returns null (no menu until a rect exists)",
+        "follows an anchor moving without scroll or resize and stops tracking when closed or unmounted",
+        "portal mode renders the list under body, positions it fixed, and still closes on outside pointerdown",
+        "portal mode resolves align=end / side=top to clamped left/top coordinates",
+        "renders footer rows in a pinned section below the items; they still select",
+        "caps the list height for internal scrolling unless a submenu row is present",
+        "is absent while closed; Escape and mask click call onClose",
+        "renders headless content without the default close chrome",
+        "renders outage, attempt progress, and recovered states without a native tooltip",
+        "fades out for the exit duration before unmounting"
+      ],
+      "platformSkips": {}
+    },
+    "packages/client/ui-workspace/tests/rows.client.spec.tsx": {
+      "total": 102,
+      "requiredTitles": [
+        "shares the first workspace dwell across mixed rows and resets on list exit",
+        "shares the first session dwell across mixed rows and resets on list exit",
+        "uses an inert offscreen workspace copy without changing the source row",
+        "uses an inert offscreen session copy without changing the source row",
+        "keeps workspace dragging active when the browser rejects its preview",
+        "keeps session dragging active when the browser rejects its preview",
+        "finishes a Session drag when the source becomes archived before drag end",
+        "removes workspace previews on replacement, drag end, and unmount",
+        "removes session previews on replacement, drag end, and unmount",
+        "keeps the leading status cell in the hierarchy-free flat list",
+        "renders a selected content-search row and opens only its session",
+        "withholds the search-result restore control while the Session access excludes unarchiving",
+        "shows approval ahead of running in search results",
+        "shows plan-review ahead of running in search results",
+        "shows question ahead of running in search results",
+        "renders an active Workspace and keeps its create action separate from toggling",
+        "renders and opens a selected running Session row",
+        "keeps a row.action entry click in the strip, so a plain button does not open the row",
+        "marquees a clipped session title at a constant speed while the row is hovered",
+        "jumps a clipped title to its far edge under reduced motion",
+        "returns a marqueed title to its start in one step and cancels the crawl",
+        "shows the green done dot only on a finished, unviewed session (live activity wins the slot)",
+        "shows descendant activity without describing an idle parent as running",
+        "keeps descendant activity secondary while the parent is running",
+        "keeps child activity as a secondary status while user attention is primary",
+        "shows the green done dot on a finished search result row",
+        "workspace row menu opens on the ellipsis, renames, and shows the danger delete row",
+        "workspace row offers only the actions its Workspace access snapshot allows",
+        "workspace right-click and keyboard menu open the clicked folder without toggling",
+        "does not offer native folder opening when the remote endpoint is denied",
+        "ungrouped bucket asks the global resource whether it may start a Session",
+        "session row drags and renames from its title only while its access snapshot allows each",
+        "workspace hover card shows its details and copies the full directory path",
+        "keeps workspace details alongside the new Session tooltip on hover",
+        "keeps workspace details alongside the new Session tooltip on focus",
+        "shows workspace details and the tooltip when the pointer first enters its new Session action",
+        "workspace hover card shows a POSIX home descendant as ~ and still copies the full path",
+        "workspace hover card without a directory omits the path and copy action",
+        "workspace hover card leaves a Windows path verbatim",
+        "ungrouped bucket renders no workspace menu",
+        "blank New Session rows carry no menu, no time label, and no hover-card time",
+        "shows a home-rooted directory as ~",
+        "omits the line when the Host reports no directory",
+        "shows the directory on a blank New Session card",
+        "session row menu opens without opening the session and Escape closes it",
+        "renders the menu list with the row identity and open state, and returns focus to the trigger after an entry closes it",
+        "right-click opens the target row menu without selecting it (archived=false)",
+        "right-click opens the target row menu without selecting it (archived=true)",
+        "leaves the native context menu available on blank session rows",
+        "renders the row action list inside the actions area after the menu trigger",
+        "keeps the preview available when hovering More at 400ms",
+        "keeps the preview available when hovering More at 800ms",
+        "keeps card dwell independent of the action tooltip (0ms)",
+        "keeps card dwell independent of the action tooltip (400ms)",
+        "keeps card dwell independent of the action tooltip (800ms)",
+        "shows the hover card after the dwell and suppresses it while the row menu is open",
+        "shows approval as warning and replaces the row time",
+        "shows plan-review as warning and replaces the row time",
+        "shows question as warning and replaces the row time",
+        "uses the compact English approval row label",
+        "uses the compact English plan-review row label",
+        "uses the compact English question row label",
+        "idle hover card shows the Idle status line",
+        "completed hover card shows the Completed status line",
+        "archived hover card replaces the resting status with the archived line but keeps live activity",
+        "draggable row wires start/end and gates hover/drop on an active same-group drag",
+        "marks a pinned row and keeps it draggable",
+        "ignores child drag end on a blank Session row",
+        "ignores child drag end on a archived Session row",
+        "marks an archived row and blocks dragging it",
+        "double-clicking the title asks for the rename dialog with the current title, but not on a blank row",
+        "does not rename when the first click of the pair only activated the window",
+        "flags an archived content-search result",
+        "offers trailing icons after the time label on archived=false rows",
+        "offers trailing icons after the time label on archived=true rows",
+        "opens a focused row with Enter or Space without handling its action buttons",
+        "leaves modified \"Enter\" available to global shortcuts",
+        "leaves modified \" \" available to global shortcuts",
+        "offers the leading seat only while the row is idle, and no state dot beside it",
+        "replaces the leading seat with the an unviewed completion (new message) dot",
+        "replaces the leading seat with the live activity dot",
+        "replaces the leading seat with the a pending approval dot",
+        "replaces the leading seat with the a running subagent dot",
+        "keeps the leading cell blank on an idle archived row: no status dot and no seat",
+        "keeps the leading cell blank on an archived row with live activity: no status dot and no seat",
+        "keeps the leading cell blank on an archived row with a pending approval: no status dot and no seat",
+        "never offers the seat for a provisional blank row",
+        "renders the schedule section between the relative time and the trailing status line",
+        "labels unnamed history as 未命名",
+        "labels unnamed history as Untitled",
+        "labels unnamed search results as 未命名",
+        "labels unnamed search results as Untitled",
+        "places the workspace menu at each pointer request without selecting the row",
+        "places the session menu at each pointer request without selecting the row",
+        "keeps the workspace context menu open after leaving its trigger and a second native request",
+        "keeps the session context menu open after leaving its trigger and a second native request",
+        "returns the workspace ellipsis to its own anchor after a pointer menu closes",
+        "returns the session ellipsis to its own anchor after a pointer menu closes",
+        "anchors the workspace keyboard menu to the focused row and tracks its scrolling",
+        "anchors the session keyboard menu to the focused row and tracks its scrolling",
+        "keeps the workspace pointer menu in the viewport during resize and scroll",
+        "keeps the session pointer menu in the viewport during resize and scroll"
+      ],
+      "platformSkips": {}
+    },
+    "apps/web/tests/row-context-menu.e2e.ts": {
+      "total": 2,
+      "requiredTitles": [
+        "keeps the workspace menu at its requested anchor with dismissal and focus return",
+        "keeps the session menu at its requested anchor with dismissal and focus return"
+      ],
+      "platformSkips": {}
+    },
+    "apps/desktop/tests/prepared-runtime-smoke.spec.ts": {
+      "total": 3,
+      "requiredTitles": [
+        "retains payload progress and termination details when the child fails",
+        "smokes an x64 target verified on an arm64 build host without revalidating against the host",
+        "disables both product telemetry layers in the temporary profile before its first Host start"
+      ],
+      "platformSkips": {}
+    }
+  },
+  "parentTree": "033d75e3fabf69bb8564b80284d899bd67978bc6",
+  "scopeBase": "33b096719d52a84b931184c22e8a3a321550972f",
+  "sourceFixPaths": [
+    ".github/validation/next-desktop.test.mjs",
+    "apps/desktop/tests/main-startup.spec.ts"
+  ],
+  "smokeTests": [
+    "apps/desktop/tests/prepared-runtime-smoke.spec.ts"
+  ],
+  "smokeParent": "7b622408018241a14165b94a76ca57f1d279266e",
+  "smokeParentTree": "6b46735ce7ef0805bd621cfa712a5ecc740a2a82",
+  "smokeFixPaths": [
+    "apps/desktop/scripts/smoke-runtime.ts",
+    "apps/desktop/tests/prepared-runtime-smoke.spec.ts"
+  ],
+  "linuxQualification": {
+    "runId": 40815840070,
+    "attempt": 1,
+    "control": "ba6a1e6af0d5d5be8804926c9f731a29b9d7dfe2",
+    "ref": "refs/heads/validation/next-installer-native-20261029",
+    "artifactId": 12871924742,
+    "artifactSha256": "a701161dae5ac720be08fe531a9a887d65de0e13e4047cc8d937ba16173aa079",
+    "manifestSha256": "94e5e19b70481cade83cc9baea2c0ea98b796eedfc3168ed5c5b98100245bea9"
+  },
+  "diagnosticOnly": false
+}
