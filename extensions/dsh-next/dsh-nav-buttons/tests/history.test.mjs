@@ -379,3 +379,36 @@ test('a place key collapses when a service is missing, which is why inject must 
   assert.equal(placeKey(undefined, null, 'tab5'), placeKey(undefined, null, 'tab5'))
   assert.notEqual(placeKey(undefined, null, 'tab5'), placeKey(undefined, null, 'tab7'))
 })
+
+test('suppressing the restore echo must not swallow a real switch', () => {
+  // The page half ignores the observation its own restore causes, so a back step
+  // does not rewrite the stack. Suppressing by TIME (a 0 ms window) also drops
+  // whatever the user does inside it — pressing X1 and immediately switching a tab
+  // lost the switch. Keying on the restored place instead drops only the echo.
+  const SEP = '\u0001'
+  const key = tab => `session-a${SEP}${SEP}${tab}`
+  const history = new NavHistory()
+  let restoring = null
+  let visits = 0
+
+  const record = (k) => {
+    if (k === restoring) { restoring = null; return }
+    if (history.visit(k)) visits++
+  }
+
+  record(key('tab5'))
+  record(key('tab7'))
+  record(key('tab9'))
+
+  // Back: the plugin sets `restoring`, then the observer echoes that place.
+  const entry = history.back()
+  restoring = entry.key
+  record(entry.key)
+  assert.equal(history.position, 1, 'the back step moved')
+  assert.equal(history.snapshot.size, 3, 'the echo did not rewrite the stack')
+
+  // A genuine switch immediately afterwards must still be recorded.
+  record(key('tab1'))
+  assert.equal(visits, 4, 'the real switch counted')
+  assert.deepEqual(history.snapshot.keys.map(k => k.split(SEP).pop()), ['tab5', 'tab7', 'tab1'])
+})

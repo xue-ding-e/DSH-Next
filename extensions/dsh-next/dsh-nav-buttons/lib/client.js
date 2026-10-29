@@ -275,9 +275,10 @@ function report(payload) {
  */
 function install(ctx) {
   const history = new NavHistory(200)
-  // While replaying a history step, observed navigation must not be recorded as
-  // a new visit: that would turn every back step into a fresh branch.
-  let replaying = false
+  // While replaying a history step, the observation that echoes it must not be
+  // recorded as a new visit: that would turn every back step into a fresh branch.
+  // See `restoring` below — it is keyed on the place being restored rather than on
+  // a time window, because a window also swallows whatever the user does meanwhile.
   let visits = 0
   let backs = 0
   let forwards = 0
@@ -299,14 +300,25 @@ function install(ctx) {
   // which, and the joined key hides them.
   let lastParts = null
 
+  // The place this plugin is currently restoring, or null. Suppression is keyed on
+  // the VALUE, not on a time window: a window drops whatever the user does inside
+  // it (measured: pressing X1 then switching a tab within 0 ms lost the switch),
+  // while a value check only ignores the restore it caused itself.
+  let restoring = null
+
   const record = (fromSample = false) => {
-    if (replaying) return
     if (fromSample) sampleCalls++
     else recordCalls++
     lastParts = placeParts(ctx)
     const key = currentPlace(ctx)
     lastKeys.push(key === undefined ? null : key.slice(0, 60))
     if (lastKeys.length > 8) lastKeys.shift()
+    // Ignore the echo of our own restore: the observer fires for the place we just
+    // selected, and treating that as a visit would rewrite the stack we are walking.
+    if (key !== undefined && key === restoring) {
+      restoring = null
+      return
+    }
     if (key !== undefined && history.visit(key)) visits++
   }
 
@@ -315,13 +327,15 @@ function install(ctx) {
     if (entry === undefined) return
     if (direction === 'back') backs++
     else forwards++
-    replaying = true
+    // Cleared by the observer once it has seen this exact place, and unconditionally
+    // after a short settle in case the restore never produces an observation (the
+    // selection may already have been there). Without the timeout a restore that
+    // changes nothing would suppress the NEXT unrelated visit forever.
+    restoring = entry.key
     try {
       restorePlace(ctx, entry.key)
     } finally {
-      // Selection changes settle asynchronously; release on the next task so the
-      // observers see the restored place, not the restored place as a new visit.
-      setTimeout(() => { replaying = false }, 0)
+      setTimeout(() => { if (restoring === entry.key) restoring = null }, 250)
     }
   }
 
