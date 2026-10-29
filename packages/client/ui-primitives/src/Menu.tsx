@@ -435,13 +435,13 @@ export function Menu({ open, anchor, items = [], children, selectedId, selectedI
     }
   }, [open, onClose, autoFocus])
 
-  // A close from selection/Escape/outside click outruns a pending grace close;
-  // left armed it would shut a list reopened inside the grace window. Its own
+  // Closing or disabling pointer-leave dismissal cancels a pending grace close;
+  // left armed it would shut a reopened or newly context-anchored list. Its own
   // effect, not the listener effect above: that one re-runs on every `onClose`
   // identity change and would cancel the grace mid-transit.
   useEffect(() => {
-    if (!open) cancelClose()
-  }, [open, cancelClose])
+    if (!open || !closeOnPointerLeave) cancelClose()
+  }, [open, closeOnPointerLeave, cancelClose])
 
   // The submenu card is absolutely positioned outside the list box; the
   // scroll clip would crop it, so only submenu-free menus get the height cap.

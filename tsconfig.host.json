@@ -127,6 +127,7 @@
     "apps/web/tests/public-mount.e2e.ts",
     "apps/web/tests/workspace-new-session-folding.e2e.ts",
     "apps/web/tests/workspace-management.e2e.ts",
+    "apps/web/tests/row-context-menu.e2e.ts",
     "apps/web/tests/default-workspace.e2e.ts",
     "apps/web/tests/new-session-refused.e2e.ts",
     "apps/web/tests/workspace-recency.e2e.ts",

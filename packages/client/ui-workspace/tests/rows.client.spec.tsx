@@ -1673,3 +1673,112 @@ it.each([['未命名', t], ['Untitled', tEn]])('labels unnamed search results as
   fireEvent.click(screen.getByText(label))
   expect(onOpen).toHaveBeenCalledWith(result.id)
 })
+
+
+describe('row menu positioning', () => {
+  afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals() })
+
+  function mountRow(kind: 'workspace' | 'session') {
+    vi.stubGlobal('innerWidth', 1000)
+    vi.stubGlobal('innerHeight', 800)
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue(new DOMRect(250, 100, 24, 24))
+    vi.spyOn(HTMLElement.prototype, 'offsetWidth', 'get').mockReturnValue(120)
+    vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockReturnValue(80)
+    const onOpen = vi.fn()
+    if (kind === 'workspace') {
+      const group: GroupNode = {
+        key: 'project', workspaceId: wid('project'), cwd: '/projects/project', label: 'Project', createdAt: 0,
+        sessionCount: 0, expanded: false, containsCurrent: false, sessions: [],
+      }
+      render(<ProjectRowItem group={group} onToggle={onOpen} onCreate={vi.fn()} t={tEn}
+        actions={{ rename: vi.fn(), delete: vi.fn() }} />)
+    } else {
+      const node: SessionNode = {
+        id: sid('target'), title: 'Target', blank: false, running: false,
+        runningSubagentCount: 0, completed: false, updatedAt: 0, pinned: false, archived: false,
+      }
+      render(<SessionNodeItem node={node} currentId={undefined} now={0} onOpen={onOpen} t={tEn} />)
+    }
+    const row = screen.getByRole('treeitem')
+    const rowRect = vi.spyOn(row, 'getBoundingClientRect').mockReturnValue(new DOMRect(40, 100, 240, 32))
+    const trigger = screen.getByRole('button', { name: /actions/i })
+    return { row, rowRect, trigger, onOpen }
+  }
+
+  it.each(['workspace', 'session'] as const)('places the %s menu at each pointer request without selecting the row', (kind) => {
+    const { row, trigger, onOpen } = mountRow(kind)
+    fireEvent.contextMenu(row, { clientX: 100, clientY: 180 })
+    expect(screen.getByRole('menu').style.left).toBe('100px')
+    expect(screen.getByRole('menu').style.top).toBe('184px')
+    fireEvent.contextMenu(row, { clientX: 210, clientY: 240 })
+    expect(screen.getAllByRole('menu')).toHaveLength(1)
+    expect(screen.getByRole('menu').style.left).toBe('210px')
+    expect(screen.getByRole('menu').style.top).toBe('244px')
+    expect(onOpen).not.toHaveBeenCalled()
+    expect(document.activeElement).toBe(trigger)
+    fireEvent.keyDown(document, { key: 'Escape' })
+    expect(screen.queryByRole('menu')).toBeNull()
+    expect(document.activeElement).toBe(trigger)
+  })
+
+  it.each(['workspace', 'session'] as const)('keeps the %s context menu open after leaving its trigger and a second native request', (kind) => {
+    vi.useFakeTimers()
+    try {
+      const { row, trigger } = mountRow(kind)
+      fireEvent.pointerDown(row, { button: 2 })
+      fireEvent.contextMenu(row, { clientX: 100, clientY: 180 })
+      fireEvent.pointerLeave(trigger.parentElement as HTMLElement)
+      act(() => { vi.advanceTimersByTime(500) })
+      expect(screen.getByRole('menu').style.left).toBe('100px')
+      fireEvent.pointerDown(row, { button: 2 })
+      fireEvent.contextMenu(row, { clientX: 210, clientY: 240 })
+      expect(screen.getAllByRole('menu')).toHaveLength(1)
+      expect(screen.getByRole('menu').style.left).toBe('210px')
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it.each(['workspace', 'session'] as const)('returns the %s ellipsis to its own anchor after a pointer menu closes', (kind) => {
+    const { row, trigger } = mountRow(kind)
+    fireEvent.contextMenu(row, { clientX: 100, clientY: 180 })
+    fireEvent.pointerDown(document.body)
+    expect(screen.queryByRole('menu')).toBeNull()
+    fireEvent.click(trigger)
+    expect(screen.getByRole('menu').style.left).toBe('250px')
+    expect(screen.getByRole('menu').style.top).toBe('128px')
+    fireEvent.click(trigger)
+    expect(screen.queryByRole('menu')).toBeNull()
+  })
+
+  it.each(['workspace', 'session'] as const)('anchors the %s keyboard menu to the focused row and tracks its scrolling', (kind) => {
+    const { row, rowRect, onOpen } = mountRow(kind)
+    for (const request of [{ key: 'ContextMenu' }, { key: 'F10', shiftKey: true }]) {
+      row.focus()
+      expect(fireEvent.keyDown(row, request)).toBe(false)
+      expect(screen.getByRole('menu').style.left).toBe('40px')
+      expect(screen.getByRole('menu').style.top).toBe('136px')
+      fireEvent.keyDown(document, { key: 'Escape' })
+    }
+    fireEvent.keyDown(row, { key: 'ContextMenu' })
+    rowRect.mockReturnValue(new DOMRect(40, 160, 240, 32))
+    fireEvent.scroll(window)
+    expect(screen.getByRole('menu').style.top).toBe('196px')
+    expect(onOpen).not.toHaveBeenCalled()
+  })
+
+  it.each(['workspace', 'session'] as const)('keeps the %s pointer menu in the viewport during resize and scroll', (kind) => {
+    const { row } = mountRow(kind)
+    fireEvent.contextMenu(row, { clientX: 990, clientY: 790 })
+    expect(screen.getByRole('menu').style.left).toBe('868px')
+    expect(screen.getByRole('menu').style.top).toBe('708px')
+    vi.stubGlobal('innerWidth', 500)
+    vi.stubGlobal('innerHeight', 400)
+    fireEvent(window, new Event('resize'))
+    expect(screen.getByRole('menu').style.left).toBe('368px')
+    expect(screen.getByRole('menu').style.top).toBe('308px')
+    fireEvent.scroll(window)
+    expect(screen.getByRole('menu').style.left).toBe('368px')
+    expect(screen.getByRole('menu').style.top).toBe('308px')
+  })
+})
