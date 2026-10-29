@@ -13,6 +13,7 @@ description: "在本地或 Windows／macOS Actions 中生成 Desktop 安装包�
 ## 目录
 
 - [选择打包方式](#choose-a-build)
+- [DSH Next 安装包与手动更新](#next-distribution)
 - [发布版本](#release-versions)
 - [配置与本地构建](#configuration-and-local-builds)
 - [Windows Actions 打包](#windows-actions)
@@ -33,6 +34,20 @@ description: "在本地或 Windows／macOS Actions 中生成 Desktop 安装包�
 安装锁定依赖后，从仓库根目录运行本地命令。本地构建使用平台命令，已注册的自托管 runner 使用对应平台的 Actions。test/production 部署与 signed/unsigned 模式分别选择。任何 Windows 签名构建或共享 runner 使用前，先阅读 [Windows 签名与 runner 运维](../windows-signing/README.zh.md#trust-and-isolation)。安装与打包分开进行；[发布](../publishing/README.zh.md)还需要单独的显式操作。
 
 将 `DSH_DESKTOP_PACKAGE_CACHE_DIR` 设为绝对构建缓存目录以跨 checkout 复用；详见[缓存配置与生命周期](#desktop-runtime-preparation)。
+
+<a id="next-distribution"></a>
+
+## DSH Next 安装包与手动更新
+
+`DSH Next` 是面向 `xue-ding-e/DSH-Next` 的独立未签名发行版，不是覆盖官方 Harness 安装的更新。应用 ID 为 `io.github.xue-ding-e.dsh-next`，Windows 安装 GUID 为 `e74d59b9-768b-51ae-bb11-7f24bfbafa5a`。包名、协议及可选终端命令分别为 `dsh-next-desktop`、`dsh-next` 和 `dsh-next`。它不会注册官方 `dsh` 命令，也不会复制官方 profile。官方原有签名与更新配置保持不变。
+
+在已安装锁定依赖及本文所述安装工具链的原生 Windows x64 构建主机上，使用 `pnpm --dir apps/desktop run package:next:win:x64 -- --build-version <approved-version>`。`--next` 必须配合 `--unsigned`，不继承签名凭据及上游更新服务。`--build-version auto` 只扫描本地 Next 产物，不能在干净 runner 上预留全局唯一发布版本；发布前须确认所选版本尚未使用。打包保留 `--publish never`，不创建 release、tag 或更新清单。
+
+安装包匿名检查公开 release，并在筛选更高版本的兼容未签名安装器前验证仓库 ID。稳定包使用非预发布的 `next-v<version>` release；预发布包使用相同版本 tag 规则的预发布 release。产物必须命名为 `dsh-next-<version>-win-x64-unsigned.exe` 或 `dsh-next-<version>-mac-<arch>-unsigned.dmg`。渠道为空、安装器缺失或列表不完整会明确报告，不要求 token。确认提示后仅打开已验证的 release 页面，不下载、执行或自动安装未签名程序。运行安装器前，用户须检查源码提交、产物校验和及平台未签名警告。签名自动更新还需单独配置签名者并验证清单；手动更新路径不会伪造 `latest.yml`、`latest-mac.yml`、`nightly.yml` 或 `nightly-mac.yml`。
+
+Next 默认使用 `~/.dsh-next`，也可通过绝对路径 `DSH_NEXT_HOME` 指定目录。它拒绝与官方默认 home、继承的自定义 `DSH_HOME` 或应用安装目录发生规范路径重叠，包括已有软链接或 junction 祖先。同身份重装保留数据；Next 卸载只移除应用文件，明确保留 profile、偏好设置和缓存。
+
+可选 profile 转移需要明确选择并先备份，不会自动迁移：关闭两个应用；自行选择源目录；制作并验证独立离线备份；检查所选目录树不含软链接或 junction；复制到位置独立、全新且为空的 Next 根目录，不合并、不覆盖任何内容；将 `DSH_NEXT_HOME` 指向副本。源目录与备份保持不变。确认 Next 内会话及设置正常后再依赖副本；如果启动拒绝数据格式，保留全部副本并继续使用原应用，不强制降级。profile 备份可能含有凭据，不得随构建产物上传。
 
 <a id="release-versions"></a>
 

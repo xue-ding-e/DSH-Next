@@ -24,6 +24,16 @@ afterEach(async () => {
 })
 
 describe('desktop build version discovery', () => {
+  it('numbers Next artifacts independently without consulting the official bucket', async () => {
+    const artifactsRoot = await artifactsWith([
+      `dsh-next-${PRERELEASE}.${DATE}.7-win-x64-unsigned.exe`,
+      `deepseek-harness-${PRERELEASE}.${DATE}.90-win-x64.exe`,
+    ])
+    await expect(suggestDesktopBuildVersion({ productVersion: PRERELEASE, target: 'win-x64',
+      environment: { DSH_DESKTOP_AUTO_UPDATE_ENV: 'invalid-official-environment' }, date: DATE, artifactsRoot,
+      artifactPrefix: 'dsh-next' })).resolves.toBe(`${PRERELEASE}.${DATE}.8`)
+  })
+
   it('formats the date segment in the build host time zone', () => {
     expect(desktopBuildDateSegment(new Date(2026, 8, 21))).toBe('20260921')
     expect(desktopBuildDateSegment(new Date(2026, 0, 5))).toBe('20260105')

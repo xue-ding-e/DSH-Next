@@ -4,6 +4,7 @@ import { WINDOWS_TITLEBAR_HEIGHT } from './windows-layout.ts'
 
 import { readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
+import { homedir } from 'node:os'
 import { fileURLToPath } from 'node:url'
 import {
   app,
@@ -37,7 +38,7 @@ import { claimDesktopSingleInstance } from './single-instance.ts'
 import { desktopUpdateChannel } from './update-channel.ts'
 import { DesktopUpdateCoordinator } from './update-coordinator.ts'
 import { prepareDesktopUpdateWindow } from './update-window.ts'
-import { DesktopCommandManager } from './command-management.ts'
+import { DesktopCommandManager, commandMessages } from './command-management.ts'
 import { serveWebDocument, authenticateWebHost, forwardWebRequest } from './web-document.ts'
 import { DesktopFatalRecovery } from './fatal-recovery.ts'
 import { pruneCrashReports, RendererConsoleTail, writeCrashReport, type CrashReportSource } from './crash-report.ts'
@@ -63,6 +64,9 @@ import { DesktopUpdateOverlays } from './update-overlay.ts'
 import { DesktopQuitConfirmation } from './quit-confirmation.ts'
 import { DesktopTray } from './tray.ts'
 import { DesktopBackgroundNotice } from './background-notice.ts'
+import { NEXT_DESKTOP_IDENTITY, nextDesktopDistribution } from './next-distribution.ts'
+import { nextDesktopEnvironment, nextDesktopInstallRoot } from './next-profile.ts'
+import { checkNextManualRelease, NextManualUpdateCoordinator } from './next-manual-update.ts'
 
 let focusPrimaryWindow = (): void => {}
 let stopForRecovery = async (): Promise<void> => {}
@@ -79,6 +83,7 @@ let windowsLanguage: string | undefined
  * failure while tearing down a ready backend still reads as `running`.
  */
 let backendReady = false
+let profileReady = false
 /** Error-level console output of the primary window, attached to crash reports. */
 const rendererConsole = new RendererConsoleTail()
 
@@ -99,6 +104,7 @@ const recovery = new DesktopFatalRecovery({
   show: options => dialog.showMessageBox(options),
   stop: () => { shuttingDown = true; return stopForRecovery() },
   disablePlugins: async () => {
+    if (!profileReady) throw new Error('Desktop profile identity has not been established')
     const manager = new DesktopProjectManager(resolveDesktopPaths(), runtimeResources())
     const backupPath = await manager.disableAllPlugins()
     console.info('Desktop profile recovery completed:', { profilePatchBackup: backupPath ?? null, homePatch: 'unchanged' })
@@ -317,6 +323,10 @@ function createWindow(preload: string, show = false, primary = false): BrowserWi
 }
 
 async function main(): Promise<void> {
+  const manifest: unknown = JSON.parse(await readFile(join(app.getAppPath(), 'package.json'), 'utf8'))
+  const nextDistribution = app.isPackaged ? nextDesktopDistribution(manifest) : undefined
+  if (nextDistribution !== undefined) Object.assign(process.env, await nextDesktopEnvironment(homedir(), process.env, nextDesktopInstallRoot(process.execPath, process.platform)))
+  profileReady = true
   const desktopSettings = readDesktopSettings(app.getPath('userData'))
   void pruneCrashReports(app.getPath('logs'))
   const journalDirectory = process.env.DSH_DESKTOP_UPDATE_JOURNAL_DIR
@@ -337,7 +347,10 @@ async function main(): Promise<void> {
     signal: loginShellRead.signal,
   }).then((result) => {
     for (const failure of result.failures) console.warn(`desktop login shell: ${failure.shell} failed (${failure.reason})`)
-    return result.environment
+    // A login shell may export upstream DSH_HOME; it must not remap an already selected Next profile.
+    return nextDistribution === undefined ? result.environment : { ...result.environment,
+      DSH_HOME: process.env.DSH_HOME, DSH_NEXT_HOME: process.env.DSH_NEXT_HOME,
+      DSH_NEXT_ACTIVE_HOME: process.env.DSH_NEXT_ACTIVE_HOME, DSH_NEXT_UPSTREAM_HOME: process.env.DSH_NEXT_UPSTREAM_HOME }
   })
   let hostEnvironment: NodeJS.ProcessEnv = process.env
   const prepareHostEnvironment = async (): Promise<void> => { hostEnvironment = await loginShell }
@@ -406,12 +419,13 @@ async function main(): Promise<void> {
   // Copy comes from the same locale as the update prompts so the dialog
   // chrome and its content never mix languages.
   const showAbout = async (): Promise<void> => {
-    await ordinaryMessageBox({ type: 'info', title: locale.messages.aboutMenu, message: locale.messages.aboutProduct,
+    await ordinaryMessageBox({ type: 'info', title: locale.messages.aboutMenu, message: nextDistribution === undefined ? locale.messages.aboutProduct : NEXT_DESKTOP_IDENTITY.productName,
       detail: formatDesktopMessage(locale.messages.aboutVersion, { version: app.getVersion() }),
       buttons: [locale.messages.updateAcknowledge], cancelId: 0 })
   }
   const commandManager = new DesktopCommandManager({
     resources: process.resourcesPath,
+    distribution: nextDistribution === undefined ? 'official' : 'next',
     isPackaged: app.isPackaged,
     isInstalledLocation: () => process.platform !== 'darwin' || app.isInApplicationsFolder(),
     isInstalling: () => updateState.phase === 'installing',
@@ -612,7 +626,6 @@ async function main(): Promise<void> {
     return startup
   }
 
-  const manifest: unknown = JSON.parse(await readFile(join(app.getAppPath(), 'package.json'), 'utf8'))
   const updateChannel = desktopUpdateChannel(manifest)
   const updates = new DesktopUpdateCoordinator(
     publishUpdate,
@@ -671,7 +684,10 @@ async function main(): Promise<void> {
     updateChannel,
   )
 
-  const updateSchedule = new DesktopUpdateSchedule(updates, resolveDesktopUpdateScheduleConfig(process.env))
+  const manualUpdates = nextDistribution === undefined ? undefined : new NextManualUpdateCoordinator(publishUpdate,
+    () => checkNextManualRelease(nextDistribution.channel, app.getVersion(), process.platform, process.arch))
+  const activeUpdates = manualUpdates ?? updates
+  const updateSchedule = new DesktopUpdateSchedule(activeUpdates, resolveDesktopUpdateScheduleConfig(process.env))
 
   const downloadUpdate = async (version: string): Promise<DesktopUpdateState> => {
     void track('desktop_upgrade_click', {})
@@ -801,7 +817,7 @@ async function main(): Promise<void> {
   })
   ipcMain.handle(DESKTOP_IPC.updatesStatus, (event) => {
     assertProductSender(event)
-    return presentDesktopUpdate(updates.state)
+    return presentDesktopUpdate(activeUpdates.state)
   })
   ipcMain.handle(DESKTOP_IPC.deviceInfo, (event) => {
     assertProductSender(event)
@@ -845,18 +861,52 @@ async function main(): Promise<void> {
       }
       let controller: AbortController | undefined
       let progress: Promise<unknown> | undefined
+      let checkDismissed = false
       try {
-        let state = updates.state
+        let state = activeUpdates.state
         if (manual || state.phase === 'idle' || (state.phase === 'error' && state.failedOperation === 'check')) {
           controller = new AbortController()
           ordinaryDialogs.add(controller)
           const parent = currentDialogWindow()
           progress = parent === undefined ? Promise.resolve() : updateDialog.show(parent, { type: 'info', title: locale.messages.updateCheckTitle,
-            message: locale.messages.updateChecking, buttons: [locale.messages.later], cancelId: 0, signal: controller.signal })
+            message: locale.messages.updateChecking, buttons: [locale.messages.later], cancelId: 0, signal: controller.signal }).then(result => { checkDismissed = true; return result })
           if (!joinedPolicyAuthentication) {
             void checkPolicyManually('deferred').catch((error: unknown) => { console.error(error) })
           }
-          state = await updateSchedule.check(true)
+          const checked = updateSchedule.check(true)
+          if (manualUpdates !== undefined && parent !== undefined) {
+            // Dismissal ends this UI operation, not the shared network lookup. A later click may
+            // show a fresh progress dialog while joining that same lookup; this controller owns
+            // only the dismissed dialog, so its cleanup cannot close the new operation's window.
+            const outcome = await Promise.race([
+              checked.then(value => ({ kind: 'checked', value }) as const),
+              progress.then(() => ({ kind: 'dismissed' }) as const),
+            ])
+            if (outcome.kind === 'dismissed') return
+            state = outcome.value
+          } else state = await checked
+        }
+        if (manualUpdates !== undefined) {
+          // A dismissed progress dialog must not reopen UI when the shared lookup returns later.
+          if (checkDismissed || quitting) return
+          const result = manualUpdates.result
+          const message = result.kind === 'available'
+            ? formatDesktopMessage(locale.messages.updateAvailable, { version: result.version })
+            : result.kind === 'current' ? locale.messages.updateCurrent
+              : result.kind === 'error' ? (result.reason === 'network' ? locale.messages.updateCheckNetworkFailed
+                : result.reason === 'identity' ? locale.messages.nextUpdateIdentityFailed
+                  : result.reason === 'access' ? locale.messages.nextUpdateAccessFailed : locale.messages.nextUpdateInvalidResponse)
+                : locale.messages.nextUpdateUnavailable
+          const response = await ordinaryMessageBox({ type: result.kind === 'error' ? 'error' : 'info',
+            title: locale.messages.updateCheckTitle, message,
+            detail: `${locale.messages.nextUpdateManualDetail}\n\n${formatDesktopMessage(locale.messages.updateCurrentDetail, { version: app.getVersion() })}`,
+            buttons: result.kind === 'error' ? [locale.messages.updateAcknowledge]
+              : [locale.messages.nextUpdateOpenRelease, locale.messages.later], cancelId: result.kind === 'error' ? 0 : 1 })
+          if (result.kind !== 'error' && response.response === 0) {
+            await shell.openExternal(result.kind === 'available' ? result.page
+              : `https://github.com/${NEXT_DESKTOP_IDENTITY.repository}/releases`)
+          }
+          return
         }
         if (isMandatory()) { mandatoryUI?.focus(); return }
         if (state.phase === 'error' && state.failedOperation === 'check') { await showUpdateFailure(state); return }
@@ -957,12 +1007,13 @@ async function main(): Promise<void> {
     updateSchedule.dispose()
     powerMonitor.off('resume', automaticCheck)
     updates.dispose()
+    manualUpdates?.dispose()
   })
 
   const applicationIconPath = development ? join(app.getAppPath(), 'resources', 'icon-windows.png')
     : join(process.resourcesPath, 'icon.png')
   app.setAboutPanelOptions({
-    applicationName: 'DeepSeek Harness',
+    applicationName: nextDistribution === undefined ? 'DeepSeek Harness' : NEXT_DESKTOP_IDENTITY.productName,
     applicationVersion: app.getVersion(),
     // The release has no separate build number; omit Electron's bundle version.
     version: '',
@@ -991,7 +1042,7 @@ async function main(): Promise<void> {
     { type: 'separator' },
     { label: currentDesktopLocale().messages.checkUpdatesMenu, click: () => { void openUpdatePrompt(true) } },
     ...process.platform === 'darwin' || process.platform === 'win32'
-      ? [{ label: currentDesktopLocale().messages.cliCommandMenu, click: () => { void commandManager.show() } }] : [],
+      ? [{ label: commandMessages(currentDesktopLocale().messages, nextDistribution === undefined ? 'official' : 'next').cliCommandMenu, click: () => { void commandManager.show() } }] : [],
     ...development ? [
       { type: 'separator' as const },
       { label: currentDesktopLocale().messages.reloadPageMenu, role: 'reload' as const },
@@ -1262,10 +1313,11 @@ async function main(): Promise<void> {
     window.focus()
   }
 
-  if (app.isPackaged || process.env.DSH_DESKTOP_DEV_APP === '1') app.setAsDefaultProtocolClient('dsh')
+  const applicationProtocol = nextDistribution === undefined ? 'dsh' : NEXT_DESKTOP_IDENTITY.protocol
+  if (app.isPackaged || process.env.DSH_DESKTOP_DEV_APP === '1') app.setAsDefaultProtocolClient(applicationProtocol)
   app.on('open-url', (event, url) => {
     event.preventDefault()
-    if (url === 'dsh://open' || url === 'dsh://open/') focusPrimaryWindow()
+    if (url === `${applicationProtocol}://open` || url === `${applicationProtocol}://open/`) focusPrimaryWindow()
   })
 
   app.on('activate', (_event, hasVisibleWindows) => {

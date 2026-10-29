@@ -9,6 +9,14 @@ import {
 } from '../scripts/package-target.ts'
 
 describe('desktop package target', () => {
+  it('requires explicit unsigned mode for the independently identified Next installer', () => {
+    expect(parseDesktopPackageInvocation(['win-x64', '--next', '--unsigned'], 'win32', 'x64'))
+      .toMatchObject({ next: true, unsigned: true, target: { name: 'win-x64' } })
+    expect(parseDesktopPackageInvocation(['win-x64'], 'win32', 'x64').next).toBe(false)
+    expect(() => parseDesktopPackageInvocation(['win-x64', '--next'], 'win32', 'x64')).toThrow()
+    expect(() => parseDesktopPackageInvocation(['win-x64', '--next', '--unsigned', '--prepare-only'], 'win32', 'x64')).toThrow()
+  })
+
   it('selects matching runtime and electron-builder architectures', () => {
     expect(resolveDesktopPackageTarget('mac-arm64', 'darwin', 'arm64')).toMatchObject({
       platform: 'darwin', arch: 'arm64', builderPlatform: '--mac', builderArch: '--arm64',
