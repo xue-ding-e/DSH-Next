@@ -35,6 +35,12 @@ let report
 /** When the last report arrived, so a stale page is distinguishable from none. */
 let reportedAt
 
+/** Keys the last page report actually carried; empty until one arrives. */
+let lastRawKeys = []
+
+/** First bytes of the last page report, for reading the real payload. */
+let lastRawSample = ''
+
 /** Commands the page half accepts from the diagnostics mailbox. */
 const COMMANDS = new Set(['back', 'forward'])
 
@@ -71,6 +77,11 @@ export function apply(ctx) {
             pageHalf: 'reported',
             ageMs: Date.now() - reportedAt,
             shapeStale: (report.shape ?? 1) < EXPECTED_SHAPE,
+            // What the page actually sent. `shape: 1` says the loaded bundle is
+            // old, but only the key list says whether the field is absent or the
+            // whole payload is from a different build.
+            reportKeys: lastRawKeys,
+            reportSample: lastRawSample,
             ...report,
           })
         res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' })
@@ -121,10 +132,18 @@ export function apply(ctx) {
         req.on('data', chunk => { chunks.push(chunk) })
         req.on('end', () => {
           try {
-            const parsed = JSON.parse(Buffer.concat(chunks).toString('utf8'))
+            const raw = Buffer.concat(chunks).toString('utf8')
+            const parsed = JSON.parse(raw)
+            // Keep the raw keys so "the field is missing" can be distinguished
+            // from "the field is present but the wrong value" without guessing at
+            // which page version is running.
+            lastRawKeys = Object.keys(parsed).sort()
+            lastRawSample = raw.slice(0, 300)
             report = {
               // Which payload shape the page half speaks; compared in `status`.
               shape: Number(parsed.shape) || 1,
+              installed: parsed.installed === true,
+              error: typeof parsed.error === 'string' ? parsed.error : null,
               loadedAt: Number(parsed.loadedAt) || 0,
               visits: Number(parsed.visits) || 0,
               backs: Number(parsed.backs) || 0,

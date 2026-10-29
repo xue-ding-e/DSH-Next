@@ -20,6 +20,18 @@ window.__ModuleLoader__.load({
 /** Separator that keeps the three id spaces unambiguous in one key. */
 const SEP = '\u0001'
 
+/**
+ * Version of the payload this page half sends.
+ *
+ * Bumped whenever the reported shape changes. `set_plugin` reloads the host half
+ * but does NOT re-execute a page that is already loaded, so the two halves can
+ * legitimately disagree about the payload — comparing this against the host's
+ * expectation turns "the new field is mysteriously missing" into one glance.
+ * Module scope (not inside `install`) so `apply` can report it even when
+ * `install` throws before reaching the reporter.
+ */
+const PAYLOAD_SHAPE = 2
+
 /** A bounded back/forward history of visited places. */
 class NavHistory {
   #entries = []
@@ -260,10 +272,14 @@ function apply(ctx) {
   // only rethrowing, so the console and the Host status route both see it.
   try {
     install(ctx)
+    // Proof of a successful INSTALL (not just of a loaded module). Without this,
+    // "the module never ran" and "install threw and the error report also failed"
+    // both leave the host with no report at all and look identical.
+    report({ shape: PAYLOAD_SHAPE, installed: true, loadedAt: Date.now() })
   } catch (error) {
     const message = error instanceof Error ? `${error.name}: ${error.message}` : String(error)
     window.dshNavButtonsError = message
-    report({ loadedAt: Date.now(), error: message })
+    report({ shape: PAYLOAD_SHAPE, installed: false, loadedAt: Date.now(), error: message })
     throw error
   }
 }
@@ -478,11 +494,10 @@ function install(ctx) {
   // but does NOT re-execute a page that is already loaded, so the two halves can
   // legitimately disagree about the payload. Comparing this against the host's
   // expectation turns "the new field is mysteriously missing" into one glance.
-  const SHAPE = 2
   const live = () => {
     const snapshot = history.snapshot
     report({
-      shape: SHAPE,
+      shape: PAYLOAD_SHAPE,
       loadedAt: activatedAt,
       visits, backs, forwards,
       entries: snapshot.size,
