@@ -261,10 +261,20 @@ async function perform(action, request, webview) {
           if (elements.length >= ${maxElements}) break;
         }
         const headings = [];
+        // Deduplicated by text: pages repeat the same labels verbatim (a footer
+        // mirrored for mobile, a nav rendered twice), and an agent reading the
+        // same string twice spends context on nothing. Also capped by total
+        // characters, because 40 entries of up to 200 chars is 8 KB in one tool
+        // result while the caller may only need to know what the page is about.
+        const seenText = new Set();
+        let budget = 4000;
         for (const element of scope.querySelectorAll(${JSON.stringify(TEXTUAL)})) {
           const text = (element.innerText ?? '').trim().replace(/\\s+/g, ' ');
-          if (text !== '') headings.push({ tag: element.tagName.toLowerCase(), text: text.slice(0, 200) });
-          if (headings.length >= 40) break;
+          if (text === '' || seenText.has(text)) continue;
+          if (text.length > budget) break;
+          seenText.add(text);
+          budget -= text.length;
+          headings.push({ tag: element.tagName.toLowerCase(), text: text.slice(0, 200) });
         }
         return {
           url: location.href,
