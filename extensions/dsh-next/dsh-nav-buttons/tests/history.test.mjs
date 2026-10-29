@@ -360,3 +360,22 @@ test('walks a real session+tab key stream the way X1/X2 must', () => {
   assert.equal(history.back(), undefined)
   assert.equal(history.position, 0)
 })
+
+test('a place key collapses when a service is missing, which is why inject must be complete', () => {
+  // Cordis resolves only DECLARED services; an undeclared ctx.get() is undefined
+  // with no error. The page half builds its key from three services, so a missing
+  // declaration does not throw — it silently produces a key with empty segments,
+  // and two genuinely different places then look identical. That is exactly how
+  // the history stayed at one entry while the code looked correct.
+  const SEP = '\u0001'
+  const placeKey = (sessionId, panel, tabId) => [sessionId ?? '', panel ?? '', tabId ?? ''].join(SEP)
+
+  // Every service present: the key identifies all three axes.
+  assert.equal(placeKey('session-abc', 'chat', 'tab5'), `session-abc${SEP}chat${SEP}tab5`)
+
+  // Session and panel services missing: the key degrades to something that cannot
+  // tell this place from any other tab, in any session, on any panel.
+  assert.equal(placeKey(undefined, null, 'tab5'), `${SEP}${SEP}tab5`)
+  assert.equal(placeKey(undefined, null, 'tab5'), placeKey(undefined, null, 'tab5'))
+  assert.notEqual(placeKey(undefined, null, 'tab5'), placeKey(undefined, null, 'tab7'))
+})
