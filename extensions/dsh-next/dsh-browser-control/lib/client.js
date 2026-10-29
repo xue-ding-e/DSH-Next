@@ -108,8 +108,12 @@ async function driveStartPage(url) {
  * @returns the guest once it is usable, or undefined on timeout.
  */
 async function whenReady(webview, timeoutMs) {
+  // Callers pass whatever `chooseWebview` returned, which is undefined until a
+  // tab has mounted. Reading `.isConnected` off that crashed the whole action
+  // with a bare TypeError instead of reporting "no tab open".
+  if (webview === undefined || webview === null) return undefined
   const ready = () => {
-    if (!webview.isConnected) return false
+    if (webview.isConnected !== true) return false
     try {
       // A committed document reports a URL; an attached-but-blank guest does not.
       return typeof webview.getURL === 'function' && webview.getURL() !== ''
@@ -447,14 +451,26 @@ function apply(ctx) {
     }
   }
 
+  // One lifetime for the whole plugin, plus a generation counter that a reset
+  // bumps. The old loop stops when its generation no longer matches; a NEW loop
+  // must then be started, or the feature stays dead.
+  const lifetime = new AbortController()
+  const startLoop = () => { void loop(lifetime) }
+
   ctx.effect(() => {
-    const lifetime = new AbortController()
-    void loop(lifetime)
+    startLoop()
     return () => { stopped = true; lifetime.abort() }
   }, 'dsh-browser-control: page loop')
 
-  // A reconnected page must not leave the previous loop racing for requests.
-  ctx.on('connection/reset', () => { generation++ })
+  // Opening the sidebar browser (or reconnecting) resets the connection. Bumping
+  // the generation ends the previous loop; restarting is what keeps the channel
+  // alive. Without the restart the page half polls once and then goes silent,
+  // which reads as "browser tab not open" for every later tool call.
+  ctx.on('connection/reset', () => {
+    if (stopped || lifetime.signal.aborted) return
+    generation++
+    startLoop()
+  })
   ctx.logger?.info?.('dsh-browser-control: page half polling', channel)
 }
 
