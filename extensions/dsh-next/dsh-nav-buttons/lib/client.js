@@ -49,7 +49,26 @@ class NavHistory {
       canGoBack: this.#index > 0,
       canGoForward: this.#index >= 0 && this.#index < this.#entries.length - 1,
       size: this.#entries.length,
+      // The entries themselves, oldest first. `size` alone cannot distinguish
+      // "two different places" from "one place recorded twice", which is exactly
+      // the question when a back step reports there is nowhere to go.
+      //
+      // KEEP IN SYNC with lib/history.js. This bundle is a classic script and
+      // cannot import that module, so the class is duplicated here; a field added
+      // to only one copy is invisible until something reads it. That happened:
+      // `stack` read `snapshot.keys.map(...)` against a copy without `keys` and
+      // install() threw "Cannot read properties of undefined (reading 'map')".
+      keys: this.#entries.map(entry => entry.key),
     }
+  }
+
+  /**
+   * Cursor position in the stack: -1 when empty, otherwise the index of the entry
+   * currently shown. Also duplicated from lib/history.js — keep both copies equal.
+   * @returns {number} the zero-based index, or -1 when there is no current entry.
+   */
+  get position() {
+    return this.#index
   }
 
   visit(key) {
