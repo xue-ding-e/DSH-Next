@@ -29,8 +29,12 @@
 /** Stable Cordis plugin name. */
 export const name = 'dsh-input-guard'
 
-/** No required services; the route is optional so the plugin loads anywhere. */
-export const inject = []
+/**
+ * The consent route needs the HTTP carrier. Declaring it here makes Cordis wait
+ * for `webServer` before activation; reading it through `ctx.get()` with an empty
+ * `inject` raced the carrier's own startup and silently mounted nothing.
+ */
+export const inject = ['webServer']
 
 /** Prefix owned by this plugin. */
 const ROUTE = '/tool-input-guard'
@@ -89,11 +93,8 @@ function readJson(req) {
  * @param {object} ctx - host plugin context.
  */
 export function apply(ctx) {
-  const webServer = ctx.get('webServer')
-  if (webServer === undefined) {
-    ctx.logger.warn(`dsh-input-guard: no webServer; ${ROUTE} stays unmounted`)
-    return
-  }
+  // `inject: ['webServer']` guaranteed this is resolved before apply() runs.
+  const webServer = ctx.webServer
 
   ctx.effect(() => webServer.register({
     kind: 'prefix',

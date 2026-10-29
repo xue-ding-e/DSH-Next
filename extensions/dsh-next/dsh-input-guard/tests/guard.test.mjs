@@ -17,7 +17,9 @@ function hostFixture() {
   const routes = new Map()
   const webServer = { register(route) { routes.set(route.path, route); return () => {} } }
   const ctx = {
-    get: service => (service === 'webServer' ? webServer : undefined),
+    // The host half declares `inject: ['webServer']`, so Cordis resolves the
+    // property on the context itself; the fixture must mirror that.
+    webServer,
     effect(install) { install(); return () => {} },
     logger: { warn() {} },
   }
