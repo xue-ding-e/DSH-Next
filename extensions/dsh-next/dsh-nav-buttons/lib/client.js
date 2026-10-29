@@ -242,7 +242,26 @@ function placeParts(ctx) {
     session: sessionId === undefined ? null : sessionId,
     panel: layout === undefined ? null : layoutPanel(layout),
     tab: focusedTab(ctx) ?? null,
+    // How many sessions claim the main view right now. The contract calls
+    // `retainedBy` "local ownership counts", so more than one is possible (a
+    // preloading neighbour, a closing older one). `mainSessionId` returns the
+    // first match, and if that count is ever >1 the chosen session may not be
+    // the one on screen — invisible without this number.
+    mainCandidates: mainViewCandidates(sessions).length,
   }
+}
+
+/**
+ * Every session currently holding a positive main-view reference.
+ * @param sessions - the sessions service, or undefined.
+ * @returns the candidate ids, in catalog order.
+ */
+function mainViewCandidates(sessions) {
+  const byId = sessions?.list?.getSnapshot?.()?.byId
+  if (byId === undefined || byId === null) return []
+  return Object.values(byId)
+    .filter(candidate => (candidate?.retainedBy?.mainView ?? 0) > 0)
+    .map(candidate => candidate.id)
 }
 
 /**
