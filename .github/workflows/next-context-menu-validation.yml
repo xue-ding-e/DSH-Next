@@ -1,181 +1,100 @@
-name: Next workspace and session menu validation
+name: Next pointer menu focused validation
 
 # Manual-only community validation; inherited automation remains quarantined.
-# Rebuilt community repository ID 1437727533: register this existing manual entry on the new repository.
-# Dispatch only after the reviewed cross-repository heavy-work queue.
+# Rebuilt community repository ID 1437727533 uses its newly registered manual entry.
+
 on:
   workflow_dispatch:
     inputs:
-      expected_automation_sha:
-        description: Reviewed full SHA of D, which only quarantines inherited Dependabot version-update configuration
-        type: string
-        required: true
-      expected_product_sha:
-        description: Reviewed full SHA of workspace commit W on validation/workspace-open-folder
-        type: string
-        required: true
       expected_control_sha:
-        description: Reviewed full SHA of S's control parent C, which must still be main
+        description: Reviewed full SHA of this locked-validation control commit
         type: string
         required: true
-      flutter_validation_run_id:
-        description: Terminal reviewed Flutter Linux validation run, verified by the dispatcher
-        type: string
-        required: true
-      flutter_expected_sha:
-        description: Independently reviewed full Flutter source SHA for that run
-        type: string
-        required: true
-      magpie_run_id:
-        description: Terminal dispatched Magpie full-CI run, verified by the dispatcher
-        type: string
-        required: true
-      magpie_expected_sha:
-        description: Independently reviewed full Magpie source SHA for that run (including any attribution-only rewrite)
-        type: string
-        required: true
-
 permissions:
   contents: read
-
-# GitHub concurrency is repository-scoped; heavy-queue.mjs also checks the named
-# predecessor repositories. The dispatcher still owns cross-repository ordering.
+# This repository-local group is not a cross-repository mutex; root owns the heavy slot.
 concurrency:
   group: next-reviewed-heavy-validation
   cancel-in-progress: false
-
 env:
-  EXPECTED_PRODUCT_SHA: ${{ inputs.expected_product_sha }}
   EXPECTED_CONTROL_SHA: ${{ inputs.expected_control_sha }}
-  EXPECTED_AUTOMATION_SHA: ${{ inputs.expected_automation_sha }}
+  EXPECTED_PRODUCT_SHA: 0ca9b499a527164874cf59495344da366be224dd
   DSH_TELEMETRY_DISABLED: '1'
-  DSH_SNAPSHOT: replay
   DSH_GATE_CONCURRENCY: '2'
   DSH_OXLINT_THREADS: '2'
-  DSH_COVERAGE_MAX_WORKERS: '2'
+  DSH_SNAPSHOT: replay
   CMAKE_BUILD_PARALLEL_LEVEL: '2'
   RAYON_NUM_THREADS: '2'
-
 jobs:
   validate:
-    if: github.repository == 'xue-ding-e/DSH-Next' && github.ref == 'refs/heads/validation/workspace-open-folder' && github.event_name == 'workflow_dispatch'
+    if: github.repository == 'xue-ding-e/DSH-Next' && github.repository_id == '1437727533' && github.ref == 'refs/heads/validation/pointer-menu-fixture-20261029' && github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-24.04
     timeout-minutes: 300
     defaults:
       run:
         shell: bash
     steps:
-      - name: Read reviewed validation helpers from this immutable workflow commit
+      - name: Checkout immutable validation controls
         timeout-minutes: 5
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           ref: ${{ github.sha }}
           path: control
-          sparse-checkout: .github/validation
+          sparse-checkout: |
+            .github/validation
+            .github/workflows
           persist-credentials: false
-
-      - name: Set up pinned Node runtime without dependency caches
+      - name: Set up pinned Node without dependency cache
         timeout-minutes: 5
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
         with:
           node-version: 24.19.0
           package-manager-cache: false
-
-      - name: Enforce the reviewed cross-repository queue before allocating product dependencies
+      - name: Validate control gates without installing dependencies
+        timeout-minutes: 2
+        run: node --test control/.github/validation/pointer-menu-validation.test.mjs control/.github/validation/run-command-cancellation.test.mjs
+      - name: Checkout exact unvalidated product candidate and parent
         timeout-minutes: 5
-        env:
-          FLUTTER_VALIDATION_RUN_ID: ${{ inputs.flutter_validation_run_id }}
-          FLUTTER_EXPECTED_SHA: ${{ inputs.flutter_expected_sha }}
-          MAGPIE_RUN_ID: ${{ inputs.magpie_run_id }}
-          MAGPIE_EXPECTED_SHA: ${{ inputs.magpie_expected_sha }}
-        run: node control/.github/validation/heavy-queue.mjs
-
-      - name: Checkout the exact dispatched and reviewed integration SHA
-        timeout-minutes: 10
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
-          ref: ${{ github.sha }}
+          ref: 0ca9b499a527164874cf59495344da366be224dd
           path: product
           fetch-depth: 5
           persist-credentials: false
-
-      - name: Verify source identity and credential-free inputs
-        working-directory: product
+      - name: Verify exact reviewed source chain and range blobs before dependency scripts
         timeout-minutes: 2
         run: |
-          node ../control/.github/validation/product-identity.mjs "$PWD"
-          test -z "$(git status --porcelain)"
-          test ! -e .env
+          node control/.github/validation/pointer-menu-validation.mjs product --identity-only
+          test -z "$(git -C product status --porcelain)"
+          test ! -e product/.env
           test -z "${DEEPSEEK_API_KEY:-}"
           test -z "${NPM_TOKEN:-}"
           test -z "${NODE_AUTH_TOKEN:-}"
-          echo "TMPDIR=$RUNNER_TEMP" >> "$GITHUB_ENV"
-          echo "NODE_COMPILE_CACHE=$RUNNER_TEMP/node-compile-cache" >> "$GITHUB_ENV"
           echo "PNPM_CONFIG_STORE_DIR=$RUNNER_TEMP/pnpm-store" >> "$GITHUB_ENV"
+          echo "TMPDIR=$RUNNER_TEMP" >> "$GITHUB_ENV"
           echo "PLAYWRIGHT_BROWSERS_PATH=$RUNNER_TEMP/playwright" >> "$GITHUB_ENV"
-          mkdir -p "$RUNNER_TEMP/dsh-next-evidence"
-
-      - name: Set up the repository's pinned pnpm without running install
+      - name: Set up locked package manager without install
         timeout-minutes: 5
-        uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v5.0.0
+        uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320
         with:
           version: 11.28.5
           run_install: false
           package_json_file: product/package.json
           dest: ${{ runner.temp }}/pnpm
-
-      - name: Check evidence-classifier guards
-        timeout-minutes: 2
-        run: node --test control/.github/validation/vitest-evidence.test.mjs
-
-      - name: Install exact lockfile dependencies without secrets
+      - name: Install frozen dependencies with repository-approved allowBuilds
         working-directory: product
         timeout-minutes: 25
         run: pnpm install --frozen-lockfile
-
-      - name: Build the official host native prerequisite once for standard unit tests
-        working-directory: product
-        timeout-minutes: 20
-        run: pnpm run build:native-system
-
-      - name: Require the genuine before failure, restore source, then pass all reviewed standard Vitest files
-        timeout-minutes: 30
-        run: node control/.github/validation/context-menu-unit.mjs product "$RUNNER_TEMP/dsh-next-evidence"
-
-      - name: Run the required complete GUI suite
-        working-directory: product
-        timeout-minutes: 40
-        run: pnpm run test:gui --maxWorkers=2 --reporter=default --reporter=json --outputFile="$RUNNER_TEMP/dsh-next-evidence/gui.json"
-
-      - name: Build the fixed candidate artifacts using the original build graph
-        working-directory: product
-        timeout-minutes: 60
-        run: pnpm run build:artifacts
-
-      - name: Install only Chromium and its hosted-runner dependencies
-        working-directory: product
-        timeout-minutes: 15
-        run: pnpm --filter @deepseek-ai/dsh-web-frontend exec playwright install --with-deps chromium
-
-      - name: Type-check original aggregates plus the owned browser assertion and run real Chromium
-        timeout-minutes: 55
-        run: node control/.github/validation/context-menu-browser.mjs product "$RUNNER_TEMP/dsh-next-evidence"
-
-      - name: Run the required complete replay Web suite without real API credentials
-        working-directory: product
-        timeout-minutes: 120
-        env:
-          DSH_SNAPSHOT: replay
-        run: pnpm run test:web
-
-      - name: Retain only test evidence, never packages, credentials, or workspace data
+      - name: Run required builds and docs, owner RED/GREEN and two synthetic-data browser regressions
+        timeout-minutes: 270
+        run: exec node control/.github/validation/pointer-menu-validation.mjs product
+      - name: Upload only generated review evidence, never installation packages
+        if: always()
         timeout-minutes: 5
-        if: ${{ always() }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
-          name: next-context-menu-${{ github.run_id }}-${{ github.run_attempt }}
-          path: |
-            ${{ runner.temp }}/dsh-next-evidence/*.json
-            product/.artifacts/dsh-next-*.png
+          name: pointer-menu-${{ github.run_id }}
+          path: ${{ runner.temp }}/dsh-pointer-evidence/
           if-no-files-found: warn
           retention-days: 7
+          include-hidden-files: false
