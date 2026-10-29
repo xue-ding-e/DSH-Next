@@ -1,5 +1,5 @@
 /** Main-process ownership and fixed isolation policy for Sidebar webview guests. */
-import { randomUUID } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import { app, session, type BrowserWindow, type Session, type WebContents } from 'electron'
 import type { DesktopBrowserLeaseId, DesktopBrowserOpenRequest, DesktopBrowserReservation } from '@deepseek-ai/dsh-client-ui-sidebar-browser/types'
 import { DESKTOP_IPC } from './ipc.ts'
@@ -12,6 +12,28 @@ interface GuestLease {
   releaseInput?: () => void
 }
 
+/**
+ * Storage partition for one workspace identity.
+ *
+ * Two defects made every restart a fresh browser: the partition name carried a
+ * random UUID, so a workspace never got its old jar back, and the name had no
+ * `persist:` prefix, so Chromium kept the jar in memory only. Both are fixed
+ * here: the name is derived from the workspace identity (stable across restarts)
+ * and carries `persist:`, which is what makes Electron write cookies and local
+ * storage under the user-data directory.
+ *
+ * The identity itself is arbitrary text — `cwd:<absolute path>` or `session:<id>`
+ * — so it is hashed rather than embedded: a partition name is a directory name,
+ * and paths contain characters Windows rejects and case-insensitive filesystems
+ * would fold together.
+ * @param workspace - workspace storage identity received over IPC.
+ * @returns the persistent partition name for that identity.
+ */
+export function persistentPartition(workspace: string): string {
+  const digest = createHash('sha256').update(workspace, 'utf8').digest('hex')
+  return `persist:dsh-sidebar-browser-${digest.slice(0, 32)}`
+}
+
 /** Owns workspace storage partitions independently from individual tab guests. */
 export class DesktopBrowserGuests {
   private readonly partitions = new Map<string, string>()
@@ -21,7 +43,7 @@ export class DesktopBrowserGuests {
   constructor(private readonly hostUrl: () => string | undefined) {}
 
   /**
-   * Reserve one guest in a workspace's process-lifetime partition.
+   * Reserve one guest in a workspace's persistent partition.
    * @param owner - authenticated primary application WebContents.
    * @param workspace - workspace identity received over IPC.
    * @returns opaque lease and the partition approved for it.
@@ -32,7 +54,7 @@ export class DesktopBrowserGuests {
     }
     let partition = this.partitions.get(workspace)
     if (partition === undefined) {
-      partition = `dsh-sidebar-browser-${randomUUID()}`
+      partition = persistentPartition(workspace)
       this.configureSession(session.fromPartition(partition))
       this.partitions.set(workspace, partition)
     }
