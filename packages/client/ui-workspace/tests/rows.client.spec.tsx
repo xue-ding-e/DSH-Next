@@ -1700,8 +1700,12 @@ describe('row menu positioning', () => {
       render(<SessionNodeItem node={node} currentId={undefined} now={0} onOpen={onOpen} t={tEn} />)
     }
     const row = screen.getByRole('treeitem')
-    const rowRect = vi.spyOn(row, 'getBoundingClientRect').mockReturnValue(new DOMRect(40, 100, 240, 32))
+    const rowRect = vi.fn(() => new DOMRect(40, 100, 240, 32))
+    Object.defineProperty(row, 'getBoundingClientRect', { configurable: true, value: rowRect })
     const trigger = screen.getByRole('button', { name: /actions/i })
+    expect(row.getBoundingClientRect).not.toBe(trigger.getBoundingClientRect)
+    expect(row.getBoundingClientRect()).toEqual(new DOMRect(40, 100, 240, 32))
+    expect(trigger.getBoundingClientRect()).toEqual(new DOMRect(250, 100, 24, 24))
     return { row, rowRect, trigger, onOpen }
   }
 
