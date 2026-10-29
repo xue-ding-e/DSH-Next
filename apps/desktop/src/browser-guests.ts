@@ -26,6 +26,13 @@ interface GuestLease {
  * — so it is hashed rather than embedded: a partition name is a directory name,
  * and paths contain characters Windows rejects and case-insensitive filesystems
  * would fold together.
+ *
+ * Known limitation, deliberately not fixed yet: the hash is taken over the raw
+ * spelling, so `D:\a`, `d:\a`, `D:/a` and `D:\a\` produce four different jars for
+ * one directory. Canonicalizing before hashing WOULD fix that, but it also
+ * changes every existing partition name, which signs the user out of every site
+ * they had saved. Do it only together with a migration that renames the old
+ * partition directory to the new name — never on its own.
  * @param workspace - workspace storage identity received over IPC.
  * @returns the persistent partition name for that identity.
  */
