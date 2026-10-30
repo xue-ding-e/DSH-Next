@@ -198,5 +198,5 @@ test('sidebar fixture revision preserves the exact prior protocol chain and only
     { paths: [...actual.paths, 'apps/web/src/product.ts'] }, { baseParent: 'f'.repeat(40) }, { basePaths: [] }]) {
     assert.throws(() => assertFixtureRevision({ ...actual, ...change }))
   }
-  assert.equal(manifest.linuxQualification, null, 'new source has no inherited Linux qualification')
+  assert.equal(manifest.linuxQualification.control, '71d391a9ccad1457786fdcae4de174bad95e80d1', 'only the new exact-source Linux qualification is pinned')
 })

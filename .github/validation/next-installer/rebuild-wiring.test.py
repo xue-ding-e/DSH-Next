@@ -31,6 +31,15 @@ class Wiring(unittest.TestCase):
   self.assertIn("if ((Json (Read-Registry $nextProtocol)) -cne $script:foreignProtocolSnapshot) { throw",s)
   self.assertIn("Install-Actual 'reinstall-idempotent' $final",s)
   self.assertIn('-Source $Package.source',s)
+ def test_exact_source_linux_prerequisite_runs_before_any_build_or_installer(self):
+  m=json.loads((D/'manifest.json').read_text());p=m['linuxQualification']
+  self.assertEqual(p['runId'],41132362963);self.assertEqual(p['control'],'71d391a9ccad1457786fdcae4de174bad95e80d1')
+  self.assertEqual(p['reviewedContents']['actualStagesPassed'],15)
+  s=(D.parents[1]/'workflows/next-context-menu-validation.yml').read_text()
+  gate=s.index('node control/.github/validation/next-installer/linux-evidence.mjs')
+  self.assertLess(gate,s.index('Download fixed prior artifact'))
+  self.assertLess(gate,s.index('Test fixed source and build only new V2'))
+  self.assertIn('linux-evidence.test.mjs',s);self.assertIn('linux-dependency/reviewed-linux.json',s)
  def test_no_release_or_product_write_credentials(self):
   s=(D.parents[1]/'workflows/next-context-menu-validation.yml').read_text()
   self.assertIn('contents: read',s);self.assertIn('actions: read',s)

@@ -1044,5 +1044,41 @@
       "scope": "Locally reviewed immutable ZIP contents; runtime revalidates exact artifact digest and run metadata, not a second ZIP extraction."
     }
   },
-  "linuxQualification": null
+  "linuxQualification": {
+    "runId": 41132362963,
+    "attempt": 1,
+    "control": "71d391a9ccad1457786fdcae4de174bad95e80d1",
+    "ref": "refs/heads/validation/next-sidebar-linux-20261030",
+    "manifestSha256": "23d5f6ffec0ccf3c004cfca116f53a1c7bd4549ae93ebb1ed2cf12686fb321f3",
+    "artifactId": 13013868343,
+    "artifactSha256": "d7973b1ebba6dbef290d24dc8faedce8818c0ea9d11cc05d36ba65eae27c30e3",
+    "reviewedContents": {
+      "resultSha256": "87e0d303c98fbe2b76889629ae0e70908fd97112e888e3822bb774dbcc10ab38",
+      "actualStagesPassed": 15,
+      "controlReceipts": 4,
+      "allCleanupConfirmed": true,
+      "receiptSha256": {
+        "owned-command-65MAjU/receipt.json": "455a2c0c25bfb9c7d6df8853be8920a28cfed125d497e0e61a29c69ecbc22c50",
+        "owned-command-7LmF9L/receipt.json": "5d83fa606ecaa39dd981fb3466308f6def420e8d5474360b9879ea9aceeee06f",
+        "owned-command-7byzLN/receipt.json": "07515b1a518ac5dd11cf70878c9399b05a29cf3bbddc10900376791bde6219ee",
+        "owned-command-8c1ny3/receipt.json": "ef0cee8768eb3594c2d3331ff128640b8ab3566402937d07ea3c06d2e37f818c",
+        "owned-command-CMir9u/receipt.json": "245488ef1905e716054b8f1a8135f46d759c8cdcd3b8f5bb3c808e65e3ec218d",
+        "owned-command-EdVvRs/receipt.json": "019840b6e54e0bffbf46c280c082800c24ef0351d2e6d8a787a05eca652ac393",
+        "owned-command-Em5Tv9/receipt.json": "926cddac03f9beafdfb7859c2c2f2cf294913dd74382707c57eeaaa9770b8971",
+        "owned-command-JKac1a/receipt.json": "2af16c3022e9cae35379a743f82a5ad4b1b1ad72ef18e1efbfc10c18571de557",
+        "owned-command-JYysyU/receipt.json": "f24a812c0890710920ebcdb099f39480da0c7afb29f808f9fb264f09958d8408",
+        "owned-command-O8KF8P/receipt.json": "642b25220683ebc367778552706600ced2ac47fba4a45574777a6a2b71844653",
+        "owned-command-aEBgGi/receipt.json": "8f41a5408ae6de1e9569406c6c9ad3eab97de5f8314e5810cae2308340c499ad",
+        "owned-command-aryGIz/receipt.json": "cd4988227d09b9090369cde4f8a74e36b5f4cf0290da02031bd334d4c2dd492f",
+        "owned-command-iOKCya/receipt.json": "bf5fe52fc1bb7dfb85e1a14f7709638fd8ecf27c66fd7acb15b01c0b2f13cd6b",
+        "owned-command-kl9WhH/receipt.json": "ecf6bc175d2e92bbf42dabac187f0a83d2e24e281af35b167efb0efa2cbab218",
+        "owned-command-lClhpb/receipt.json": "6f0732aaaf89aae6c43fabcf78354b9b4fce9524d0b5e96c7f9a839a4654dc0a",
+        "owned-command-q5pkiz/receipt.json": "563cc645ee99e70b567e2a6a7b40407ef914ffb80a70d10dfb16d8e8fecc070f",
+        "owned-command-tJ8aJL/receipt.json": "d1bb43b8c3582e672420503c104e943be57d1606ed77a0c5e7c475c4ba44f6f6",
+        "owned-command-xNrTsl/receipt.json": "d968d32d6d4437b92d2ffc7fcc1e322cb449e132fb0a81404801bc0bc174b45b",
+        "owned-command-xQrzsW/receipt.json": "59ce24081245ce43d93ae0f950a0759b5db77ee7571e55e6930bf34a1abc85e1"
+      },
+      "scope": "Locally reviewed exact immutable ZIP contents; runtime revalidates run/job/manifest/artifact metadata and digest. Not Windows qualification."
+    }
+  }
 }

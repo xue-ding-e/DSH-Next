@@ -82,11 +82,16 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Tool selection regression failed.' }
           python -B control/.github/validation/next-installer/rebuild-wiring.test.py
           if ($LASTEXITCODE -ne 0) { throw 'Rebuild wiring regression failed.' }
-          node --test control/.github/validation/next-installer/qualification.test.mjs
+          node --test control/.github/validation/next-installer/qualification.test.mjs control/.github/validation/next-installer/linux-evidence.test.mjs
           if ($LASTEXITCODE -ne 0) { throw 'Source identity regression failed.' }
           & control/.github/validation/next-installer/environment.test.ps1
           & control/.github/validation/next-installer/windows-owned-process.test.ps1
           & control/.github/validation/next-installer/windows-path-guard.test.ps1
+      - name: Verify reviewed exact-source Linux prerequisite
+        timeout-minutes: 2
+        run: |
+          node control/.github/validation/next-installer/linux-evidence.mjs
+          if ($LASTEXITCODE -ne 0) { throw 'Exact-source Linux prerequisite is not qualified.' }
       - name: Download fixed prior artifact under native process ownership
         timeout-minutes: 8
         env:
@@ -137,6 +142,7 @@ jobs:
         with:
           name: next-fixed-installer-qualification-${{ github.run_id }}
           path: |
+            ${{ runner.temp }}/dsh-next-installer-evidence/linux-dependency/reviewed-linux.json
             ${{ runner.temp }}/dsh-reuse-installation/*.json
             ${{ runner.temp }}/dsh-next-installer-evidence/windows/*.json
             ${{ runner.temp }}/dsh-next-installer-evidence/windows/runtime-*/protocol-runtime.json

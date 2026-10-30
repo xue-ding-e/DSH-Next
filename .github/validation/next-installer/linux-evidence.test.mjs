@@ -4,7 +4,7 @@ import { test } from 'node:test'
 import { assertLinuxQualification } from './linux-evidence.mjs'
 
 function fixture() {
-  const prior = { source: 'a'.repeat(40), tree: 'b'.repeat(40), parent: 'c'.repeat(40), parentTree: 'f'.repeat(40), scopeBase: '0'.repeat(40),
+  const prior = { baselineSource: '8'.repeat(40), fixtureBaseSource: '9'.repeat(40), fixtureFixPaths: ['menu.e2e.ts'], protocolFixPaths: ['uninstall.nsh'], source: 'a'.repeat(40), tree: 'b'.repeat(40), parent: 'c'.repeat(40), parentTree: 'f'.repeat(40), scopeBase: '0'.repeat(40),
     installerSource: '5'.repeat(40), installerTree: '6'.repeat(40), documentationPaths: ['README.md'], documentationFiles: { 'README.md': { sha256: '7'.repeat(64) } },
     smokeParent: '1'.repeat(40), smokeParentTree: '2'.repeat(40), smokeFixPaths: ['smoke.ts', 'smoke.spec.ts'],
     sourceFixPaths: ['paths.spec.ts', 'main.spec.ts'], candidatePaths: ['base.ts', 'smoke.ts', 'smoke.spec.ts'], smokeTests: ['smoke.spec.ts'], browserCookieTests: ['browser.spec.ts'], extensionNodeTests: [{ path: 'extension.test.mjs', total: 7, allowedSkips: ['explicit runtime'] }], preservedMainFiles: { browser: 'locked baseline blob' }, repository: 'xue-ding-e/DSH-Next',
@@ -30,7 +30,8 @@ test('foreign, pending, failed, rerun, changed-source, missing-job and forged-ma
     f => { f.run.repository.id-- }, f => { f.run.head_sha = '0'.repeat(40) }, f => { f.run.run_attempt++ },
     f => { f.run.status = 'in_progress' }, f => { f.run.conclusion = 'failure' }, f => { f.run.event = 'push' },
     f => { f.jobs.jobs = [] }, f => { f.jobs.jobs[0].conclusion = 'skipped' }, f => { f.jobs.total_count++ },
-    f => { f.prior.source = '0'.repeat(40) }, f => { f.prior.controlRef = 'refs/heads/foreign' },
+    f => { f.prior.baselineSource = '0'.repeat(40) }, f => { f.prior.fixtureBaseSource = '0'.repeat(40) },
+    f => { f.prior.fixtureFixPaths = [] }, f => { f.prior.protocolFixPaths = [] }, f => { f.prior.source = '0'.repeat(40) }, f => { f.prior.controlRef = 'refs/heads/foreign' },
     f => { f.prior.testInventory = {} }, f => { f.bytes = Buffer.from('forged') }, f => { f.m.linuxQualification = null },
     f => { f.artifacts.artifacts[0].digest = 'sha256:' + '0'.repeat(64) },
     f => { f.artifacts.artifacts[0].expired = true }, f => { f.artifacts.artifacts[0].workflow_run.head_sha = '0'.repeat(40) },
