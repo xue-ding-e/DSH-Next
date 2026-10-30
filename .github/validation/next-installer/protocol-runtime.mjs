@@ -60,6 +60,9 @@ export class Inspector {
 }
 export const IDENTITY_EXPRESSION = `(() => {
  const {app,BrowserWindow}=require('electron');const fs=require('fs'),path=require('path'),crypto=require('crypto');
+ // Inspector can attach before Electron initializes the packaged app path.
+ // Only readiness is polled; a missing main after readiness remains fatal.
+ if(!app.isReady())return {pid:process.pid,execPath:process.execPath,ready:false};
  const main=path.join(app.getAppPath(),'lib','main.js');const source=fs.readFileSync(main,'utf8');
  return {pid:process.pid,execPath:process.execPath,appPath:app.getAppPath(),version:app.getVersion(),electron:process.versions.electron,
  isPackaged:app.isPackaged,ready:app.isReady(),defaultProtocol:app.isDefaultProtocolClient('dsh-next'),

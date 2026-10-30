@@ -84,3 +84,17 @@ test('failed evaluation retains fixed categories without exception text or remot
  const next=i.read('identity');s.reply({id:2,result:{exceptionDetails:{text:'x'.repeat(1000)}}})
  await assert.rejects(next,error=>{assert.deepEqual(error.inspectorDetails,{className:'Other',categories:[],lineNumber:undefined,columnNumber:undefined});return true})
 })
+
+test('pre-ready identity never reads the not-yet-initialized application path',()=>{
+ let reads=0,appPaths=0
+ const app={isReady:()=>false,getAppPath:()=>{appPaths++;return 'not-initialized'}}
+ const requireFixture=name=>({electron:{app},fs:{readFileSync:()=>{reads++;throw Error('ENOENT synthetic startup')}},path:{join:(...x)=>x.join('/')},crypto:{}}[name])
+ const result=new Function('require','process','return '+IDENTITY_EXPRESSION)(requireFixture,{pid:123,execPath:exe})
+ assert.deepEqual(result,{pid:123,execPath:exe,ready:false})
+ assert.equal(reads,0);assert.equal(appPaths,0)
+})
+test('ready identity still rejects a missing installed main rather than retrying ENOENT',()=>{
+ const app={isReady:()=>true,getAppPath:()=>'/synthetic/app.asar'}
+ const requireFixture=name=>({electron:{app},fs:{readFileSync:()=>{throw Error('ENOENT synthetic missing installed main')}},path:{join:(...x)=>x.join('/')},crypto:{}}[name])
+ assert.throws(()=>new Function('require','process','return '+IDENTITY_EXPRESSION)(requireFixture,{pid:123,execPath:exe}),/ENOENT synthetic missing installed main/)
+})
