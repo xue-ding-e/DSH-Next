@@ -209,6 +209,11 @@ async function linux(root) {
     assert.match(nodeTests.output, /# tests 35\r?\n/u)
     assert.match(nodeTests.output, /# pass 35\r?\n/u)
     assert.match(nodeTests.output, /# (?:skipped|skip) 0\r?\n/u)
+    const uninstall = await command('next-uninstall-regression', process.execPath,
+      ['--test', '--test-reporter=tap', 'apps/desktop/tests/next-uninstall-protocol.test.mjs'], 3)
+    for (const [counter, count] of Object.entries({ tests: 3, pass: 3, fail: 0, skipped: 0, cancelled: 0 })) {
+      assert.match(uninstall.output, new RegExp('# ' + counter + ' ' + count + '\\r?\\n', 'u'))
+    }
     await tests('desktop-tests', manifest.desktopTests)
     await tests('smoke-profile-tests', manifest.smokeTests)
     await tests('browser-cookie-tests', manifest.browserCookieTests)

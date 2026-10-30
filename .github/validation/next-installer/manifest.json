@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "repository": "xue-ding-e/DSH-Next",
   "repositoryId": "1437727533",
-  "controlRef": "refs/heads/validation/next-installer-reuse-20261030",
+  "controlRef": "refs/heads/validation/next-fixed-linux-20261030",
   "source": "097405ae7f990d34a17a2afe689db17df55932a3",
   "parent": "95f1945de962bf0aeb970195059e5a5590e4000b",
   "tree": "d0a9ce0096e53addf6763b915054d695aff26bac",

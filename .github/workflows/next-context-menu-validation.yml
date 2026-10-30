@@ -1,15 +1,15 @@
-name: Next fixed V2 build and actual installer qualification
+name: Next fixed source Linux qualification
 
+# Existing registered manual entry; no default-branch trigger and no publication.
 on:
   workflow_dispatch:
     inputs:
       expected_control_sha:
-        description: Full reviewed fixed-source build and lifecycle control commit
-        type: string
+        description: Full reviewed SHA of this manual validation control commit
         required: true
+        type: string
 permissions:
   contents: read
-  actions: read
 concurrency:
   group: next-reviewed-heavy-validation
   cancel-in-progress: false
@@ -22,17 +22,17 @@ env:
   DSH_OXLINT_THREADS: '2'
   CMAKE_BUILD_PARALLEL_LEVEL: '2'
   RAYON_NUM_THREADS: '2'
-  DSH_COVERAGE_TEST_TIMEOUT_MS: '90000'
 jobs:
-  windows:
-    if: github.repository == 'xue-ding-e/DSH-Next' && github.repository_id == '1437727533' && github.ref == 'refs/heads/validation/next-installer-reuse-20261030' && github.event_name == 'workflow_dispatch'
-    runs-on: windows-2025
-    timeout-minutes: 240
+  linux:
+    if: github.repository == 'xue-ding-e/DSH-Next' && github.repository_id == '1437727533' && github.ref == 'refs/heads/validation/next-fixed-linux-20261030' && github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 300
     defaults:
       run:
-        shell: pwsh
+        shell: bash
     steps:
-      - name: Checkout exact reviewed controls
+      - name: Checkout reviewed controls without persisted credentials
+        timeout-minutes: 5
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           ref: ${{ github.sha }}
@@ -41,76 +41,31 @@ jobs:
             .github/validation/next-installer
             .github/workflows
           persist-credentials: false
-      - name: Checkout immutable baseline source
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - name: Set up frozen Node
+        timeout-minutes: 5
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
         with:
-          ref: 270dd45091805cb504fdd39bf09d9ec596ca4150
-          path: baseline
-          sparse-checkout: apps/desktop/package.json
-          sparse-checkout-cone-mode: false
-          persist-credentials: false
-      - name: Checkout exact fixed product source
+          node-version: 24.19.0
+          package-manager-cache: false
+      - name: Test evidence gates and owned-process cancellation without dependencies
+        timeout-minutes: 2
+        run: node --test control/.github/validation/next-installer/qualification.test.mjs control/.github/validation/next-installer/run-command-cancellation.test.mjs control/.github/validation/next-installer/fixed-linux-wiring.test.mjs
+      - name: Checkout exact rebased installer product and reviewed main baseline
+        timeout-minutes: 5
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           ref: 097405ae7f990d34a17a2afe689db17df55932a3
           path: product
           fetch-depth: 6
           persist-credentials: false
-      - name: Set up pinned Node
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
-        with:
-          node-version: 24.19.0
-          package-manager-cache: false
-      - name: Verify controls and owned process helpers
-        timeout-minutes: 5
-        run: |
-          if ($env:EXPECTED_CONTROL_SHA -cnotmatch '^[a-f0-9]{40}$' -or $env:GITHUB_SHA -cne $env:EXPECTED_CONTROL_SHA) { throw 'Unexpected control commit.' }
-          $head = git -C control rev-parse HEAD
-          if ($LASTEXITCODE -ne 0 -or $head -cne $env:EXPECTED_CONTROL_SHA) { throw 'Checkout identity mismatch.' }
-          foreach ($file in Get-ChildItem control/.github/validation/next-installer/*.ps1) {
-            $tokens = $null; $parseErrors = $null
-            $null = [System.Management.Automation.Language.Parser]::ParseFile($file.FullName,[ref]$tokens,[ref]$parseErrors)
-            if ($parseErrors.Count -ne 0) { throw ('PowerShell syntax check failed: ' + $file.Name) }
-          }
-          node --test control/.github/validation/next-installer/protocol-runtime.test.mjs
-          if ($LASTEXITCODE -ne 0) { throw 'Protocol control tests failed.' }
-          python -B control/.github/validation/next-installer/verify-reuse.test.py
-          if ($LASTEXITCODE -ne 0) { throw 'Reuse verification tests failed.' }
-          python -B control/.github/validation/next-installer/download-reuse.test.py
-          if ($LASTEXITCODE -ne 0) { throw 'Transport tests failed.' }
-          python -B control/.github/validation/next-installer/workflow-tools.test.py
-          if ($LASTEXITCODE -ne 0) { throw 'Tool selection regression failed.' }
-          python -B control/.github/validation/next-installer/rebuild-wiring.test.py
-          if ($LASTEXITCODE -ne 0) { throw 'Rebuild wiring regression failed.' }
-          node --test control/.github/validation/next-installer/qualification.test.mjs
-          if ($LASTEXITCODE -ne 0) { throw 'Source identity regression failed.' }
-          & control/.github/validation/next-installer/environment.test.ps1
-          & control/.github/validation/next-installer/windows-owned-process.test.ps1
-          & control/.github/validation/next-installer/windows-path-guard.test.ps1
-      - name: Download fixed prior artifact under native process ownership
-        timeout-minutes: 8
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          . control/.github/validation/next-installer/windows-owned-process.ps1
-          $evidence = Join-Path $env:RUNNER_TEMP 'dsh-reuse-transport-evidence'
-          New-Item -ItemType Directory -Path $evidence | Out-Null
-          $python = (Get-Command python.exe -CommandType Application | Select-Object -First 1).Source
-          $gh = (Get-Command gh.exe -CommandType Application | Select-Object -First 1).Source
-          $null = Invoke-NextOwnedProcess -FilePath $python -Arguments @('-B',(Join-Path $env:GITHUB_WORKSPACE 'control/.github/validation/next-installer/download-reuse.py'),'--gh',$gh,'--output',(Join-Path $env:RUNNER_TEMP 'dsh-reuse-download')) -WorkingDirectory $env:GITHUB_WORKSPACE -TimeoutSeconds 400 -EvidencePrefix (Join-Path $evidence 'transport')
-      - name: Verify archive identity and extract only reviewed installer inputs
-        timeout-minutes: 5
-        run: |
-          $download = Join-Path $env:RUNNER_TEMP 'dsh-reuse-download'
-          python -B control/.github/validation/next-installer/verify-reuse.py --manifest control/.github/validation/next-installer/reuse-manifest.json --archive "$download/artifact.zip" --run "$download/run.json" --artifact "$download/artifact.json" --product baseline --output "$env:RUNNER_TEMP/dsh-reuse-installation"
-          if ($LASTEXITCODE -ne 0) { throw 'Fixed artifact verification failed; no installer may run.' }
-      - name: Verify new source and isolated dependency store
+      - name: Verify exact fixed source, control, reviewed history and preserved main blobs
         timeout-minutes: 2
         run: |
           node control/.github/validation/next-installer/qualification.mjs identity product
-          if ($LASTEXITCODE -ne 0) { throw 'Fixed source identity failed.' }
-          "PNPM_CONFIG_STORE_DIR=$env:RUNNER_TEMP\pnpm-store" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-      - name: Set up pinned package manager
+          echo "PNPM_CONFIG_STORE_DIR=$RUNNER_TEMP/pnpm-store" >> "$GITHUB_ENV"
+          echo "TMPDIR=$RUNNER_TEMP" >> "$GITHUB_ENV"
+          echo "PLAYWRIGHT_BROWSERS_PATH=$RUNNER_TEMP/playwright" >> "$GITHUB_ENV"
+      - name: Set up pinned package manager without installation
         timeout-minutes: 5
         uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320
         with:
@@ -118,49 +73,20 @@ jobs:
           run_install: false
           package_json_file: product/package.json
           dest: ${{ runner.temp }}/pnpm
-      - name: Install frozen dependencies under owned process budget
-        timeout-minutes: 26
-        run: '& control/.github/validation/next-installer/windows-qualify.ps1 -Product product -Mode install-dependencies'
-      - name: Test fixed source and build only new V2
-        timeout-minutes: 180
-        run: '& control/.github/validation/next-installer/windows-qualify.ps1 -Product product -Mode qualify -BaselineIndex "$env:RUNNER_TEMP/dsh-reuse-installation/packages.json"'
-      - name: Qualify actual installed launch upgrade repair uninstall and reinstall
+      - name: Install frozen dependencies
         timeout-minutes: 25
-        run: |
-          if ($env:GH_TOKEN -or $env:GITHUB_TOKEN) { throw 'Transport token must not reach installed application validation.' }
-          $node = (Get-Command node.exe -CommandType Application | Select-Object -First 1).Source
-          $nodeHash = (Get-FileHash -LiteralPath $node -Algorithm SHA256).Hash.ToLowerInvariant()
-          & control/.github/validation/next-installer/windows-installer.ps1 -Product product -PackageIndex "$env:RUNNER_TEMP/dsh-next-installer-evidence/windows/packages.json" -NodeExe $node -ExpectedNodeSha256 $nodeHash
-      - name: Retain synthetic qualification records without installers or profiles
+        working-directory: product
+        run: pnpm install --frozen-lockfile
+      - name: Run actual Next source tests, Desktop and synthetic browser-cookie suites, full TS6 build, paired docs and pointer regressions
+        timeout-minutes: 260
+        run: exec node control/.github/validation/next-installer/qualification.mjs linux product
+      - name: Retain only generated source-qualification evidence
         if: always()
+        timeout-minutes: 5
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
-          name: next-fixed-installer-qualification-${{ github.run_id }}
-          path: |
-            ${{ runner.temp }}/dsh-reuse-installation/*.json
-            ${{ runner.temp }}/dsh-next-installer-evidence/windows/*.json
-            ${{ runner.temp }}/dsh-next-installer-evidence/windows/runtime-*/protocol-runtime.json
-            ${{ runner.temp }}/dsh-next-installer-evidence/windows/runtime-*/protocol-before.json
-            ${{ runner.temp }}/dsh-next-installer-evidence/windows/runtime-*/protocol-after.json
-            ${{ runner.temp }}/dsh-next-installer-evidence/windows/runtime-*/node-identity.json
-            ${{ runner.temp }}/dsh-next-installer-evidence/windows/runtime-*/owned.result.json
-            ${{ runner.temp }}/dsh-reuse-transport-evidence/*.result.json
-          if-no-files-found: warn
-          retention-days: 7
-          include-hidden-files: false
-      - name: Retain only new V2 candidate bytes and build attestation
-        if: always()
-        timeout-minutes: 10
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
-        with:
-          name: next-fixed-v2-candidate-${{ github.run_id }}
-          path: |
-            ${{ runner.temp }}/dsh-next-installer-evidence/windows/dsh-next-0.2.1-rc.3.20261029.2-win-x64-unsigned.exe
-            ${{ runner.temp }}/dsh-next-installer-evidence/windows/package-v2.json
-            ${{ runner.temp }}/dsh-next-installer-evidence/windows/package-v2-config-witness.json
-            ${{ runner.temp }}/dsh-next-installer-evidence/windows/package-v2-pe.json
-            ${{ runner.temp }}/dsh-next-installer-evidence/windows/result.json
-            ${{ runner.temp }}/dsh-next-installer-evidence/windows/installer-result.json
+          name: next-installer-linux-${{ github.run_id }}
+          path: ${{ runner.temp }}/dsh-next-installer-evidence/linux/
           if-no-files-found: warn
           retention-days: 7
           include-hidden-files: false
