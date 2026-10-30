@@ -30,7 +30,9 @@ jobs:
         with:
           ref: ${{ github.sha }}
           path: control
-          sparse-checkout: .github/validation/next-installer
+          sparse-checkout: |
+            .github/validation/next-installer
+            .github/workflows
           persist-credentials: false
       - name: Checkout immutable packaged source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -62,6 +64,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Reuse verification tests failed.' }
           python -B control/.github/validation/next-installer/download-reuse.test.py
           if ($LASTEXITCODE -ne 0) { throw 'Transport tests failed.' }
+          python -B control/.github/validation/next-installer/workflow-tools.test.py
+          if ($LASTEXITCODE -ne 0) { throw 'Tool selection regression failed.' }
           & control/.github/validation/next-installer/environment.test.ps1
           & control/.github/validation/next-installer/windows-owned-process.test.ps1
           & control/.github/validation/next-installer/windows-path-guard.test.ps1
@@ -73,8 +77,8 @@ jobs:
           . control/.github/validation/next-installer/windows-owned-process.ps1
           $evidence = Join-Path $env:RUNNER_TEMP 'dsh-reuse-transport-evidence'
           New-Item -ItemType Directory -Path $evidence | Out-Null
-          $python = (Get-Command python.exe -CommandType Application).Source
-          $gh = (Get-Command gh.exe -CommandType Application).Source
+          $python = (Get-Command python.exe -CommandType Application | Select-Object -First 1).Source
+          $gh = (Get-Command gh.exe -CommandType Application | Select-Object -First 1).Source
           $null = Invoke-NextOwnedProcess -FilePath $python -Arguments @('-B',(Join-Path $env:GITHUB_WORKSPACE 'control/.github/validation/next-installer/download-reuse.py'),'--gh',$gh,'--output',(Join-Path $env:RUNNER_TEMP 'dsh-reuse-download')) -WorkingDirectory $env:GITHUB_WORKSPACE -TimeoutSeconds 400 -EvidencePrefix (Join-Path $evidence 'transport')
       - name: Verify archive identity and extract only reviewed installer inputs
         timeout-minutes: 5
@@ -86,7 +90,7 @@ jobs:
         timeout-minutes: 25
         run: |
           if ($env:GH_TOKEN -or $env:GITHUB_TOKEN) { throw 'Transport token must not reach installed application validation.' }
-          $node = (Get-Command node.exe -CommandType Application).Source
+          $node = (Get-Command node.exe -CommandType Application | Select-Object -First 1).Source
           $nodeHash = (Get-FileHash -LiteralPath $node -Algorithm SHA256).Hash.ToLowerInvariant()
           & control/.github/validation/next-installer/windows-installer.ps1 -Product product -PackageIndex "$env:RUNNER_TEMP/dsh-reuse-installation/packages.json" -NodeExe $node -ExpectedNodeSha256 $nodeHash
       - name: Retain synthetic qualification records without installers or profiles
