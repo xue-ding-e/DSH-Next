@@ -170,7 +170,12 @@ function Uninstall-Actual([string]$Label) {
     # _?= executes the real uninstaller in place, avoiding an unowned detached temporary copy.
     $null = Invoke-Lifecycle -FilePath $copy -Arguments @('/S','/currentuser') -RawTail ('_?=' + $install) -WorkingDirectory $root -TimeoutSeconds 180 -EvidencePrefix (Join-Path $evidence $Label)
     if (Test-Path -LiteralPath $install) { throw 'Owned installation directory remained after uninstall.' }
-    if ($null -ne (Read-Registry $uninstallKey) -or $null -ne (Read-Registry $nextProtocol)) { throw 'Next uninstall/protocol registration remained.' }
+    $uninstallRemained = $null -ne (Read-Registry $uninstallKey)
+    $protocolRemained = $null -ne (Read-Registry $nextProtocol)
+    @{ uninstallKeyRemained=$uninstallRemained; protocolKeyRemained=$protocolRemained; installationDirectoryRemained=(Test-Path -LiteralPath $install) } |
+        ConvertTo-Json | Set-Content -LiteralPath (Join-Path $evidence ($Label + '-registration.json')) -Encoding utf8
+    & (Join-Path $PSScriptRoot 'uninstall-registration-summary.ps1') -ExpectedExe (Join-Path $install 'DSH Next.exe') -Output (Join-Path $evidence ($Label + '-protocol-after-uninstall.json'))
+    if ($uninstallRemained -or $protocolRemained) { throw 'Next uninstall/protocol registration remained.' }
     $script:installedAttested = $false
 }
 function Command-Worker([string]$Label, [string]$Operation, [string]$Expected = '') {

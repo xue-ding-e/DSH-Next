@@ -69,3 +69,18 @@ test('outer Node startup has explicit pinned tool and sanitized environment',()=
  assert(wrapper.includes('$result = Invoke-NextCleanEnvironment -Safe $safe -Action'));assert(wrapper.includes("SetEnvironmentVariable($key,$null,'Process')"))
  assert(wrapper.includes('finally {'));assert(wrapper.includes("SetEnvironmentVariable($key,$saved[$key],'Process')"))
 })
+test('failed evaluation retains fixed categories without exception text or remote values',async()=>{
+ const s=new Socket(),i=new Inspector(s)
+ s.reply({method:'Runtime.executionContextCreated',params:{context:{id:7,auxData:{isDefault:true}}}})
+ const pending=i.read('identity')
+ s.reply({id:1,result:{exceptionDetails:{text:'Uncaught',lineNumber:3,columnNumber:4,
+   exception:{className:'Error',description:'Failed to get logs path: C:/synthetic/private\nstack with synthetic private detail',value:'not retained',properties:['not retained']}}}})
+ await assert.rejects(pending,error=>{
+  assert.equal(error.message,'owned main evaluation failed')
+  assert.deepEqual(error.inspectorDetails,{className:'Error',categories:['pathUnavailable'],lineNumber:3,columnNumber:4})
+  assert(!JSON.stringify(error.inspectorDetails).includes('private'))
+  return true
+ })
+ const next=i.read('identity');s.reply({id:2,result:{exceptionDetails:{text:'x'.repeat(1000)}}})
+ await assert.rejects(next,error=>{assert.deepEqual(error.inspectorDetails,{className:'Other',categories:[],lineNumber:undefined,columnNumber:undefined});return true})
+})

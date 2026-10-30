@@ -38,7 +38,23 @@ export class Inspector {
   async read(expression) {
     assert(this.contextId !== undefined && !this.contextInvalid, 'unique default main context is missing or changed')
     const reply = await this.send('Runtime.evaluate', { contextId: this.contextId, expression, includeCommandLineAPI: true, returnByValue: true, awaitPromise: true })
-    assert(!reply.exceptionDetails, 'owned main evaluation failed')
+    if (reply.exceptionDetails) {
+      const details = reply.exceptionDetails
+      const position = value => Number.isSafeInteger(value) && value >= 0 ? value : undefined
+      const error = new Error('owned main evaluation failed')
+      // Fixed categories only: messages may contain paths or runtime values even
+      // in a synthetic profile. No exception text or remote values are retained.
+      const classes = ['Error','TypeError','ReferenceError','RangeError','SyntaxError','EvalError']
+      const description = typeof details.exception?.description === 'string' ? details.exception.description.slice(0, 1000) : ''
+      const patterns = { requireUnavailable: /require is not defined/, moduleMissing: /Cannot find module/,
+        pathUnavailable: /getPath|Failed to get .* path/, objectDestroyed: /has been destroyed/,
+        beforeReady: /not ready|before.*ready/, undefinedProperty: /Cannot read properties of undefined/,
+        fileMissing: /ENOENT/ }
+      error.inspectorDetails = { className: classes.includes(details.exception?.className) ? details.exception.className : 'Other',
+        categories: Object.entries(patterns).filter(([,pattern]) => pattern.test(description)).map(([name]) => name),
+        lineNumber: position(details.lineNumber), columnNumber: position(details.columnNumber) }
+      throw error
+    }
     return reply.result.value
   }
 }
@@ -114,6 +130,7 @@ export async function main(requestPath) {
     let identity
     while(true){
       assert(Date.now()<deadline,'real welcome/registration was not observed')
+      status.phase='read-identity';save()
       identity=await client.read(IDENTITY_EXPRESSION)
       assert.equal(identity.pid,child.pid);assert.equal(identity.execPath.toLowerCase(),request.exe.toLowerCase())
       if(identity.ready&&identity.defaultProtocol&&identity.windows.some(w=>/\/renderer\/welcome\.html(?:[?#]|$)/.test(w.url)))break
@@ -127,13 +144,14 @@ export async function main(requestPath) {
     assert.equal(sha(script.scriptSource),identity.scriptSha256,'loaded main differs from attested ASAR main')
     status.identity=identity;save()
     const after=snapshot('protocol-after');verifyProtocolSnapshots(before,after,request.exe)
+    status.phase='request-normal-quit';save()
     assert.equal(await client.read(QUIT_EXPRESSION),true)
     socket.close();const result=await exit
     assert.equal(result.code,0);assert.equal(result.signal,null)
     assert.equal(await hash(request.exe),attestation.executableSha256);assert.equal(await hash(asar),attestation.asarSha256)
     assert.equal(readFileSync(join(env.DSH_NEXT_HOME,'cordis.patch.yml'),'utf8'),PROFILE_PATCH)
     status.appExit=result;status.qualified=true;status.outerJobNaturalQuiescence='still required by caller';save()
-  }catch(error){failure=error;status.failure=error.message;save()}
+  }catch(error){failure=error;status.failure=error.message;status.inspectorDetails=error.inspectorDetails;save()}
   finally{clearTimeout(timer);client?.socket.close()}
   // No throw/unwind cleanup can pretend the application tree is gone.
   if(failure){console.error('Protocol probe failed; preserve synthetic fixture and use outer owned-job cleanup:',failure.message);process.exit(1)}
