@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { createHash } from 'node:crypto'
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
+import { stripVTControlCharacters } from 'node:util'
 import { manifest, verifyIdentity } from './qualification.mjs'
 import { runCommand } from './run-command.mjs'
 
@@ -98,10 +99,43 @@ export async function runInstrumentedRound(file, original, overlay, execute) {
   }
 }
 
-export function assertDiagnosticOutcome(result) {
-  assert.equal(result.error, undefined, 'Diagnostic owner failed or was cancelled')
+export function assertionLines(overlay) {
+  return overlay.split('\n').flatMap((line, index) => /\bexpect(?:\.|\()|await menu\.waitFor\(/u.test(line) ? [index + 1] : [])
+}
+
+export function assertDiagnosticOutcome(result, report, allowedLines = []) {
   assert.equal(result.signal, null)
-  assert([0, 1].includes(result.status), 'Only ordinary Vitest pass/assertion-failure exits permit comparison')
+  assert.equal(result.cancelled, false, 'Diagnostic command was cancelled')
+  assert.equal(result.ownership?.cleanupConfirmed, true)
+  assert.deepEqual(result.ownership.record.survivors, {})
+  assert.equal(result.ownership.record.exit_code, result.status)
+  if (result.status === 0) {
+    assert.equal(result.error, undefined)
+    assert.equal(result.ownership.record.reason, 'completed')
+    return
+  }
+  assert.equal(result.status, 1, 'Only a confirmed Vitest assertion failure permits comparison')
+  assert.equal(result.ownership.record.reason, 'nonzero_exit')
+  assert.equal(report?.success, false)
+  assert.equal(report.numTotalTests, 2)
+  assert.equal(report.numPendingTests, 0)
+  assert.equal(report.numRuntimeErrors ?? 0, 0)
+  const assertions = report.testResults.flatMap(file => {
+    assert(file.name.endsWith('/apps/web/tests/row-context-menu.e2e.ts'))
+    return file.assertionResults
+  })
+  const failures = assertions.filter(test => test.status === 'failed')
+  assert.equal(assertions.length, 2)
+  assert.deepEqual(assertions.map(test => test.fullName).sort(), ['session', 'workspace'].map(kind =>
+    'web e2e: row context-menu placement keeps the ' + kind + ' menu at its requested anchor with dismissal and focus return'))
+  assert(failures.every(test => test.failureMessages?.some(message =>
+    [...stripVTControlCharacters(String(message)).matchAll(/^\s*(?:at\s+(?:[^\n(]+\()?|❯\s+)(?:file:\/\/)?(?:\/[^\s():]+)*\/?apps\/web\/tests\/row-context-menu\.e2e\.ts:(\d+):\d+\)?\s*$/gmu)]
+      .some(match => allowedLines.includes(Number(match[1]))))), 'Failure must point to an unchanged menu assertion, not fixture startup')
+  assert(failures.length > 0)
+  assert.equal(failures.length, report.numFailedTests)
+  assert.equal(report.numPassedTests + report.numFailedTests, 2)
+  assert(failures.every(test => test.failureMessages?.some(message => typeof message === 'string' && message.length > 0)))
+  assert(assertions.every(test => ['passed', 'failed'].includes(test.status)))
 }
 
 async function main() {
@@ -134,7 +168,9 @@ async function main() {
       stages.at(-1).overlaySha256 = digest(overlay)
       stages.at(-1).qualified = false
       verifyIdentity(root)
-      assertDiagnosticOutcome(result)
+      const report = result.status === 1
+        ? JSON.parse(readFileSync(join(evidence, label + '-tests.json'), 'utf8')) : undefined
+      assertDiagnosticOutcome(result, report, assertionLines(overlay))
     }
   } catch (error) { failure = error.message; process.exitCode = 1 }
   finally {

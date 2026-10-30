@@ -4,7 +4,7 @@ import { mkdtempSync, readFileSync, rmSync, rmdirSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { stripTypeScriptTypes } from 'node:module'
-import { assertDiagnosticOutcome, instrumentMenuTest, runInstrumentedRound, sampleInstrumentation } from './menu-diagnostic.mjs'
+import { assertionLines, assertDiagnosticOutcome, instrumentMenuTest, runInstrumentedRound, sampleInstrumentation } from './menu-diagnostic.mjs'
 import { manifest } from './qualification.mjs'
 
 const fixture = `import { readFile } from 'node:fs/promises'
@@ -119,13 +119,58 @@ test('workflow keeps fixed source, manual-only read-only diagnostic scope and un
   assert(!/gh release|npm publish|contents: write/u.test(workflow))
 })
 
-test('only ordinary pass and assertion failure permit the next diagnostic round', () => {
-  for (const status of [0, 1]) assert.doesNotThrow(() => assertDiagnosticOutcome({ status, signal: null }))
-  for (const error of [new Error('timeout'), new Error('SIGINT'), new Error('SIGTERM')]) {
-    assert.throws(() => assertDiagnosticOutcome({ status: 1, signal: null, error }), /owner failed/)
+const ordinaryResult = status => ({ status, signal: null, cancelled: false,
+  error: status === 1 ? new Error('RuntimeError: command: nonzero_exit; see command evidence') : undefined,
+  ownership: { cleanupConfirmed: true, record: { exit_code: status, reason: status === 1 ? 'nonzero_exit' : 'completed', survivors: {} } } })
+const failedReport = () => ({ success: false, numTotalTests: 2, numPendingTests: 0, numPassedTests: 1, numFailedTests: 1,
+  testResults: [{ name: '/product/apps/web/tests/row-context-menu.e2e.ts',
+    assertionResults: [{ fullName: 'web e2e: row context-menu placement keeps the workspace menu at its requested anchor with dismissal and focus return', status: 'failed', failureMessages: ['TimeoutError: locator.waitFor\n    at /product/apps/web/tests/row-context-menu.e2e.ts:100:5'] },
+      { fullName: 'web e2e: row context-menu placement keeps the session menu at its requested anchor with dismissal and focus return', status: 'passed', failureMessages: [] }] }] })
+
+test('real owner nonzero_exit plus an actual failed assertion permits diagnostic comparison', () => {
+  assert.doesNotThrow(() => assertDiagnosticOutcome(ordinaryResult(0)))
+  assert.doesNotThrow(() => assertDiagnosticOutcome(ordinaryResult(1), failedReport(), [100]))
+})
+
+test('startup, malformed or missing reports never qualify exit one as an assertion failure', () => {
+  for (const report of [undefined, {}, { ...failedReport(), numTotalTests: 0 },
+    { ...failedReport(), numRuntimeErrors: 1 }, { ...failedReport(), numFailedTests: 0 },
+    { ...failedReport(), testResults: [] }, { ...failedReport(), success: true }]) {
+    assert.throws(() => assertDiagnosticOutcome(ordinaryResult(1), report, [100]))
   }
-  for (const status of [null, undefined, 2, 130, 143]) {
-    assert.throws(() => assertDiagnosticOutcome({ status, signal: null }))
+  const report = failedReport()
+  report.testResults[0].assertionResults[0].failureMessages = []
+  assert.throws(() => assertDiagnosticOutcome(ordinaryResult(1), report, [100]))
+})
+
+test('cancellation, timeout and unknown ownership stop even when a failure report exists', () => {
+  for (const reason of ['timeout', 'cancelled', 'surviving_descendants_after_parent_exit']) {
+    const result = ordinaryResult(1); result.ownership.record.reason = reason
+    assert.throws(() => assertDiagnosticOutcome(result, failedReport(), [100]))
   }
-  assert.throws(() => assertDiagnosticOutcome({ status: 1, signal: 'SIGTERM' }))
+  for (const patch of [{ cancelled: true }, { cancelled: undefined }, { signal: 'SIGTERM' }, { status: 2 }]) {
+    assert.throws(() => assertDiagnosticOutcome({ ...ordinaryResult(1), ...patch }, failedReport(), [100]))
+  }
+  const result = ordinaryResult(1); result.ownership.record.survivors = { 123: 'live' }
+  assert.throws(() => assertDiagnosticOutcome(result, failedReport(), [100]))
+})
+
+test('assertion callsite proof rejects hook startup, missing stacks and duplicate cases', () => {
+  assert.deepEqual(assertionLines('setup()\nawait menu.waitFor()\nexpect(true).toBe(true)\nawait expect.poll(check).toBe(true)'), [2, 3, 4])
+  for (const message of ['beforeAll failed', 'Error\n    at /product/apps/web/tests/row-context-menu.e2e.ts:30:5', 'Error mentions /product/apps/web/tests/row-context-menu.e2e.ts:100:5', 'Error\n    at /product/other/row-context-menu.e2e.ts:100:5']) {
+    const report = failedReport(); report.testResults[0].assertionResults[0].failureMessages = [message]
+    assert.throws(() => assertDiagnosticOutcome(ordinaryResult(1), report, [100]))
+  }
+  const report = failedReport()
+  report.testResults[0].assertionResults[1].fullName = report.testResults[0].assertionResults[0].fullName
+  assert.throws(() => assertDiagnosticOutcome(ordinaryResult(1), report, [100]))
+})
+
+test('recognized ANSI and named stack frames retain precise assertion callsite proof', () => {
+  for (const frame of ['    at run (/product/apps/web/tests/row-context-menu.e2e.ts:100:5)',
+    ' ❯ /product/apps/web/tests/row-context-menu.e2e.ts:100:5',
+    '\u001b[31m    at /product/apps/web/tests/row-context-menu.e2e.ts:100:5\u001b[0m']) {
+    const report = failedReport(); report.testResults[0].assertionResults[0].failureMessages = ['Error\n' + frame]
+    assert.doesNotThrow(() => assertDiagnosticOutcome(ordinaryResult(1), report, [100]))
+  }
 })

@@ -55,6 +55,6 @@ export async function runCommand(command, args, { cwd, timeout, env = process.en
   process.stdout.write(stdout); process.stderr.write(stderr)
   const record = receipt.record
   const error = cancellation || (receipt.failure ? new Error(receipt.failure) : undefined)
-  return { status: record.exit_code, signal: null, error, output: stdout + stderr,
+  return { status: record.exit_code, signal: null, error, cancelled: Boolean(cancellation || receipt.cancelled), output: stdout + stderr,
     ownership: { cleanupConfirmed: true, evidence, record } }
 }

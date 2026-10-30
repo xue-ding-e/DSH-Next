@@ -46,6 +46,7 @@ test('normal and nonzero commands preserve real exit status and final reap', { t
   for (const code of [0, 7]) {
     const result = await runCommand(process.execPath, ['-e', `console.log('owned-output');process.exit(${code})`], { cwd: dir, timeout: 3000 })
     assert.equal(result.status, code); assert.equal(Boolean(result.error), code !== 0)
+    assert.equal(result.cancelled, false)
     assert.match(result.output, /owned-output/); assert.equal(result.ownership.cleanupConfirmed, true)
   }
   rmSync(dir, { recursive: true })
@@ -65,7 +66,7 @@ for (const signal of ['SIGINT', 'SIGTERM']) test(`pipe-mediated ${signal} waits 
   writeFileSync(source, 'original')
   const script = `import{readFileSync,writeFileSync,existsSync}from'node:fs';import{setTimeout as delay}from'node:timers/promises';import{runCommand}from${JSON.stringify(wrapper)};
 const p=${JSON.stringify(source)},saved=readFileSync(p);writeFileSync(p,'synthetic-active');
-try{const pending=runCommand(process.execPath,['-e',${JSON.stringify(childCode(heartbeat))}],{cwd:${JSON.stringify(dir)},timeout:10000});while(!existsSync(${JSON.stringify(heartbeat)}))await delay(20);process.kill(process.pid,${JSON.stringify(signal)});const result=await pending;if(!result.error?.message.includes('cancelled by ${signal}')||!result.ownership.cleanupConfirmed)throw Error('cancel not confirmed');}finally{writeFileSync(p,saved)};
+try{const pending=runCommand(process.execPath,['-e',${JSON.stringify(childCode(heartbeat))}],{cwd:${JSON.stringify(dir)},timeout:10000});while(!existsSync(${JSON.stringify(heartbeat)}))await delay(20);process.kill(process.pid,${JSON.stringify(signal)});const result=await pending;if(!result.error?.message.includes('cancelled by ${signal}')||!result.ownership.cleanupConfirmed||result.cancelled!==true)throw Error('cancel not confirmed');}finally{writeFileSync(p,saved)};
 if(process.listenerCount('SIGINT')||process.listenerCount('SIGTERM'))throw Error('listener leak');`
   const result = await actor(script, dir).done
   assert.equal(result.code, 0, result.text); assert.equal(result.signal, null)
