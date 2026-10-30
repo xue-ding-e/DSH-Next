@@ -1,4 +1,4 @@
-name: Next fixed source Linux qualification
+name: Next synthetic sidebar menu diagnostic
 
 # Existing registered manual entry; no default-branch trigger and no publication.
 on:
@@ -24,9 +24,9 @@ env:
   RAYON_NUM_THREADS: '2'
 jobs:
   linux:
-    if: github.repository == 'xue-ding-e/DSH-Next' && github.repository_id == '1437727533' && github.ref == 'refs/heads/validation/next-fixed-linux-20261030' && github.event_name == 'workflow_dispatch'
+    if: github.repository == 'xue-ding-e/DSH-Next' && github.repository_id == '1437727533' && github.ref == 'refs/heads/validation/next-menu-diagnostic-20261030' && github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-24.04
-    timeout-minutes: 300
+    timeout-minutes: 210
     defaults:
       run:
         shell: bash
@@ -49,7 +49,7 @@ jobs:
           package-manager-cache: false
       - name: Test evidence gates and owned-process cancellation without dependencies
         timeout-minutes: 2
-        run: node --test control/.github/validation/next-installer/qualification.test.mjs control/.github/validation/next-installer/run-command-cancellation.test.mjs control/.github/validation/next-installer/fixed-linux-wiring.test.mjs
+        run: node --test control/.github/validation/next-installer/qualification.test.mjs control/.github/validation/next-installer/run-command-cancellation.test.mjs control/.github/validation/next-installer/menu-diagnostic.test.mjs
       - name: Checkout exact rebased installer product and reviewed main baseline
         timeout-minutes: 5
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -77,16 +77,18 @@ jobs:
         timeout-minutes: 25
         working-directory: product
         run: pnpm install --frozen-lockfile
-      - name: Run actual Next source tests, Desktop and synthetic browser-cookie suites, full TS6 build, paired docs and pointer regressions
-        timeout-minutes: 260
-        run: exec node control/.github/validation/next-installer/qualification.mjs linux product
-      - name: Retain only generated source-qualification evidence
+      - name: Observe original and synchronized synthetic menu fixtures without relaxing assertions
+        timeout-minutes: 160
+        run: exec node control/.github/validation/next-installer/menu-diagnostic.mjs product
+      - name: Retain bounded synthetic diagnostic samples and screenshots
         if: always()
         timeout-minutes: 5
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
-          name: next-installer-linux-${{ github.run_id }}
-          path: ${{ runner.temp }}/dsh-next-installer-evidence/linux/
+          name: next-menu-diagnostic-${{ github.run_id }}
+          path: |
+            ${{ runner.temp }}/dsh-next-menu-diagnostic/
+            ${{ runner.temp }}/dsh-next-installer-evidence/linux/
           if-no-files-found: warn
           retention-days: 7
           include-hidden-files: false
