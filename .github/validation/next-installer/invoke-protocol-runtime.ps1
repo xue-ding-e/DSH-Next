@@ -15,7 +15,7 @@ function Invoke-NextProtocolRuntime {
   if (-not $ExecutionAuthorized) { throw 'Runtime lane not authorized.' }
   # Keep source/version coupled: neither a valid SHA nor a known version alone is enough.
   $baselinePair = $Source -ceq '270dd45091805cb504fdd39bf09d9ec596ca4150' -and $Version -ceq '0.2.1-rc.3.20261029.1'
-  $fixedPair = $Source -ceq '097405ae7f990d34a17a2afe689db17df55932a3' -and $Version -ceq '0.2.1-rc.3.20261029.2'
+  $fixedPair = $Source -ceq '6b9ebe026a565e5aa547811972dff745961e134f' -and $Version -ceq '0.2.1-rc.3.20261029.2'
   if (-not ($baselinePair -or $fixedPair)) { throw 'Unreviewed runtime source/version pair.' }
   if (-not $IsWindows -or $env:GITHUB_ACTIONS -ne 'true' -or $env:RUNNER_ENVIRONMENT -ne 'github-hosted' -or $env:GITHUB_REPOSITORY_ID -ne '1437727533') { throw 'Only the fresh hosted DSH validation account is supported.' }
   if ([Environment]::UserName -ne 'runneradmin') { throw 'Unexpected account.' }

@@ -31,6 +31,23 @@ class Wiring(unittest.TestCase):
   self.assertIn("if ((Json (Read-Registry $nextProtocol)) -cne $script:foreignProtocolSnapshot) { throw",s)
   self.assertIn("Install-Actual 'reinstall-idempotent' $final",s)
   self.assertIn('-Source $Package.source',s)
+ def test_all_runtime_source_pins_equal_the_sealed_manifest_pair(self):
+  m=json.loads((D/'manifest.json').read_text())
+  import re
+  names=['windows-installer.ps1','protocol-policy.mjs','invoke-protocol-runtime.ps1']
+  texts={name:(D/name).read_text() for name in names}
+  def check(t):
+   installer,policy,wrapper=[t[name] for name in names]
+   pins=re.search(r"\$expectedSources = @\('([a-f0-9]{40})','([a-f0-9]{40})'\)",installer)
+   self.assertIsNotNone(pins);self.assertEqual(list(pins.groups()),[m['baselineSource'],m['source']])
+   self.assertIn("source: '"+m['source']+"', version: '"+m['upgradeVersion']+"'",policy)
+   self.assertIn("SOURCE = '"+m['baselineSource']+"'",policy)
+   self.assertIn("$fixedPair = $Source -ceq '"+m['source']+"' -and $Version -ceq '"+m['upgradeVersion']+"'",wrapper)
+   self.assertNotIn(m['fixtureBaseSource'],installer+policy+wrapper)
+  check(texts)
+  for name in names:
+   wrong=dict(texts);wrong[name]=wrong[name].replace(m['source'],m['fixtureBaseSource'])
+   with self.assertRaises(AssertionError):check(wrong)
  def test_exact_source_linux_prerequisite_runs_before_any_build_or_installer(self):
   m=json.loads((D/'manifest.json').read_text());p=m['linuxQualification']
   self.assertEqual(p['runId'],41132362963);self.assertEqual(p['control'],'71d391a9ccad1457786fdcae4de174bad95e80d1')

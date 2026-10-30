@@ -16,7 +16,7 @@ $PackageIndex = Assert-NextPath -Path $PackageIndex -Within $evidence -MustExist
 $packages = @(Get-Content -LiteralPath $PackageIndex -Raw | ConvertFrom-Json)
 if ($packages.Count -ne 2) { throw 'Exactly one package or one reviewed V1/V2 pair is required.' }
 
-$expectedSources = @('270dd45091805cb504fdd39bf09d9ec596ca4150','097405ae7f990d34a17a2afe689db17df55932a3')
+$expectedSources = @('270dd45091805cb504fdd39bf09d9ec596ca4150','6b9ebe026a565e5aa547811972dff745961e134f')
 $expectedVersions = @('0.2.1-rc.3.20261029.1','0.2.1-rc.3.20261029.2')
 for ($i=0; $i -lt 2; $i++) {
     if ($packages[$i].source -cne $expectedSources[$i] -or $packages[$i].version -cne $expectedVersions[$i]) { throw 'Unreviewed source/version package pair.' }

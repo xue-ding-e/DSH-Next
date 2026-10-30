@@ -5,7 +5,7 @@ export const SOURCE = '270dd45091805cb504fdd39bf09d9ec596ca4150'
 // Exact reviewed artifact identities, not a general SHA/version permission.
 const REVIEWED_PACKAGES = Object.freeze([
   Object.freeze({ source: SOURCE, version: '0.2.1-rc.3.20261029.1' }),
-  Object.freeze({ source: '097405ae7f990d34a17a2afe689db17df55932a3', version: '0.2.1-rc.3.20261029.2' }),
+  Object.freeze({ source: '6b9ebe026a565e5aa547811972dff745961e134f', version: '0.2.1-rc.3.20261029.2' }),
 ])
 export function verifyReviewedPackage(source, version) {
   assert(REVIEWED_PACKAGES.some(item => item.source === source && item.version === version), 'unreviewed source/version pair')

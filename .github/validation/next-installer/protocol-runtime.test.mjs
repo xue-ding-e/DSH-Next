@@ -101,13 +101,13 @@ test('ready identity still rejects a missing installed main rather than retrying
 
 
 test('only the two reviewed source/version pairs can reach runtime attestation',()=>{
- const oldSource='270dd45091805cb504fdd39bf09d9ec596ca4150', fixedSource='097405ae7f990d34a17a2afe689db17df55932a3'
+ const oldSource='270dd45091805cb504fdd39bf09d9ec596ca4150', fixedSource='6b9ebe026a565e5aa547811972dff745961e134f'
  const v1='0.2.1-rc.3.20261029.1', v2='0.2.1-rc.3.20261029.2'
  for(const [source,version] of [[oldSource,v1],[fixedSource,v2]]) {
   verifyReviewedPackage(source,version)
   verifyPackageAttestation({source,version},{source,version})
  }
- for(const [source,version] of [[oldSource,v2],[fixedSource,v1],['a'.repeat(40),v2],[fixedSource,v2+'0'],[fixedSource.toUpperCase(),v2]]) {
+ for(const [source,version] of [[oldSource,v2],['097405ae7f990d34a17a2afe689db17df55932a3',v2],[fixedSource,v1],['a'.repeat(40),v2],[fixedSource,v2+'0'],[fixedSource.toUpperCase(),v2]]) {
   assert.throws(()=>verifyReviewedPackage(source,version))
   assert.throws(()=>verifyPackageAttestation({source,version},{source,version}))
  }
@@ -118,7 +118,7 @@ test('PowerShell wrapper carries and checks the coupled reviewed source through 
  const wrapper=readFileSync(new URL('./invoke-protocol-runtime.ps1',import.meta.url),'utf8')
  assert(wrapper.includes('[Parameter(Mandatory)][string]$Source,'))
  assert(wrapper.includes("$baselinePair = $Source -ceq '270dd45091805cb504fdd39bf09d9ec596ca4150' -and $Version -ceq '0.2.1-rc.3.20261029.1'"))
- assert(wrapper.includes("$fixedPair = $Source -ceq '097405ae7f990d34a17a2afe689db17df55932a3' -and $Version -ceq '0.2.1-rc.3.20261029.2'"))
+ assert(wrapper.includes("$fixedPair = $Source -ceq '6b9ebe026a565e5aa547811972dff745961e134f' -and $Version -ceq '0.2.1-rc.3.20261029.2'"))
  assert(wrapper.includes('if (-not ($baselinePair -or $fixedPair))'))
  assert(wrapper.includes('executionAuthorized=$ExecutionAuthorized;source=$Source;'))
  assert(wrapper.includes('$receipt.source -cne $Source -or $receipt.version -cne $Version'))
