@@ -115,7 +115,7 @@ jobs:
         run: |
           node control/.github/validation/next-installer/qualification.mjs identity product
           if ($LASTEXITCODE -ne 0) { throw 'Fixed source identity failed.' }
-          python -B control/.github/validation/next-installer/verify-v2-reuse.py --manifest control/.github/validation/next-installer/v2-reuse-manifest.json --download "$env:RUNNER_TEMP/dsh-v2-reuse-download" --product product --baseline "$env:RUNNER_TEMP/dsh-reuse-installation" --output "$env:RUNNER_TEMP/dsh-next-installer-evidence/windows"
+          python -B control/.github/validation/next-installer/verify-v2-reuse.py --manifest control/.github/validation/next-installer/v2-reuse-manifest.json --download "$env:RUNNER_TEMP/dsh-v2-reuse-download" --product product --baseline "$env:RUNNER_TEMP/dsh-reuse-installation" --output "$env:RUNNER_TEMP/dsh-next-installer-evidence/reused-windows"
           if ($LASTEXITCODE -ne 0) { throw 'Existing V2 build bytes failed qualification; no installer may run.' }
       - name: Qualify actual installed launch upgrade repair uninstall and reinstall
         timeout-minutes: 25
@@ -123,7 +123,7 @@ jobs:
           if ($env:GH_TOKEN -or $env:GITHUB_TOKEN) { throw 'Transport token must not reach installed application validation.' }
           $node = (Get-Command node.exe -CommandType Application | Select-Object -First 1).Source
           $nodeHash = (Get-FileHash -LiteralPath $node -Algorithm SHA256).Hash.ToLowerInvariant()
-          & control/.github/validation/next-installer/windows-installer.ps1 -Product product -PackageIndex "$env:RUNNER_TEMP/dsh-next-installer-evidence/windows/packages.json" -NodeExe $node -ExpectedNodeSha256 $nodeHash
+          & control/.github/validation/next-installer/windows-installer.ps1 -Product product -PackageIndex "$env:RUNNER_TEMP/dsh-next-installer-evidence/reused-windows/packages.json" -NodeExe $node -ExpectedNodeSha256 $nodeHash
       - name: Retain synthetic qualification records without installers or profiles
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
@@ -133,6 +133,7 @@ jobs:
             ${{ runner.temp }}/dsh-next-installer-evidence/linux-dependency/reviewed-linux.json
             ${{ runner.temp }}/dsh-reuse-installation/*.json
             ${{ runner.temp }}/dsh-next-installer-evidence/windows/*.json
+            ${{ runner.temp }}/dsh-next-installer-evidence/reused-windows/**/*.json
             ${{ runner.temp }}/dsh-next-installer-evidence/windows/runtime-*/protocol-runtime.json
             ${{ runner.temp }}/dsh-next-installer-evidence/windows/runtime-*/protocol-before.json
             ${{ runner.temp }}/dsh-next-installer-evidence/windows/runtime-*/protocol-after.json

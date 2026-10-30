@@ -87,6 +87,11 @@ def validate_build(m, candidate, qualification):
     return {'buildBytesVerified': True, 'source': m['source'], 'priorRun': m['priorRun'], 'priorAttempt': m['priorAttempt'], 'priorBuildQualified': True, 'lifecycleQualified': False}
 
 
+def create_output_directory(output):
+    """Allocate separate lifecycle evidence without merging earlier native-test outputs."""
+    output.mkdir(exist_ok=False)
+
+
 def main():
     parser = argparse.ArgumentParser()
     for name in ['manifest', 'download', 'product', 'baseline', 'output']:
@@ -110,7 +115,7 @@ def main():
         prior = read_json((a.baseline / 'packages.json').read_bytes())
         require(len(prior) == 1 and prior[0]['source'] == '270dd45091805cb504fdd39bf09d9ec596ca4150' and prior[0]['version'] == '0.2.1-rc.3.20261029.1' and prior[0]['sha256'] == '4246aac2173d65b61a9a9087caf44e941bef8439c3fa2a37eb0458d24e222a10', 'Verified baseline index required')
         # Create a new evidence directory; never trust or follow paths from the old run.
-        a.output.mkdir(exist_ok=False)
+        create_output_directory(a.output)
         for field in ['installer', 'attestation']:
             source = Path(prior[0][field]).resolve()
             require(source.is_relative_to(a.baseline.resolve()) and source.is_file(), 'Baseline path escape')

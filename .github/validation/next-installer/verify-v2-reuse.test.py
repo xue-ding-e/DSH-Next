@@ -89,6 +89,19 @@ class Archive(unittest.TestCase):
                 self.assertNotEqual(result.returncode,0)
                 self.assertIn('sealed',result.stderr.lower())
 
+    def test_native_test_directory_is_preserved_and_lifecycle_allocates_exclusively(self):
+        import tempfile
+        native=(HERE/'windows-path-guard.test.ps1').read_text()
+        self.assertIn("Join-Path $temporary 'dsh-next-installer-evidence/windows'",native)
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory)/'dsh-next-installer-evidence';native_root=root/'windows'
+            native_root.mkdir(parents=True);receipt=native_root/'path-guard-native.json';receipt.write_bytes(b'{"passed":true}')
+            with self.assertRaises(FileExistsError):v2.create_output_directory(native_root)
+            output=root/'reused-windows';v2.create_output_directory(output)
+            self.assertTrue(output.is_dir());self.assertEqual(receipt.read_bytes(),b'{"passed":true}')
+            with self.assertRaises(FileExistsError):v2.create_output_directory(output)
+            self.assertEqual(receipt.read_bytes(),b'{"passed":true}')
+
     def test_inventory_digest_and_unsafe_paths_fail_closed(self):
         import hashlib
         import tempfile
@@ -117,6 +130,17 @@ class Archive(unittest.TestCase):
             self.assertIn(required,workflow)
         self.assertLess(workflow.index('linux-evidence.mjs'),workflow.index('Download fixed V1'))
         self.assertLess(workflow.index('verify-v2-reuse.py --manifest'),workflow.index('& control/.github/validation/next-installer/windows-installer.ps1'))
+        # Native path-guard tests already own windows/. Extraction must not merge into it.
+        output='--output "$env:RUNNER_TEMP/dsh-next-installer-evidence/reused-windows"'
+        package='-PackageIndex "$env:RUNNER_TEMP/dsh-next-installer-evidence/reused-windows/packages.json"'
+        def check_paths(text):
+            self.assertIn(output,text);self.assertIn(package,text)
+            self.assertIn('dsh-next-installer-evidence/reused-windows/**/*.json',text)
+            self.assertNotIn('--output "$env:RUNNER_TEMP/dsh-next-installer-evidence/windows"',text)
+        check_paths(workflow)
+        for token in [output,package,'dsh-next-installer-evidence/reused-windows/**/*.json']:
+            with self.assertRaises(AssertionError):check_paths(workflow.replace(token,token.replace('reused-windows','windows')))
+        self.assertIn('output.mkdir(exist_ok=False)',(HERE/'verify-v2-reuse.py').read_text())
 
 
 if __name__ == '__main__': unittest.main()
