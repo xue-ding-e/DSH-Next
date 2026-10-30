@@ -188,3 +188,15 @@ test('workflow environment and the product checkout independently bind the exact
     workflow + '\n  EXPECTED_PRODUCT_SHA: ' + manifest.source + '\n',
   ]) assert.throws(() => check(changed))
 })
+
+test('sidebar fixture revision preserves the exact prior protocol chain and only its reviewed test path', async () => {
+  const { assertFixtureRevision } = await import('./qualification.mjs')
+  const actual = { parent: manifest.fixtureBaseSource, paths: [...manifest.fixtureFixPaths],
+    baseParent: manifest.baselineSource, basePaths: [...manifest.protocolFixPaths] }
+  assert.doesNotThrow(() => assertFixtureRevision(actual))
+  for (const change of [{ parent: 'f'.repeat(40) }, { paths: [] },
+    { paths: [...actual.paths, 'apps/web/src/product.ts'] }, { baseParent: 'f'.repeat(40) }, { basePaths: [] }]) {
+    assert.throws(() => assertFixtureRevision({ ...actual, ...change }))
+  }
+  assert.equal(manifest.linuxQualification, null, 'new source has no inherited Linux qualification')
+})

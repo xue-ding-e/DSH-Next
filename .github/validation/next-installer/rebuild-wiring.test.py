@@ -6,7 +6,7 @@ D=Path(__file__).parent
 class Wiring(unittest.TestCase):
  def test_sealed_sources_and_only_new_version_built(self):
   m=json.loads((D/'manifest.json').read_text())
-  self.assertEqual(m['source'],'097405ae7f990d34a17a2afe689db17df55932a3')
+  self.assertEqual(m['source'],'6b9ebe026a565e5aa547811972dff745961e134f')
   self.assertEqual(m['baselineSource'],'270dd45091805cb504fdd39bf09d9ec596ca4150')
   s=(D/'windows-qualify.ps1').read_text()
   self.assertIn('$versions = @($m.upgradeVersion)',s)

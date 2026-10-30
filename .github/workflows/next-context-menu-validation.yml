@@ -1,4 +1,4 @@
-name: Next fixed V2 build and actual installer qualification
+name: Next sidebar-ready V2 and actual installer qualification
 
 on:
   workflow_dispatch:
@@ -15,7 +15,7 @@ concurrency:
   cancel-in-progress: false
 env:
   EXPECTED_CONTROL_SHA: ${{ inputs.expected_control_sha }}
-  EXPECTED_PRODUCT_SHA: 097405ae7f990d34a17a2afe689db17df55932a3
+  EXPECTED_PRODUCT_SHA: 6b9ebe026a565e5aa547811972dff745961e134f
   DSH_TELEMETRY_DISABLED: '1'
   DSH_SNAPSHOT: replay
   DSH_GATE_CONCURRENCY: '2'
@@ -25,7 +25,7 @@ env:
   DSH_COVERAGE_TEST_TIMEOUT_MS: '90000'
 jobs:
   windows:
-    if: github.repository == 'xue-ding-e/DSH-Next' && github.repository_id == '1437727533' && github.ref == 'refs/heads/validation/next-installer-reuse-20261030' && github.event_name == 'workflow_dispatch'
+    if: github.repository == 'xue-ding-e/DSH-Next' && github.repository_id == '1437727533' && github.ref == 'refs/heads/validation/next-sidebar-windows-20261030' && github.event_name == 'workflow_dispatch'
     runs-on: windows-2025
     timeout-minutes: 240
     defaults:
@@ -52,9 +52,9 @@ jobs:
       - name: Checkout exact fixed product source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
-          ref: 097405ae7f990d34a17a2afe689db17df55932a3
+          ref: 6b9ebe026a565e5aa547811972dff745961e134f
           path: product
-          fetch-depth: 6
+          fetch-depth: 7
           persist-credentials: false
       - name: Set up pinned Node
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
