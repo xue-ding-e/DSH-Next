@@ -1,10 +1,12 @@
 <# Actual-package silent acceptance only on this run's fresh disposable GitHub-hosted Windows account. #>
 [CmdletBinding()]
-param([Parameter(Mandatory)][string]$Product, [Parameter(Mandatory)][string]$PackageIndex)
+param([Parameter(Mandatory)][string]$Product, [Parameter(Mandatory)][string]$PackageIndex,
+    [Parameter(Mandatory)][string]$NodeExe, [Parameter(Mandatory)][string]$ExpectedNodeSha256)
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'windows-owned-process.ps1')
 . (Join-Path $PSScriptRoot 'windows-path-guard.ps1')
+. (Join-Path $PSScriptRoot 'invoke-protocol-runtime.ps1')
 if ($env:GITHUB_ACTIONS -ne 'true' -or $env:RUNNER_ENVIRONMENT -ne 'github-hosted' -or $env:RUNNER_OS -ne 'Windows' -or $env:GITHUB_REPOSITORY_ID -ne '1437727533') { throw 'Fresh GitHub-hosted Windows runner required; never run on a personal computer.' }
 if ([Environment]::UserName -ne 'runneradmin' -or [IO.Path]::GetFullPath($env:USERPROFILE) -ne 'C:\Users\runneradmin') { throw 'Unexpected hosted account; no profile data will be touched.' }
 $m = Get-Content (Join-Path $PSScriptRoot 'manifest.json') -Raw | ConvertFrom-Json
@@ -135,6 +137,8 @@ function Attest-Installed([string]$Label, $Package) {
     try {
         if ($entry.GetValue('DisplayName') -ne 'DSH Next' -or $entry.GetValue('DisplayVersion') -ne $Package.version -or $entry.GetValue('InstallLocation').TrimEnd('\') -ne $install) { throw 'Next uninstall registration identity/version/location mismatch.' }
     } finally { $entry.Dispose() }
+    # The actual application owns protocol registration on first launch.
+    $null = Invoke-NextProtocolRuntime -InstalledExe $exe -Attestation (Join-Path $evidence ($Label + '.json')) -Version $Package.version -OwnedRoot $root -Evidence $evidence -Label $Label -ExecutionAuthorized $true -NodeExe $NodeExe -ExpectedNodeSha256 $ExpectedNodeSha256
     $protocol = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey($nextProtocol + '\shell\open\command')
     if ($null -eq $protocol) { throw 'Next protocol registration is missing.' }
     try { if ($protocol.GetValue('') -cne ('"' + $exe + '" "%1"')) { throw 'Next protocol does not target this owned installed executable.' } }
