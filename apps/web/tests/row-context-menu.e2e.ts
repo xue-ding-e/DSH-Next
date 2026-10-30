@@ -58,6 +58,7 @@ describe('web e2e: row context-menu placement', () => {
   it.each(['workspace', 'session'] as const)('keeps the %s menu at its requested anchor with dismissal and focus return', async (kind) => {
     onTestFailed(() => saveFailureShot(page, `web-e2e-row-context-menu-${kind}`))
     await page.setViewportSize({ width: 1200, height: 720 })
+    await page.getByRole('button', { name: 'Collapse sidebar', exact: true }).first().waitFor({ state: 'visible' })
     const row = page.locator(`[data-row-key="${kind}:${kind === 'workspace' ? workspaceId : TARGET}"]`)
     await row.waitFor()
     const trigger = row.getByRole('button', { name: /actions for/ })
@@ -110,7 +111,9 @@ describe('web e2e: row context-menu placement', () => {
     // A narrow, short viewport places the actual sidebar row near the menu's right/bottom limits.
     await page.setViewportSize({ width: 420, height: 340 })
     const reopen = page.getByRole('button', { name: 'Open sidebar', exact: true }).first()
-    if (await reopen.isVisible()) await reopen.click()
+    await reopen.waitFor({ state: 'visible' })
+    await reopen.click()
+    await page.getByRole('button', { name: 'Collapse sidebar', exact: true }).first().waitFor({ state: 'visible' })
     await row.scrollIntoViewIfNeeded()
     const bounds = await rect(row)
     await row.click({ button: 'right', position: { x: bounds.width - 16, y: bounds.height / 2 } })
