@@ -11,6 +11,17 @@ class ToolSelection(unittest.TestCase):
                 self.assertEqual(workflow.count(f'(Get-Command {tool}.exe -CommandType Application | Select-Object -First 1).Source'), 1)
                 self.assertNotIn(f'(Get-Command {tool}.exe -CommandType Application).Source', workflow)
 
+    def test_absent_uninstaller_cannot_be_executed_again_after_registration_failure(self):
+        installer = (Path(__file__).parent / 'windows-installer.ps1').read_text()
+        section = installer.split('function Uninstall-Actual', 1)[1].split('function Command-Worker', 1)[0]
+        gone = section.index("if (Test-Path -LiteralPath $install) { throw")
+        disowned = section.index('$script:installedAttested = $false')
+        failure = section.index("if ($uninstallRemained -or $protocolRemained) { throw")
+        self.assertLess(gone, disowned)
+        self.assertLess(disowned, failure)
+        self.assertEqual(section.count('$script:installedAttested = $false'), 1)
+        self.assertIn("if ($installedAttested) { Uninstall-Actual 'failure-cleanup-uninstall' }", installer)
+
     def test_uninstall_summary_is_checked_out_parsed_and_retained_without_raw_registry_values(self):
         directory = Path(__file__).parent
         workflow = (directory.parents[1] / 'workflows' / 'next-context-menu-validation.yml').read_text()
