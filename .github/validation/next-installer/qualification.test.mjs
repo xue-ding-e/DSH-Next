@@ -59,7 +59,7 @@ test('a skipped-only file with a fabricated positive pass count is not evidence'
 test('the locked source inventory contains 204 Desktop cases, five Linux skips and 157 + 2 pointer cases', () => {
   assert.equal(manifest.desktopTests.length, 10)
   assert.equal(manifest.candidatePaths.length, 44)
-  assert.equal(Object.keys(manifest.files).length, 59)
+  assert.equal(Object.keys(manifest.files).length, 60)
   assert.equal(manifest.desktopTests.reduce((sum, path) => sum + manifest.testInventory[path].total, 0), 204)
   assert.equal(manifest.desktopTests.reduce((sum, path) => sum + (manifest.testInventory[path].platformSkips.linux?.length ?? 0), 0), 5)
   assert.equal(manifest.pointerTests.reduce((sum, path) => sum + manifest.testInventory[path].total, 0), 157)

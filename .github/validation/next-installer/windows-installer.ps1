@@ -14,7 +14,13 @@ $temporary = Assert-NextPath -Path $env:RUNNER_TEMP -MustExist
 $evidence = Assert-NextPath -Path (Split-Path -Parent ([IO.Path]::GetFullPath($PackageIndex))) -Within $temporary -MustExist
 $PackageIndex = Assert-NextPath -Path $PackageIndex -Within $evidence -MustExist
 $packages = @(Get-Content -LiteralPath $PackageIndex -Raw | ConvertFrom-Json)
-if ($packages.Count -notin @(1,2)) { throw 'Exactly one package or one reviewed V1/V2 pair is required.' }
+if ($packages.Count -ne 2) { throw 'Exactly one package or one reviewed V1/V2 pair is required.' }
+
+$expectedSources = @('270dd45091805cb504fdd39bf09d9ec596ca4150','097405ae7f990d34a17a2afe689db17df55932a3')
+$expectedVersions = @('0.2.1-rc.3.20261029.1','0.2.1-rc.3.20261029.2')
+for ($i=0; $i -lt 2; $i++) {
+    if ($packages[$i].source -cne $expectedSources[$i] -or $packages[$i].version -cne $expectedVersions[$i]) { throw 'Unreviewed source/version package pair.' }
+}
 $officialFile = Assert-NextPath -Path (Join-Path $evidence 'official-identity.json') -Within $evidence -MustExist
 $officialIdentity = Get-Content -LiteralPath $officialFile -Raw | ConvertFrom-Json
 if ($officialIdentity.source -ne $m.source -or $officialIdentity.appId -ne 'com.deepseek.dsh' -or $officialIdentity.builderVersion -ne '26.17.0' -or $officialIdentity.guid -notmatch '^[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$' -or $officialIdentity.guid -eq 'e74d59b9-768b-51ae-bb11-7f24bfbafa5a') { throw 'Locked official identity derivation is missing.' }
@@ -127,10 +133,11 @@ function Attest-Installed([string]$Label, $Package) {
     $exe = Assert-NextPath -Path (Join-Path $install 'DSH Next.exe') -Within $install -MustExist
     $null = Assert-NextPath -Path $Package.attestation -Within $evidence -MustExist
     $build = Get-Content -LiteralPath $Package.attestation -Raw | ConvertFrom-Json
+    if ($build.source -cne $Package.source -or $build.version -cne $Package.version) { throw 'Installed attestation source/version pair mismatch.' }
     if ((Get-FileHash -LiteralPath $exe -Algorithm SHA256).Hash.ToLowerInvariant() -ne $build.executableSha256) { throw 'Installed executable differs from this run actual package.' }
     $env:ELECTRON_RUN_AS_NODE = '1'
     try {
-        $null = Invoke-Lifecycle -FilePath $exe -Arguments @((Join-Path $PSScriptRoot 'package-attest.mjs'),$install,$Package.version,$m.source,(Join-Path $evidence ($Label + '.json')),$build.asarSha256) -WorkingDirectory $root -TimeoutSeconds 120 -EvidencePrefix (Join-Path $evidence ($Label + '-attest'))
+        $null = Invoke-Lifecycle -FilePath $exe -Arguments @((Join-Path $PSScriptRoot 'package-attest.mjs'),$install,$Package.version,$Package.source,(Join-Path $evidence ($Label + '.json')),$build.asarSha256) -WorkingDirectory $root -TimeoutSeconds 120 -EvidencePrefix (Join-Path $evidence ($Label + '-attest'))
     } finally { $env:ELECTRON_RUN_AS_NODE = $oldNodeMode }
     $entry = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey($uninstallKey)
     if ($null -eq $entry) { throw 'The exact Next GUID uninstall registration is missing.' }
@@ -138,7 +145,7 @@ function Attest-Installed([string]$Label, $Package) {
         if ($entry.GetValue('DisplayName') -ne 'DSH Next' -or $entry.GetValue('DisplayVersion') -ne $Package.version -or $entry.GetValue('InstallLocation').TrimEnd('\') -ne $install) { throw 'Next uninstall registration identity/version/location mismatch.' }
     } finally { $entry.Dispose() }
     # The actual application owns protocol registration on first launch.
-    $null = Invoke-NextProtocolRuntime -InstalledExe $exe -Attestation (Join-Path $evidence ($Label + '.json')) -Version $Package.version -OwnedRoot $root -Evidence $evidence -Label $Label -ExecutionAuthorized $true -NodeExe $NodeExe -ExpectedNodeSha256 $ExpectedNodeSha256
+    $null = Invoke-NextProtocolRuntime -InstalledExe $exe -Attestation (Join-Path $evidence ($Label + '.json')) -Version $Package.version -Source $Package.source -OwnedRoot $root -Evidence $evidence -Label $Label -ExecutionAuthorized $true -NodeExe $NodeExe -ExpectedNodeSha256 $ExpectedNodeSha256
     $protocol = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey($nextProtocol + '\shell\open\command')
     if ($null -eq $protocol) { throw 'Next protocol registration is missing.' }
     try { if ($protocol.GetValue('') -cne ('"' + $exe + '" "%1"')) { throw 'Next protocol does not target this owned installed executable.' } }
@@ -158,7 +165,7 @@ function Install-Actual([string]$Label, $Package) {
     } finally { $env:ELECTRON_RUN_AS_NODE = $oldNodeMode }
     Attest-Installed $Label $Package
 }
-function Uninstall-Actual([string]$Label) {
+function Uninstall-Actual([string]$Label, [string]$ExpectedForeign = '') {
     if (-not $script:installedAttested) { throw 'Only an attested installation is owned for uninstall.' }
     Assert-NextInstallTree -Path $install -OwnedRoot $root
     foreach ($path in $sentinelRoots) { Assert-NextInstallTree -Path $path -OwnedRoot $env:USERPROFILE }
@@ -178,7 +185,17 @@ function Uninstall-Actual([string]$Label) {
     @{ uninstallKeyRemained=$uninstallRemained; protocolKeyRemained=$protocolRemained; installationDirectoryRemained=(Test-Path -LiteralPath $install) } |
         ConvertTo-Json | Set-Content -LiteralPath (Join-Path $evidence ($Label + '-registration.json')) -Encoding utf8
     & (Join-Path $PSScriptRoot 'uninstall-registration-summary.ps1') -ExpectedExe (Join-Path $install 'DSH Next.exe') -Output (Join-Path $evidence ($Label + '-protocol-after-uninstall.json'))
-    if ($uninstallRemained -or $protocolRemained) { throw 'Next uninstall/protocol registration remained.' }
+    $allViews = @(Get-Content -LiteralPath (Join-Path $evidence ($Label + '-protocol-after-uninstall.json')) -Raw | ConvertFrom-Json)
+    if ($allViews.Count -ne 4) { throw 'Missing uninstall registry views.' }
+    foreach ($view in $allViews) {
+        if ($view.uninstallPresent) { throw 'Uninstall identity remained in a registry view.' }
+        $shouldExist = $ExpectedForeign -ne '' -and $view.hive -eq 'CurrentUser'
+        if ($view.protocolPresent -ne $shouldExist -or $view.protocolCommandMatchesOwnedExe) { throw 'Unexpected protocol ownership after uninstall.' }
+    }
+    if ($ExpectedForeign -ne '') {
+        if ($Label -cne 'foreign-handler-uninstall' -or $ExpectedForeign -cne $script:foreignProtocolSnapshot) { throw 'Unreviewed foreign-handler exception.' }
+        if ($uninstallRemained -or (Json (Read-Registry $nextProtocol)) -cne $ExpectedForeign) { throw 'Synthetic foreign protocol was changed or uninstall registration remained.' }
+    } elseif ($uninstallRemained -or $protocolRemained) { throw 'Next uninstall/protocol registration remained.' }
 }
 function Command-Worker([string]$Label, [string]$Operation, [string]$Expected = '') {
     $inputPath = Assert-NextPath -Path (Join-Path $evidence ($Label + '-input.json')) -Within $evidence
@@ -237,6 +254,23 @@ try {
     $state = Command-Worker 'command-remove' 'remove' $state.fingerprint
     if ($state.managed) { throw 'Owned Next PATH registration was not removed by the actual command worker.' }
     Assert-Preserved 'command-remove'
+    # Replace only this test's verified owned handler with a non-executed synthetic
+    # foreign command. The native uninstaller must preserve the entire key.
+    $commandKey = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey($nextProtocol + '\shell\open\command',$true)
+    try {
+        if ($commandKey.GetValue('') -cne ('"' + (Join-Path $install 'DSH Next.exe') + '" "%1"')) { throw 'Owned handler changed before synthetic replacement.' }
+        $commandKey.SetValue('',('"' + (Join-Path $root 'Synthetic foreign handler.exe') + '" "%1" --sentinel'))
+    } finally { $commandKey.Dispose() }
+    $script:foreignProtocolSnapshot = Json (Read-Registry $nextProtocol)
+    Uninstall-Actual 'foreign-handler-uninstall' $script:foreignProtocolSnapshot
+    Assert-Preserved 'foreign-handler-uninstall'
+    # Remove only the unchanged sentinel this run installed, after the owning
+    # application is gone; never restore a stale installed-executable command.
+    if ((Json (Read-Registry $nextProtocol)) -cne $script:foreignProtocolSnapshot) { throw 'Synthetic foreign protocol changed; refusing cleanup.' }
+    [Microsoft.Win32.Registry]::CurrentUser.DeleteSubKeyTree($nextProtocol,$false)
+    if ($null -ne (Read-Registry $nextProtocol)) { throw 'Synthetic foreign protocol cleanup failed.' }
+    Install-Actual 'reinstall-idempotent' $final
+    Assert-Preserved 'reinstall-idempotent'
     Uninstall-Actual 'final-uninstall'
     Assert-Preserved 'final-uninstall'
 } catch { $failure = $_.Exception.Message; throw }

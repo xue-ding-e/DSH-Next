@@ -2,6 +2,19 @@ import assert from 'node:assert/strict'
 import { win32 as path } from 'node:path'
 
 export const SOURCE = '270dd45091805cb504fdd39bf09d9ec596ca4150'
+// Exact reviewed artifact identities, not a general SHA/version permission.
+const REVIEWED_PACKAGES = Object.freeze([
+  Object.freeze({ source: SOURCE, version: '0.2.1-rc.3.20261029.1' }),
+  Object.freeze({ source: '097405ae7f990d34a17a2afe689db17df55932a3', version: '0.2.1-rc.3.20261029.2' }),
+])
+export function verifyReviewedPackage(source, version) {
+  assert(REVIEWED_PACKAGES.some(item => item.source === source && item.version === version), 'unreviewed source/version pair')
+}
+export function verifyPackageAttestation(request, attestation) {
+  verifyReviewedPackage(request.source, request.version)
+  assert.equal(attestation.source, request.source, 'attestation belongs to another source')
+  assert.equal(attestation.version, request.version, 'attestation belongs to another version')
+}
 export const PROFILE_PATCH = '- id: session-telemetry-otel\n  disabled: true\n- id: desktop-product-telemetry\n  disabled: true\n- id: product-analytics\n  disabled: true\n'
 const norm = value => path.normalize(value).replace(/[\\/]+$/, '').toLowerCase()
 export function inside(root, value) {

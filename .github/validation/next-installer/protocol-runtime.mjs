@@ -9,7 +9,7 @@ import { createReadStream, existsSync, mkdirSync, readFileSync, realpathSync, wr
 import { join, dirname, resolve, win32 } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { setTimeout as delay } from 'node:timers/promises'
-import { SOURCE, PROFILE_PATCH, runtimeEnvironment, inspectorEndpoint, verifyRuntimeIdentity, verifyProtocolSnapshots } from './protocol-policy.mjs'
+import { verifyReviewedPackage, verifyPackageAttestation, PROFILE_PATCH, runtimeEnvironment, inspectorEndpoint, verifyRuntimeIdentity, verifyProtocolSnapshots } from './protocol-policy.mjs'
 
 export class Inspector {
   constructor(socket) {
@@ -82,12 +82,12 @@ export async function main(requestPath) {
   assert.equal(process.platform, 'win32', 'no application launch outside native Windows')
   const request = JSON.parse(readFileSync(requestPath, 'utf8').replace(/^\uFEFF/, ''))
   assert.equal(request.executionAuthorized, true, 'probe is not reviewed/authorized')
-  assert.equal(request.source, SOURCE)
+  verifyReviewedPackage(request.source, request.version)
   const root = resolve(request.runtimeRoot), evidence = resolve(request.evidence)
   assert(!existsSync(root), 'runtime root must be completely new')
   assert.equal(realpathSync(request.exe).toLowerCase(), resolve(request.exe).toLowerCase())
   const attestation = JSON.parse(readFileSync(request.attestation, 'utf8').replace(/^\uFEFF/, ''))
-  assert.equal(attestation.source, SOURCE); assert.equal(attestation.version, request.version)
+  verifyPackageAttestation(request, attestation)
   const asar = join(dirname(request.exe), 'resources', 'app.asar')
   assert.equal(await hash(request.exe), attestation.executableSha256)
   assert.equal(await hash(asar), attestation.asarSha256)
@@ -97,7 +97,7 @@ export async function main(requestPath) {
   mkdirSync(join(root,'userData'))
   writeFileSync(join(env.DSH_NEXT_HOME,'cordis.patch.yml'), PROFILE_PATCH, { flag: 'wx' })
   const statusPath=join(evidence,'protocol-runtime.json')
-  const status={ source:SOURCE,exeSha256:attestation.executableSha256,asarSha256:attestation.asarSha256,version:request.version,qualified:false,
+  const status={ source:request.source,exeSha256:attestation.executableSha256,asarSha256:attestation.asarSha256,version:request.version,qualified:false,
     scope:'Synthetic real GUI registration and normal quit only; public anonymous GitHub update GETs permitted; not network containment or user-session migration' }
   const save=()=>writeFileSync(statusPath,JSON.stringify(status,null,2)+'\n'); save()
   const snapshot = name => {

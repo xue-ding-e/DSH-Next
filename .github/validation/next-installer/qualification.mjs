@@ -59,11 +59,16 @@ export function verifyIdentity(root, m = manifest, env = process.env) {
   assert.equal(text('rev-parse', 'HEAD'), m.source)
   assert.equal(text('rev-parse', 'HEAD^{tree}'), m.tree)
   assert.equal(text('status', '--porcelain', '--untracked-files=all'), '', 'source must stay clean')
-  assertSourceHistory({ installerSource: text('rev-parse', 'HEAD^'), installerTree: text('rev-parse', 'HEAD^' + '^{tree}'),
-    documentationPaths: text('diff', '--name-only', m.installerSource, m.source).split('\n').sort(),
-    parent: text('rev-parse', 'HEAD~2'), parentTree: text('rev-parse', 'HEAD~2^{tree}'),
-    scopeBase: text('rev-parse', 'HEAD~4'),
-    smokeParent: text('rev-parse', 'HEAD~3'), smokeParentTree: text('rev-parse', 'HEAD~3^{tree}'),
+  const history = m.baselineSource ?? 'HEAD'
+  if (m.baselineSource) {
+    assert.equal(text('rev-parse', 'HEAD^'), m.baselineSource)
+    assert.deepEqual(text('diff', '--name-only', m.baselineSource, 'HEAD').split('\n').sort(), m.protocolFixPaths)
+  }
+  assertSourceHistory({ installerSource: text('rev-parse', history + '^'), installerTree: text('rev-parse', history + '^^{tree}'),
+    documentationPaths: text('diff', '--name-only', m.installerSource, history).split('\n').sort(),
+    parent: text('rev-parse', history + '~2'), parentTree: text('rev-parse', history + '~2^{tree}'),
+    scopeBase: text('rev-parse', history + '~4'),
+    smokeParent: text('rev-parse', history + '~3'), smokeParentTree: text('rev-parse', history + '~3^{tree}'),
     cumulativePaths: text('diff', '--name-only', m.scopeBase, m.installerSource).split('\n').sort(),
     fixPaths: text('diff', '--name-only', m.parent, m.installerSource).split('\n').sort(),
     smokePaths: text('diff', '--name-only', m.smokeParent, m.parent).split('\n').sort() }, m)

@@ -2,10 +2,10 @@
   "schemaVersion": 1,
   "repository": "xue-ding-e/DSH-Next",
   "repositoryId": "1437727533",
-  "controlRef": "refs/heads/validation/next-installer-doc-pairing-windows-20261029",
-  "source": "270dd45091805cb504fdd39bf09d9ec596ca4150",
+  "controlRef": "refs/heads/validation/next-installer-reuse-20261030",
+  "source": "097405ae7f990d34a17a2afe689db17df55932a3",
   "parent": "95f1945de962bf0aeb970195059e5a5590e4000b",
-  "tree": "9d56e955dca489974bb19e44344ef3612ad9d5bb",
+  "tree": "d0a9ce0096e53addf6763b915054d695aff26bac",
   "version": "0.2.1-rc.3.20261029.1",
   "upgradeVersion": "0.2.1-rc.3.20261029.2",
   "node": "v24.19.0",
@@ -78,8 +78,8 @@
       "sha256": "05bc97ceb8dbd0c9b52a801277959ef336716a067a47966a9fac62a04ee2b4a1"
     },
     "apps/desktop/installer/uninstall.nsh": {
-      "blob": "17380076ee92dcbae510134bfdf30ace3996c8de",
-      "sha256": "901cfc80a3c9cdfd37efb913362a21828e9379e1463aa6c8675ec28486d7a75e"
+      "blob": "a424f02d075f1fbbb5ce2c5741d788d3b0376ae7",
+      "sha256": "7bcf2a44336f0f50138be6c2c7b2947c045440567eee2fd8bf0f69e83cb85ad0"
     },
     "apps/desktop/package.json": {
       "blob": "acbd400b3ca0df9bbbd167b325d74ec1194785f9",
@@ -292,6 +292,10 @@
     "vitest.config.ts": {
       "blob": "87ead1a62aeaf45f07a20d2c22c0b259f339de77",
       "sha256": "e927e8da804ad66ffabd6e09359da754c8b289c12e77be789f5cbe98c11b1a68"
+    },
+    "apps/desktop/tests/next-uninstall-protocol.test.mjs": {
+      "blob": "07ba017dcb9c270ed03c76f1f05c8d7fa5c7b0e0",
+      "sha256": "41c112abc9ff9e85126e812369e35f8ae4b38412b0e665206a8ff66d0781fb2b"
     }
   },
   "desktopTests": [
@@ -1030,5 +1034,10 @@
       },
       "scope": "Locally reviewed immutable ZIP contents; runtime revalidates exact artifact digest and run metadata, not a second ZIP extraction."
     }
-  }
+  },
+  "baselineSource": "270dd45091805cb504fdd39bf09d9ec596ca4150",
+  "protocolFixPaths": [
+    "apps/desktop/installer/uninstall.nsh",
+    "apps/desktop/tests/next-uninstall-protocol.test.mjs"
+  ]
 }

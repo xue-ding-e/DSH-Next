@@ -1,7 +1,7 @@
 import {test} from 'node:test'
 import assert from 'node:assert/strict'
 import {readFileSync} from 'node:fs'
-import {runtimeEnvironment, PROFILE_PATCH, inspectorEndpoint, verifyProtocolSnapshots, verifyRuntimeIdentity} from './protocol-policy.mjs'
+import {verifyReviewedPackage, verifyPackageAttestation, runtimeEnvironment, PROFILE_PATCH, inspectorEndpoint, verifyProtocolSnapshots, verifyRuntimeIdentity} from './protocol-policy.mjs'
 import {Inspector, IDENTITY_EXPRESSION, QUIT_EXPRESSION, loadedScriptMatches} from './protocol-runtime.mjs'
 const exe='C:\\owned\\Installed Next\\DSH Next.exe', root='C:\\owned\\runtime-new'
 const env=runtimeEnvironment('C:\\Windows',root)
@@ -97,4 +97,32 @@ test('ready identity still rejects a missing installed main rather than retrying
  const app={isReady:()=>true,getAppPath:()=>'/synthetic/app.asar'}
  const requireFixture=name=>({electron:{app},fs:{readFileSync:()=>{throw Error('ENOENT synthetic missing installed main')}},path:{join:(...x)=>x.join('/')},crypto:{}}[name])
  assert.throws(()=>new Function('require','process','return '+IDENTITY_EXPRESSION)(requireFixture,{pid:123,execPath:exe}),/ENOENT synthetic missing installed main/)
+})
+
+
+test('only the two reviewed source/version pairs can reach runtime attestation',()=>{
+ const oldSource='270dd45091805cb504fdd39bf09d9ec596ca4150', fixedSource='097405ae7f990d34a17a2afe689db17df55932a3'
+ const v1='0.2.1-rc.3.20261029.1', v2='0.2.1-rc.3.20261029.2'
+ for(const [source,version] of [[oldSource,v1],[fixedSource,v2]]) {
+  verifyReviewedPackage(source,version)
+  verifyPackageAttestation({source,version},{source,version})
+ }
+ for(const [source,version] of [[oldSource,v2],[fixedSource,v1],['a'.repeat(40),v2],[fixedSource,v2+'0'],[fixedSource.toUpperCase(),v2]]) {
+  assert.throws(()=>verifyReviewedPackage(source,version))
+  assert.throws(()=>verifyPackageAttestation({source,version},{source,version}))
+ }
+ assert.throws(()=>verifyPackageAttestation({source:oldSource,version:v1},{source:fixedSource,version:v1}))
+ assert.throws(()=>verifyPackageAttestation({source:fixedSource,version:v2},{source:fixedSource,version:v1}))
+})
+test('PowerShell wrapper carries and checks the coupled reviewed source through the receipt',()=>{
+ const wrapper=readFileSync(new URL('./invoke-protocol-runtime.ps1',import.meta.url),'utf8')
+ assert(wrapper.includes('[Parameter(Mandatory)][string]$Source,'))
+ assert(wrapper.includes("$baselinePair = $Source -ceq '270dd45091805cb504fdd39bf09d9ec596ca4150' -and $Version -ceq '0.2.1-rc.3.20261029.1'"))
+ assert(wrapper.includes("$fixedPair = $Source -ceq '097405ae7f990d34a17a2afe689db17df55932a3' -and $Version -ceq '0.2.1-rc.3.20261029.2'"))
+ assert(wrapper.includes('if (-not ($baselinePair -or $fixedPair))'))
+ assert(wrapper.includes('executionAuthorized=$ExecutionAuthorized;source=$Source;'))
+ assert(wrapper.includes('$receipt.source -cne $Source -or $receipt.version -cne $Version'))
+ const runtime=readFileSync(new URL('./protocol-runtime.mjs',import.meta.url),'utf8')
+ assert(runtime.includes('verifyPackageAttestation(request, attestation)'))
+ assert(runtime.includes('source:request.source'))
 })

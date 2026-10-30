@@ -1,6 +1,6 @@
 <# Serial Windows source tests and real unsigned NSIS packaging. No release APIs or signing credentials. #>
 [CmdletBinding()]
-param([Parameter(Mandatory)][string]$Product, [ValidateSet('install-dependencies','qualify')][string]$Mode = 'qualify')
+param([Parameter(Mandatory)][string]$Product, [ValidateSet('install-dependencies','qualify')][string]$Mode = 'qualify', [string]$BaselineIndex)
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'windows-owned-process.ps1')
@@ -10,7 +10,7 @@ $ErrorActionPreference = 'Stop'
 $Product = Assert-NextPath -Path ([IO.Path]::GetFullPath($Product)) -MustExist
 $m = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'manifest.json') -Raw | ConvertFrom-Json
 if ($m.diagnosticOnly -ne $false) { throw 'Full qualification requires an explicitly reviewed non-diagnostic manifest.' }
-$node = (Get-Command node.exe -ErrorAction Stop).Source
+$node = (Get-Command node.exe -CommandType Application | Select-Object -First 1).Source
 $temporary = Assert-NextPath -Path $env:RUNNER_TEMP -MustExist
 $evidence = Assert-NextPath -Path (Join-Path $temporary 'dsh-next-installer-evidence/windows') -Within $temporary
 New-Item -ItemType Directory -Force -Path $evidence | Out-Null
@@ -28,8 +28,20 @@ $pnpm = Join-Path $Product 'node_modules/pnpm/bin/pnpm.cjs'
 if (-not (Test-Path -LiteralPath $pnpm -PathType Leaf)) { throw 'Pinned workspace pnpm is absent.' }
 if ((Get-Content (Join-Path $Product 'node_modules/pnpm/package.json') -Raw | ConvertFrom-Json).version -ne '11.28.5') { throw 'Unexpected pnpm version.' }
 if ((Get-Content (Join-Path $Product 'node_modules/typescript/package.json') -Raw | ConvertFrom-Json).version -notmatch '^6\.') { throw 'Project TypeScript 6 is required.' }
+# Reuse only the pinned baseline installer; it is not evidence for the new source.
+$baseline = @(Get-Content -LiteralPath $BaselineIndex -Raw | ConvertFrom-Json)
+if ($baseline.Count -ne 1 -or $baseline[0].source -cne '270dd45091805cb504fdd39bf09d9ec596ca4150' -or $baseline[0].version -cne '0.2.1-rc.3.20261029.1' -or $baseline[0].sha256 -cne '4246aac2173d65b61a9a9087caf44e941bef8439c3fa2a37eb0458d24e222a10') { throw 'Only the reviewed baseline package may be reused.' }
+foreach ($field in @('installer','attestation')) {
+    $inputFile = Assert-NextPath -Path $baseline[0].$field -Within (Join-Path $temporary 'dsh-reuse-installation') -MustExist
+    $target = Join-Path $evidence ([IO.Path]::GetFileName($inputFile))
+    if (Test-Path -LiteralPath $target) { throw 'Baseline destination already exists.' }
+    Copy-Item -LiteralPath $inputFile -Destination $target
+    $baseline[0].$field = $target
+}
+if ((Get-FileHash -LiteralPath $baseline[0].installer -Algorithm SHA256).Hash.ToLowerInvariant() -cne $baseline[0].sha256) { throw 'Baseline copy hash mismatch.' }
 $stages = [Collections.Generic.List[object]]::new()
 $packages = [Collections.Generic.List[object]]::new()
+$packages.Add($baseline[0])
 $failure = $null
 function Run-Pnpm([string]$Label, [string[]]$Arguments, [int]$Seconds, [object]$VerifiedTool = $null) {
     $toolArguments = @{}
@@ -54,6 +66,7 @@ try {
     $null = Invoke-NextOwnedProcess -FilePath $node -Arguments @('--experimental-transform-types','--test','--test-reporter=tap','.github/validation/next-desktop.test.mjs') -WorkingDirectory $Product -TimeoutSeconds 180 -EvidencePrefix (Join-Path $evidence 'next-source-tests')
     $tap = Get-Content -LiteralPath (Join-Path $evidence 'next-source-tests.stdout.log') -Raw
     if ($tap -notmatch '# tests 35\r?\n' -or $tap -notmatch '# pass 35\r?\n' -or $tap -notmatch '# skipped 0\r?\n') { throw 'All 35 Node source tests must actually pass.' }
+    $null = Invoke-NextOwnedProcess -FilePath $node -Arguments @('--test','apps/desktop/tests/next-uninstall-protocol.test.mjs') -WorkingDirectory $Product -TimeoutSeconds 60 -EvidencePrefix (Join-Path $evidence 'next-uninstall-regression')
     # Fetch the real locked dependency outside Vitest's per-hook clock, under the existing job owner.
     $null = Invoke-NextOwnedProcess -FilePath $node -Arguments @((Join-Path $PSScriptRoot 'electron-dependency.mjs'),$Product,(Join-Path $evidence 'electron-dependency.json')) -WorkingDirectory $Product -TimeoutSeconds 600 -EvidencePrefix (Join-Path $evidence 'electron-dependency')
     Check-Source
@@ -81,16 +94,16 @@ try {
         $stages.Add(@{ label=$owner.label; result=$extensionResult; extensionReport=(Get-Content -LiteralPath ($extensionTap + '.json') -Raw | ConvertFrom-Json) })
         Check-Source
     }
-    $versions = @($m.version)
+    $versions = @($m.upgradeVersion)
     if ($null -ne $m.upgradeVersion) {
         # The locked project semver implementation compares real versions, not filenames or lexical text.
         & $node -e "const s=require(process.argv[1]); if(!s.valid(process.argv[2])||!s.valid(process.argv[3])||!s.gt(process.argv[3],process.argv[2]))process.exit(1)" (Join-Path $Product 'node_modules/semver') $m.version $m.upgradeVersion
         if ($LASTEXITCODE -ne 0) { throw 'Upgrade requires a genuinely higher reviewed version.' }
-        $versions += $m.upgradeVersion
+        # Only the new V2 is built; old V1 remains the hash-pinned baseline.
     }
     for ($index = 0; $index -lt $versions.Count; $index++) {
         $version = $versions[$index]
-        $label = 'package-v' + ($index + 1)
+        $label = 'package-v2'
         Run-Pnpm ($label + '-preflight') @('--dir','apps/desktop','exec','tsx','scripts/package-target.ts','win-x64','--next','--unsigned','--check','--build-version',$version) 180
         $config = Join-Path $evidence ($label + '-config-witness.json')
         $null = Invoke-NextOwnedProcess -FilePath $node -Arguments @('--experimental-transform-types',(Join-Path $PSScriptRoot 'builder-config-witness.mjs'),$Product,$version,$config) -WorkingDirectory $Product -TimeoutSeconds 60 -EvidencePrefix (Join-Path $evidence ($label + '-config-witness'))
@@ -131,16 +144,17 @@ try {
         $null = Assert-NextPath -Path $retained -Within $evidence
         Copy-Item -LiteralPath $installer -Destination $retained
         $hash = (Get-FileHash -LiteralPath $retained -Algorithm SHA256).Hash.ToLowerInvariant()
-        $packages.Add(@{ installer=$retained; sha256=$hash; version=$version; attestation=$attestation })
+        if ($hash -ceq '486e7b5ffa2e30d4483ab08a55e3d5bf9338dfd77ebdd7d2ed74ae93ac8a09cf') { throw 'Old V2 bytes cannot stand in for the fixed source.' }
+        $packages.Add(@{ source=$m.source; installer=$retained; sha256=$hash; version=$version; attestation=$attestation })
     }
     $packageIndex = Join-Path $evidence 'packages.json'
     $packages.ToArray() | ConvertTo-Json -Depth 10 -AsArray | Set-Content -LiteralPath $packageIndex -Encoding utf8
-    & (Join-Path $PSScriptRoot 'windows-installer.ps1') -Product $Product -PackageIndex $packageIndex
+    # Lifecycle runs in a separate bounded, credential-free workflow step.
     Check-Source
 } catch { $failure = $_.Exception.Message; throw }
 finally {
     @{ source=$m.source; tree=$m.tree; control=$env:EXPECTED_CONTROL_SHA; repositoryId=$m.repositoryId;
-        stages=$stages.ToArray(); packages=$packages.ToArray(); failure=$failure; qualified=($null -eq $failure);
-        scope='Actual unsigned x64 NSIS and noninteractive lifecycle; no native GUI, signature trust or publication claim' } |
+        stages=$stages.ToArray(); packages=$packages.ToArray(); failure=$failure; buildQualified=($null -eq $failure); qualified=$false;
+        scope='Build-only unsigned x64 NSIS evidence; separate installer-result.json must qualify the full lifecycle; no signature trust or publication claim' } |
         ConvertTo-Json -Depth 12 | Set-Content -LiteralPath (Join-Path $evidence 'result.json') -Encoding utf8
 }

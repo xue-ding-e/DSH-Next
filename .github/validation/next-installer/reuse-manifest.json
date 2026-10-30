@@ -442,9 +442,7 @@
   },
   "extractFiles": [
     "dsh-next-0.2.1-rc.3.20261029.1-win-x64-unsigned.exe",
-    "dsh-next-0.2.1-rc.3.20261029.2-win-x64-unsigned.exe",
     "package-v1.json",
-    "package-v2.json",
     "official-identity.json"
   ],
   "packages": [
@@ -453,12 +451,6 @@
       "version": "0.2.1-rc.3.20261029.1",
       "sha256": "4246aac2173d65b61a9a9087caf44e941bef8439c3fa2a37eb0458d24e222a10",
       "attestation": "package-v1.json"
-    },
-    {
-      "filename": "dsh-next-0.2.1-rc.3.20261029.2-win-x64-unsigned.exe",
-      "version": "0.2.1-rc.3.20261029.2",
-      "sha256": "486e7b5ffa2e30d4483ab08a55e3d5bf9338dfd77ebdd7d2ed74ae93ac8a09cf",
-      "attestation": "package-v2.json"
     }
   ],
   "qualification": "Unqualified prior artifacts; reuse of bytes never confers installer/runtime qualification."

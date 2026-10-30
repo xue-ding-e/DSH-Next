@@ -5,6 +5,7 @@ function Invoke-NextProtocolRuntime {
   param([Parameter(Mandatory)][string]$InstalledExe,
     [Parameter(Mandatory)][string]$Attestation,
     [Parameter(Mandatory)][string]$Version,
+    [Parameter(Mandatory)][string]$Source,
     [Parameter(Mandatory)][string]$OwnedRoot,
     [Parameter(Mandatory)][string]$Evidence,
     [Parameter(Mandatory)][string]$Label,
@@ -12,6 +13,10 @@ function Invoke-NextProtocolRuntime {
     [Parameter(Mandatory)][string]$NodeExe,
     [Parameter(Mandatory)][string]$ExpectedNodeSha256)
   if (-not $ExecutionAuthorized) { throw 'Runtime lane not authorized.' }
+  # Keep source/version coupled: neither a valid SHA nor a known version alone is enough.
+  $baselinePair = $Source -ceq '270dd45091805cb504fdd39bf09d9ec596ca4150' -and $Version -ceq '0.2.1-rc.3.20261029.1'
+  $fixedPair = $Source -ceq '097405ae7f990d34a17a2afe689db17df55932a3' -and $Version -ceq '0.2.1-rc.3.20261029.2'
+  if (-not ($baselinePair -or $fixedPair)) { throw 'Unreviewed runtime source/version pair.' }
   if (-not $IsWindows -or $env:GITHUB_ACTIONS -ne 'true' -or $env:RUNNER_ENVIRONMENT -ne 'github-hosted' -or $env:GITHUB_REPOSITORY_ID -ne '1437727533') { throw 'Only the fresh hosted DSH validation account is supported.' }
   if ([Environment]::UserName -ne 'runneradmin') { throw 'Unexpected account.' }
   if ($Label -notmatch '^[a-z0-9-]+$') { throw 'Unsafe stage label.' }
@@ -24,7 +29,7 @@ function Invoke-NextProtocolRuntime {
   if ((Test-Path -LiteralPath $runtimeRoot) -or (Test-Path -LiteralPath $probeEvidence)) { throw 'Probe paths must be new.' }
   New-Item -ItemType Directory -Path $probeEvidence | Out-Null
   $request = Join-Path $probeEvidence 'request.json'
-  @{ executionAuthorized=$ExecutionAuthorized;source='270dd45091805cb504fdd39bf09d9ec596ca4150';
+  @{ executionAuthorized=$ExecutionAuthorized;source=$Source;
     exe=$exe;attestation=$attest;version=$Version;runtimeRoot=$runtimeRoot;evidence=$probeEvidence;
     systemRoot=$env:SystemRoot;pwsh=(Join-Path $PSHOME 'pwsh.exe') } |
     ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $request -Encoding utf8
@@ -53,7 +58,7 @@ function Invoke-NextProtocolRuntime {
   if ((Get-FileHash -LiteralPath $node -Algorithm SHA256).Hash.ToLowerInvariant() -cne $ExpectedNodeSha256) { throw 'Node identity changed during probe.' }
   if (-not $result.naturalQuiescence -or -not $result.quiescenceConfirmed -or $result.timedOut -or $result.rootExitGraceExceeded -or $null -ne $result.toolCleanup) { throw 'Runtime did not exit naturally with owned job quiet; retain fixture.' }
   $receipt = Get-Content -LiteralPath (Join-Path $probeEvidence 'protocol-runtime.json') -Raw | ConvertFrom-Json
-  if (-not $receipt.qualified -or $receipt.source -ne '270dd45091805cb504fdd39bf09d9ec596ca4150' -or $receipt.version -ne $Version -or $receipt.appExit.code -ne 0) { throw 'Runtime identity/quit receipt failed.' }
+  if (-not $receipt.qualified -or $receipt.source -cne $Source -or $receipt.version -cne $Version -or $receipt.appExit.code -ne 0) { throw 'Runtime identity/quit receipt failed.' }
   return @{ runtime=$receipt; owner=$result }
 }
 

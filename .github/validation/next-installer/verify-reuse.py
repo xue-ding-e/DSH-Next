@@ -43,8 +43,8 @@ def validate_inventory(m, infos):
     names = [i.filename for i in infos]
     require(len(names) == len(set(names)), 'Duplicate archive entry')
     require(set(names) == set(m['files']), 'Archive inventory drift')
-    require(len(m['extractFiles']) == len(set(m['extractFiles'])) == 5,
-            'Expected two installers, two attestations and one official identity')
+    require(len(m['extractFiles']) == len(set(m['extractFiles'])) == 3,
+            'Expected baseline installer, attestation and official identity')
     require(set(m['extractFiles']).issubset(names), 'Missing selected input')
     for i in infos:
         p = PurePosixPath(i.filename)
@@ -99,7 +99,7 @@ def extract_inputs(m, archive, output):
                     target.write(chunk)
             with (output / name).open('rb') as f:
                 require(digest(f) == m['files'][name]['sha256'], 'Extracted member mismatch')
-    index = [{'version': p['version'], 'sha256': p['sha256'],
+    index = [{'source': m['source'], 'version': p['version'], 'sha256': p['sha256'],
               'installer': str((output / p['filename']).resolve()),
               'attestation': str((output / p['attestation']).resolve())} for p in m['packages']]
     (output / 'packages.json').write_text(json.dumps(index, indent=2) + '\n', encoding='utf-8')

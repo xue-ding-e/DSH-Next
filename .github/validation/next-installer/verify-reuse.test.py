@@ -60,8 +60,12 @@ class Pins(unittest.TestCase):
         r, a = metadata(); r['repository']['id'] = 1
         with self.assertRaises(ValueError): v.validate_metadata(M, r, a)
 
-    def test_full_inventory_and_five_selected_inputs(self):
+    def test_full_inventory_and_three_baseline_only_inputs(self):
         v.validate_inventory(M, inventory())
+        self.assertEqual(len(M['extractFiles']), 3)
+        self.assertEqual(len(M['packages']), 1)
+        self.assertEqual(M['packages'][0]['version'], '0.2.1-rc.3.20261029.1')
+        self.assertEqual(len(M['files']), 106)
 
     def test_duplicate_missing_size_link_and_traversal_fail(self):
         for kind in ['duplicate', 'missing', 'size', 'link', 'traversal']:
