@@ -7,15 +7,15 @@ const workflow = readFileSync(new URL('../../workflows/next-context-menu-validat
 const runner = readFileSync(new URL('./qualification.mjs', import.meta.url), 'utf8')
 
 test('Linux requalification binds the fixed product and a distinct read-only manual control branch', () => {
-  assert.equal(manifest.source, '097405ae7f990d34a17a2afe689db17df55932a3')
-  assert.equal(manifest.controlRef, 'refs/heads/validation/next-fixed-linux-20261030')
+  assert.equal(manifest.source, '6b9ebe026a565e5aa547811972dff745961e134f')
+  assert.equal(manifest.controlRef, 'refs/heads/validation/next-sidebar-linux-20261030')
   assert(workflow.includes('EXPECTED_PRODUCT_SHA: ' + manifest.source))
   assert(workflow.includes('ref: ' + manifest.source))
   assert(workflow.includes("github.ref == '" + manifest.controlRef + "'"))
   assert.match(workflow, /contents: read/u)
   assert.match(workflow, /workflow_dispatch:/u)
   assert.doesNotMatch(workflow, /contents: write|pull_request:|push:|windows-qualify|windows-installer|gh release/u)
-  assert.match(workflow, /fetch-depth: 6/u)
+  assert.match(workflow, /fetch-depth: 7/u)
 })
 
 test('Linux retains full qualification and adds the owned-protocol source regression', () => {

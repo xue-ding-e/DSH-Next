@@ -26,6 +26,14 @@ export function assertSourceHistory(actual, m = manifest) {
   assert.deepEqual(actual.smokePaths, m.smokeFixPaths)
 }
 
+/** Keep the separately reviewed test-only fixture revision atop the sealed protocol fix. */
+export function assertFixtureRevision(actual, m = manifest) {
+  assert.equal(actual.parent, m.fixtureBaseSource)
+  assert.deepEqual(actual.paths, m.fixtureFixPaths)
+  assert.equal(actual.baseParent, m.baselineSource)
+  assert.deepEqual(actual.basePaths, m.protocolFixPaths)
+}
+
 /** Preserve the user's 33 disjoint main-branch blobs, independently of the 44-file installer scope. */
 export function assertPreservedMainFiles(baseBlobs, currentBlobs, expected = manifest.preservedMainFiles) {
   assert.equal(Object.keys(expected).length, 33)
@@ -59,10 +67,17 @@ export function verifyIdentity(root, m = manifest, env = process.env) {
   assert.equal(text('rev-parse', 'HEAD'), m.source)
   assert.equal(text('rev-parse', 'HEAD^{tree}'), m.tree)
   assert.equal(text('status', '--porcelain', '--untracked-files=all'), '', 'source must stay clean')
+  if (m.fixtureBaseSource) {
+    assertFixtureRevision({ parent: text('rev-parse', 'HEAD^'),
+      paths: text('diff', '--name-only', m.fixtureBaseSource, 'HEAD').split('\n').sort(),
+      baseParent: text('rev-parse', m.fixtureBaseSource + '^'),
+      basePaths: text('diff', '--name-only', m.baselineSource, m.fixtureBaseSource).split('\n').sort() }, m)
+  }
+  const fixedSource = m.fixtureBaseSource ?? 'HEAD'
   const history = m.baselineSource ?? 'HEAD'
   if (m.baselineSource) {
-    assert.equal(text('rev-parse', 'HEAD^'), m.baselineSource)
-    assert.deepEqual(text('diff', '--name-only', m.baselineSource, 'HEAD').split('\n').sort(), m.protocolFixPaths)
+    assert.equal(text('rev-parse', fixedSource + '^'), m.baselineSource)
+    assert.deepEqual(text('diff', '--name-only', m.baselineSource, fixedSource).split('\n').sort(), m.protocolFixPaths)
   }
   assertSourceHistory({ installerSource: text('rev-parse', history + '^'), installerTree: text('rev-parse', history + '^^{tree}'),
     documentationPaths: text('diff', '--name-only', m.installerSource, history).split('\n').sort(),

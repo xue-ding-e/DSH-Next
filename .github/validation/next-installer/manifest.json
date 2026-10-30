@@ -2,10 +2,10 @@
   "schemaVersion": 1,
   "repository": "xue-ding-e/DSH-Next",
   "repositoryId": "1437727533",
-  "controlRef": "refs/heads/validation/next-fixed-linux-20261030",
-  "source": "097405ae7f990d34a17a2afe689db17df55932a3",
+  "controlRef": "refs/heads/validation/next-sidebar-linux-20261030",
+  "source": "6b9ebe026a565e5aa547811972dff745961e134f",
   "parent": "95f1945de962bf0aeb970195059e5a5590e4000b",
-  "tree": "d0a9ce0096e53addf6763b915054d695aff26bac",
+  "tree": "02b0f7781afd8df0e2610127a4382cf8d05cd8e4",
   "version": "0.2.1-rc.3.20261029.1",
   "upgradeVersion": "0.2.1-rc.3.20261029.2",
   "node": "v24.19.0",
@@ -254,8 +254,8 @@
       "sha256": "f137d89846178449e2ccdba872a48a7583fc90ae32d42ef1df7a68113d36df5c"
     },
     "apps/web/tests/row-context-menu.e2e.ts": {
-      "blob": "e3059b186e6778392a454d2898b97162d1e9135f",
-      "sha256": "a9d2a57cc5c9867a47d0da640f46da9f56d0cfce6c266b2cdc14a851acec216e"
+      "blob": "e7b7f2f881fb26e1d34a6ade6c15d34c463fbfcf",
+      "sha256": "27f69a99e8f0b294bb7ad56aceab74084d7d2404306e39be984d94816f3e4288"
     },
     "package.json": {
       "blob": "01e6ce1bad2b6e332a652071a4d31278d09391f1",
@@ -999,7 +999,16 @@
     }
   },
   "diagnosticOnly": false,
-  "linuxQualification": {
+  "baselineSource": "270dd45091805cb504fdd39bf09d9ec596ca4150",
+  "protocolFixPaths": [
+    "apps/desktop/installer/uninstall.nsh",
+    "apps/desktop/tests/next-uninstall-protocol.test.mjs"
+  ],
+  "fixtureBaseSource": "097405ae7f990d34a17a2afe689db17df55932a3",
+  "fixtureFixPaths": [
+    "apps/web/tests/row-context-menu.e2e.ts"
+  ],
+  "historicalLinuxQualification": {
     "runId": 40888610618,
     "attempt": 1,
     "control": "8b567be818568b5547dc689d7432fce6395e5494",
@@ -1035,9 +1044,5 @@
       "scope": "Locally reviewed immutable ZIP contents; runtime revalidates exact artifact digest and run metadata, not a second ZIP extraction."
     }
   },
-  "baselineSource": "270dd45091805cb504fdd39bf09d9ec596ca4150",
-  "protocolFixPaths": [
-    "apps/desktop/installer/uninstall.nsh",
-    "apps/desktop/tests/next-uninstall-protocol.test.mjs"
-  ]
+  "linuxQualification": null
 }
