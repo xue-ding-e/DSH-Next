@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "repository": "xue-ding-e/DSH-Next",
   "repositoryId": "1437727533",
-  "controlRef": "refs/heads/validation/next-sidebar-windows-20261030",
+  "controlRef": "refs/heads/validation/next-sidebar-lifecycle-reuse-20261030",
   "source": "6b9ebe026a565e5aa547811972dff745961e134f",
   "parent": "95f1945de962bf0aeb970195059e5a5590e4000b",
   "tree": "02b0f7781afd8df0e2610127a4382cf8d05cd8e4",

@@ -1,0 +1,261 @@
+{
+  "schemaVersion": 1,
+  "sealed": true,
+  "repository": "xue-ding-e/DSH-Next",
+  "repositoryId": 1437727533,
+  "source": "6b9ebe026a565e5aa547811972dff745961e134f",
+  "tree": "02b0f7781afd8df0e2610127a4382cf8d05cd8e4",
+  "version": "0.2.1-rc.3.20261029.2",
+  "priorRun": 41134150680,
+  "priorAttempt": 1,
+  "priorControl": "8bc2d508372d608415cc49a7910310ee45494de6",
+  "priorBranch": "validation/next-sidebar-windows-20261030",
+  "priorConclusion": "failure",
+  "candidate": {
+    "artifactId": 13016592352,
+    "artifactName": "next-fixed-v2-candidate-41134150680",
+    "artifactBytes": 314073550,
+    "artifactSha256": "ef34e902b1575326f578194ade9814be119952f2786f070867348e9e2113d93a",
+    "files": {
+      "dsh-next-0.2.1-rc.3.20261029.2-win-x64-unsigned.exe": {
+        "bytes": 314363742,
+        "sha256": "7cc9bceef1d7b1e2f725200898c78808c5efb82c6fdc0f8aba652fcb63ee0d23"
+      },
+      "package-v2-config-witness.json": {
+        "bytes": 3649,
+        "sha256": "7618d2018ffde642ed8681153b02a0a2ccc8c6e90ffa5fed90e5ee3aaff71645"
+      },
+      "package-v2.json": {
+        "bytes": 796,
+        "sha256": "18b11ced436ae7701df53354a8b359f6b880794d89d277cda150057bf0e2a42b"
+      },
+      "package-v2-pe.json": {
+        "bytes": 914,
+        "sha256": "c9a307f48693d2b299af00770f99b249ab66fc1c48daa23136fba5dd6a6435a0"
+      },
+      "result.json": {
+        "bytes": 21859,
+        "sha256": "bca4d49acb2f49843bb5e6dd747131f6edc75dc066c8eb275d5cb14f1bcac555"
+      }
+    }
+  },
+  "qualification": {
+    "artifactId": 13016807302,
+    "artifactName": "next-fixed-installer-qualification-41134150680",
+    "artifactBytes": 43373,
+    "artifactSha256": "bcf77e99ab1037f4148268336b95a2f3b33abaee80079fa681106ad2e343772f",
+    "files": {
+      "dsh-next-installer-evidence/linux-dependency/reviewed-linux.json": {
+        "bytes": 3005,
+        "sha256": "ec9470bfc6eac73a332fd267bb0fe7b29b165b2bc6ab2f1125f25362b41e51b9"
+      },
+      "dsh-reuse-installation/package-v1.json": {
+        "bytes": 796,
+        "sha256": "3cae2eedfbdd809bae39d6023656a20a60abc031106a0513c2f0b29bbb2651b0"
+      },
+      "dsh-reuse-installation/official-identity.json": {
+        "bytes": 685,
+        "sha256": "f9ce3546e85c8ea9e2cb8a8c88b91ada7cb857333732699c5e6e4e19ee8877a7"
+      },
+      "dsh-reuse-installation/packages.json": {
+        "bytes": 386,
+        "sha256": "0dcfe164cdb3a069555cbbf96f5665ac7f4a4b23809097efa7c1c219886dfc2c"
+      },
+      "dsh-reuse-installation/reuse-receipt.json": {
+        "bytes": 174,
+        "sha256": "7320df73e53e324ed66028a38f5ab32fb2146e1bbeb03ac049a5263ffbde79fd"
+      },
+      "dsh-next-installer-evidence/windows/browser-cookie-tests.json": {
+        "bytes": 1945,
+        "sha256": "4351964c7a386017e5058a2e891a2f1f5004b5340345aea43e2472d1d8ba4dd9"
+      },
+      "dsh-next-installer-evidence/windows/browser-cookie-tests.json.skips.json": {
+        "bytes": 3,
+        "sha256": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570"
+      },
+      "dsh-next-installer-evidence/windows/browser-cookie-tests.result.json": {
+        "bytes": 1063,
+        "sha256": "37dfef19f8df0bcc57d63a52ded2fe33b2bba5d0a586090fa7e37ed68e5081c1"
+      },
+      "dsh-next-installer-evidence/windows/dependencies.result.json": {
+        "bytes": 1066,
+        "sha256": "869e9c54c5a948ab290e157a767e972869781aa3db7cd57c8970fd5fca766780"
+      },
+      "dsh-next-installer-evidence/windows/desktop-tests.json": {
+        "bytes": 67519,
+        "sha256": "e6bc02ff14ecabc78aea02963d61faed4ddd4f8d8b8d4619a405bdd21df62b78"
+      },
+      "dsh-next-installer-evidence/windows/desktop-tests.json.skips.json": {
+        "bytes": 4500,
+        "sha256": "ebc9b699d67b743d785a5b55d4ab51ac933afae35ea492c8d13b8d299a654214"
+      },
+      "dsh-next-installer-evidence/windows/desktop-tests.result.json": {
+        "bytes": 3670,
+        "sha256": "97823eea23bd64a993892ac4bf08813c1eb398c4fd6a832e955f2a3904bd0d4d"
+      },
+      "dsh-next-installer-evidence/windows/electron-dependency.json": {
+        "bytes": 933,
+        "sha256": "75a9e6f36475bed8a5237ae104790e7e84583d548f7ab9fa7ec31616da4b49c0"
+      },
+      "dsh-next-installer-evidence/windows/electron-dependency.result.json": {
+        "bytes": 1063,
+        "sha256": "34294facccfc5e8cbb43956c676ad9be2e862fdab257ae5a367e9922cb12f8e1"
+      },
+      "dsh-next-installer-evidence/windows/extensions-browser-control.result.json": {
+        "bytes": 1060,
+        "sha256": "9ebd9c2f7c42cfa76564574c5bd9929111cbe4a20da64bd842e8f7392d47d227"
+      },
+      "dsh-next-installer-evidence/windows/extensions-browser-control.stdout.log.json": {
+        "bytes": 611,
+        "sha256": "140507eb417b132bfe20f6ad86d0387a196336ee37c0979485087464415aa915"
+      },
+      "dsh-next-installer-evidence/windows/extensions-input-guard.stdout.log.json": {
+        "bytes": 287,
+        "sha256": "93929d0b372e8367009de60b4e0ab42aa08060eac5eff6d1d7ba20956b5fdce1"
+      },
+      "dsh-next-installer-evidence/windows/extensions-input-guard.result.json": {
+        "bytes": 1066,
+        "sha256": "a08f0acf7aaa9b9fe941a5ff5b3514c3ff53202f86dc2737e8a9eb706deb8d76"
+      },
+      "dsh-next-installer-evidence/windows/extensions-nav-buttons.result.json": {
+        "bytes": 1060,
+        "sha256": "87c5424774e62aa8990f1f9171b1b20dbaf135b0f8d4e349b9f7a63dda4f6a63"
+      },
+      "dsh-next-installer-evidence/windows/extensions-nav-buttons.stdout.log.json": {
+        "bytes": 289,
+        "sha256": "b6333643da85db569c4f733a7b0abcdbca3e623cc2ab0d28ef73f9316a514411"
+      },
+      "dsh-next-installer-evidence/windows/next-source-tests.result.json": {
+        "bytes": 1060,
+        "sha256": "b132178999e34f2aab3513907fd3d69bb0fbe9c04c2547a18feb8ba07b47e952"
+      },
+      "dsh-next-installer-evidence/windows/next-uninstall-regression.result.json": {
+        "bytes": 1060,
+        "sha256": "c7cae9932012631d8b03d31d2936a98593b6765b19fe4bef9988fd19e88438b1"
+      },
+      "dsh-next-installer-evidence/windows/official-identity.json": {
+        "bytes": 685,
+        "sha256": "94b07772b78c59bec3d21e527d71a17161e5f2c1c5b315b76b99c89645d96198"
+      },
+      "dsh-next-installer-evidence/windows/official-identity.result.json": {
+        "bytes": 1057,
+        "sha256": "62c88b251e0f628ed3ac58040b56da8d9d3914920f5b20a58a662e67ad777185"
+      },
+      "dsh-next-installer-evidence/windows/package-v1.json": {
+        "bytes": 796,
+        "sha256": "3cae2eedfbdd809bae39d6023656a20a60abc031106a0513c2f0b29bbb2651b0"
+      },
+      "dsh-next-installer-evidence/windows/package-v2-attest.result.json": {
+        "bytes": 1060,
+        "sha256": "1be1b4cde1a2d55036057a865c91dd3e092a3e3dcdad1b57f4607501c06f44b5"
+      },
+      "dsh-next-installer-evidence/windows/package-v2-config-witness.json": {
+        "bytes": 3649,
+        "sha256": "7618d2018ffde642ed8681153b02a0a2ccc8c6e90ffa5fed90e5ee3aaff71645"
+      },
+      "dsh-next-installer-evidence/windows/package-v2-config-witness.result.json": {
+        "bytes": 1063,
+        "sha256": "d6f81cf41791e345af4794e71ef98646d06467c51f38305d7b902f96776aad2f"
+      },
+      "dsh-next-installer-evidence/windows/package-v2-pe.json": {
+        "bytes": 914,
+        "sha256": "c9a307f48693d2b299af00770f99b249ab66fc1c48daa23136fba5dd6a6435a0"
+      },
+      "dsh-next-installer-evidence/windows/package-v2-pe.result.json": {
+        "bytes": 1057,
+        "sha256": "e08ea6782251a801dbce13ce0e07ae144c3febaefc5bd371f4ac0c748f37a596"
+      },
+      "dsh-next-installer-evidence/windows/package-v2-preflight.result.json": {
+        "bytes": 1061,
+        "sha256": "f14531df4c2d6f36f5b0280afc09447ac4212fcd02295f9a813673d602dfd3f7"
+      },
+      "dsh-next-installer-evidence/windows/package-v2.json": {
+        "bytes": 796,
+        "sha256": "18b11ced436ae7701df53354a8b359f6b880794d89d277cda150057bf0e2a42b"
+      },
+      "dsh-next-installer-evidence/windows/package-v2.result.json": {
+        "bytes": 3674,
+        "sha256": "dd50797543dbed7b0fbcffa57b7ddf9846200afaf0a524fb567694ac8ba4a5ff"
+      },
+      "dsh-next-installer-evidence/windows/packages.json": {
+        "bytes": 823,
+        "sha256": "f2f0ef8d6a3e519eb143de8a6eee4817570f1ee5cacc8bdf727a47c2e82e8029"
+      },
+      "dsh-next-installer-evidence/windows/path-guard-native.json": {
+        "bytes": 1071,
+        "sha256": "84fc98447254f2e49c01f94f2b2078dbfe7cf31c1eb4b494857899d303de1c0b"
+      },
+      "dsh-next-installer-evidence/windows/pe-builder.result.json": {
+        "bytes": 1055,
+        "sha256": "caa34826c3ce3b01d0956c80c60dd76216fbd4159ec604ebfb0ebc8cb3d1fc62"
+      },
+      "dsh-next-installer-evidence/windows/pe-builder.json": {
+        "bytes": 528,
+        "sha256": "998263e3fb956e8ba4792787c1868857c51159cdcab3c1bd5bcf6b61ed82d3fe"
+      },
+      "dsh-next-installer-evidence/windows/result.json": {
+        "bytes": 21859,
+        "sha256": "bca4d49acb2f49843bb5e6dd747131f6edc75dc066c8eb275d5cb14f1bcac555"
+      },
+      "dsh-next-installer-evidence/windows/smoke-profile-tests.json": {
+        "bytes": 1585,
+        "sha256": "99f7e70192bc677a276825a6fffc945ffc957f5ebc71dc445d566e26817fa909"
+      },
+      "dsh-next-installer-evidence/windows/smoke-profile-tests.json.skips.json": {
+        "bytes": 3,
+        "sha256": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570"
+      },
+      "dsh-next-installer-evidence/windows/smoke-profile-tests.result.json": {
+        "bytes": 1063,
+        "sha256": "ac398f43ff3bf4e5f8052575385283c66c40493e90a4929cee54660ade82701b"
+      },
+      "dsh-next-installer-evidence/windows/vctip-desktop-tests-identity.json": {
+        "bytes": 1145,
+        "sha256": "e4304f2d9573fd9a1cbbde0528a3de32d71184ad8568ecc3e67bc2f8b6722a68"
+      },
+      "dsh-next-installer-evidence/windows/vctip-desktop-tests-vswhere.result.json": {
+        "bytes": 1057,
+        "sha256": "8e271e02e0165bcb2db5e9bed53a221f174cb348760930a6cc9f1dfc750173fc"
+      },
+      "dsh-next-installer-evidence/windows/vctip-package-v2-identity.json": {
+        "bytes": 1140,
+        "sha256": "b73b88f41ac1bef1d16db6caa2e60f4b710d7fb4de9fbfcae4f380c058f67e97"
+      },
+      "dsh-next-installer-evidence/windows/vctip-package-v2-vswhere.result.json": {
+        "bytes": 1057,
+        "sha256": "d9238e292f6949db70defb33fdb2e199e1abbe32cb881e6b01bbdc5a51a88a88"
+      },
+      "dsh-reuse-transport-evidence/transport.result.json": {
+        "bytes": 1066,
+        "sha256": "8f71bf995912edcdd3283cd1a01da135885fe1a8199c5f5f240bb838672e3fd7"
+      }
+    }
+  },
+  "candidateInputs": {
+    "installer": "dsh-next-0.2.1-rc.3.20261029.2-win-x64-unsigned.exe",
+    "result": "result.json",
+    "attestation": "package-v2.json",
+    "config": "package-v2-config-witness.json",
+    "pe": "package-v2-pe.json"
+  },
+  "qualificationInputs": {
+    "result": "dsh-next-installer-evidence/windows/result.json",
+    "attestation": "dsh-next-installer-evidence/windows/package-v2.json",
+    "config": "dsh-next-installer-evidence/windows/package-v2-config-witness.json",
+    "pe": "dsh-next-installer-evidence/windows/package-v2-pe.json",
+    "packages": "dsh-next-installer-evidence/windows/packages.json",
+    "officialIdentity": "dsh-next-installer-evidence/windows/official-identity.json"
+  },
+  "commandInputs": {
+    "dependencies": "dsh-next-installer-evidence/windows/dependencies.result.json",
+    "official-identity": "dsh-next-installer-evidence/windows/official-identity.result.json",
+    "pe-builder": "dsh-next-installer-evidence/windows/pe-builder.result.json",
+    "next-source-tests": "dsh-next-installer-evidence/windows/next-source-tests.result.json",
+    "next-uninstall-regression": "dsh-next-installer-evidence/windows/next-uninstall-regression.result.json",
+    "electron-dependency": "dsh-next-installer-evidence/windows/electron-dependency.result.json",
+    "package-v2-config-witness": "dsh-next-installer-evidence/windows/package-v2-config-witness.result.json",
+    "package-v2-pe": "dsh-next-installer-evidence/windows/package-v2-pe.result.json",
+    "package-v2-attest": "dsh-next-installer-evidence/windows/package-v2-attest.result.json"
+  },
+  "installerSha256": "7cc9bceef1d7b1e2f725200898c78808c5efb82c6fdc0f8aba652fcb63ee0d23"
+}
