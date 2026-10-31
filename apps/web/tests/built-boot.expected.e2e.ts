@@ -66,12 +66,8 @@ it('boots the built plugin graph and renders a fixture session end to end', asyn
     expect(screen.queryByText('DSH Local Build')).toBeNull()
   } else {
     expect(document.querySelector('svg[viewBox="0 0 23.16 17.04"]')).not.toBeNull()
-    const version = clientBuildValue('DSH_CLIENT_VERSION')
-    if (version === undefined) throw new Error('default client build record must carry DSH_CLIENT_VERSION')
-    const commit = clientBuildValue('DSH_CLIENT_COMMIT_HASH')
-    const buildVersion = version
-      + (commit === undefined ? '' : `-${commit}`)
-      + (clientBuildValue('DSH_CLIENT_GIT_DIRTY') === 'true' ? '-dirty' : '')
+    const buildVersion = clientBuildValue('DSH_CLIENT_BUILD_VERSION')
+    if (buildVersion === undefined) throw new Error('default client build record must carry DSH_CLIENT_BUILD_VERSION')
     screen.getByText('DSH Local Build')
     screen.getByText(buildVersion)
   }

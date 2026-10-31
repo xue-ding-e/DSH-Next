@@ -28,9 +28,13 @@ const clientEnvironment = resolveClientBuildEnvironment(process.env.DSH_CLIENT_V
   : process.env)
 const clientVersion = clientEnvironment.DSH_CLIENT_VERSION
 if (clientVersion === undefined) throw new Error('desktop build: the client environment carries no DSH_CLIENT_VERSION')
+const clientBuildVersion = clientEnvironment.DSH_CLIENT_BUILD_VERSION ?? clientVersion
 
-/** Inline the one public build value the Node entry reads; every other variable stays a runtime lookup. */
-const clientVersionDefine = { 'process.env.DSH_CLIENT_VERSION': JSON.stringify(clientVersion) }
+/** Inline the public build identities the Node entry reads; other variables stay runtime lookups. */
+const clientVersionDefine = {
+  'process.env.DSH_CLIENT_VERSION': JSON.stringify(clientVersion),
+  'process.env.DSH_CLIENT_BUILD_VERSION': JSON.stringify(clientBuildVersion),
+}
 
 export default defineConfig([
   {

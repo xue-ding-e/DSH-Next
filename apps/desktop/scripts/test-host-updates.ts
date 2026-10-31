@@ -12,7 +12,7 @@ const evidenceRoot = join(repo, 'apps/desktop/.desktop-build/qualification')
 await mkdir(evidenceRoot, { recursive: true })
 const root = await mkdtemp(join(evidenceRoot, 'host-updates-'))
 const project = join(root, 'project')
-const manifest = JSON.parse(await readFile(join(repo, 'apps/desktop/package.json'), 'utf8')) as { version: string }
+const manifest = JSON.parse(await readFile(join(repo, 'package.json'), 'utf8')) as { version: string }
 const pnpm = JSON.parse(await readFile(join(repo, 'apps/desktop/node_modules/pnpm/package.json'), 'utf8')) as { version: string }
 try {
   createDevelopmentProjectMetadata(project, {

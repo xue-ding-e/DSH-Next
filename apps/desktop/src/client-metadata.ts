@@ -15,6 +15,17 @@ export function desktopClientVersion(): string {
 }
 
 /**
+ * Read the one display identity embedded by the client build.
+ * @returns The shared product, commit, and dirty-state display value.
+ * @throws Error when neither the display identity nor the product version is embedded.
+ */
+export function desktopClientBuildVersion(): string {
+  const buildVersion = process.env.DSH_CLIENT_BUILD_VERSION
+  if (buildVersion !== undefined && buildVersion !== '') return buildVersion
+  return desktopClientVersion()
+}
+
+/**
  * Sample the Desktop client identity for one Platform request.
  * @param locale - current resolved Desktop language.
  * @returns this call's build version, the raw active language, and the UTC offset in whole seconds east.

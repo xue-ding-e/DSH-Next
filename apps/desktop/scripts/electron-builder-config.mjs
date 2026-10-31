@@ -103,7 +103,8 @@ export function createElectronBuilderConfig(
   if (preparedRuntime !== undefined) buildPaths.dsh = preparedRuntime
   // electron-builder merges extraMetadata into the packaged manifest, so a build version here reaches
   // the artifact names, the update feed, and the installed app.getVersion() the updater compares against.
-  const productVersion = JSON.parse(readFileSync(fileURLToPath(new URL('../package.json', import.meta.url)), 'utf8')).version
+  // The repository manifest is the only product-version source; workspace manifests are synchronized copies.
+  const productVersion = JSON.parse(readFileSync(fileURLToPath(new URL('../../../package.json', import.meta.url)), 'utf8')).version
   const buildVersion = resolveDesktopBuildVersion(env, productVersion)
   if (update?.channel === 'latest' && buildVersion.includes('-')) throw new Error('desktop package: latest requires a stable version')
   const packaged = resolveDesktopBuildCommit(env)
@@ -119,8 +120,9 @@ export function createElectronBuilderConfig(
         dshNext: { schemaVersion: 1, repository: NEXT_DESKTOP_IDENTITY.repository,
           repositoryId: NEXT_DESKTOP_IDENTITY.repositoryId, updateMode: 'manual' },
       } : {}),
+      // Always write the root product version into the packaged manifest so a stale workspace copy cannot leak into Electron.
+      version: buildVersion,
       ...(policy === undefined ? {} : { dshMandatoryUpdatePolicy: policy }),
-      ...buildVersion === productVersion ? {} : { version: buildVersion },
       ...packaged === undefined ? {} : { dshBuildCommit: packaged.commit, dshBuildDirty: packaged.dirty },
     },
     productName: next ? NEXT_DESKTOP_IDENTITY.productName : 'DeepSeek Harness',

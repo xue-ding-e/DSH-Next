@@ -52,7 +52,7 @@ import { desktopUpdateErrorSummary, presentDesktopUpdate } from './update-presen
 import { desktopErrorState } from './startup-error.ts'
 import { readDesktopLoginShellEnvironment, resolveDesktopLoginShellConfig } from './login-shell-environment.ts'
 import { DesktopMandatoryUpdatePolicy, resolveDesktopPolicyConfig, type DesktopPolicyState } from './mandatory-update-policy.ts'
-import { desktopClientMetadata, desktopClientVersion } from './client-metadata.ts'
+import { desktopClientBuildVersion, desktopClientMetadata, desktopClientVersion } from './client-metadata.ts'
 import { DesktopMandatoryUpdateWindow } from './mandatory-update-window.ts'
 import { DesktopPolicyTestAuth } from './policy-test-auth.ts'
 import { readDesktopSettings } from './settings.ts'
@@ -325,7 +325,10 @@ function createWindow(preload: string, show = false, primary = false): BrowserWi
 async function main(): Promise<void> {
   const manifest: unknown = JSON.parse(await readFile(join(app.getAppPath(), 'package.json'), 'utf8'))
   const nextDistribution = app.isPackaged ? nextDesktopDistribution(manifest) : undefined
-  if (nextDistribution !== undefined) Object.assign(process.env, await nextDesktopEnvironment(homedir(), process.env, nextDesktopInstallRoot(process.execPath, process.platform)))
+  if (nextDistribution !== undefined) {
+    Object.assign(process.env, await nextDesktopEnvironment(
+      homedir(), process.env, nextDesktopInstallRoot(process.execPath, process.platform)))
+  }
   profileReady = true
   const desktopSettings = readDesktopSettings(app.getPath('userData'))
   void pruneCrashReports(app.getPath('logs'))
@@ -420,7 +423,7 @@ async function main(): Promise<void> {
   // chrome and its content never mix languages.
   const showAbout = async (): Promise<void> => {
     await ordinaryMessageBox({ type: 'info', title: locale.messages.aboutMenu, message: nextDistribution === undefined ? locale.messages.aboutProduct : NEXT_DESKTOP_IDENTITY.productName,
-      detail: formatDesktopMessage(locale.messages.aboutVersion, { version: app.getVersion() }),
+      detail: formatDesktopMessage(locale.messages.aboutVersion, { version: desktopClientBuildVersion() }),
       buttons: [locale.messages.updateAcknowledge], cancelId: 0 })
   }
   const commandManager = new DesktopCommandManager({
@@ -868,8 +871,10 @@ async function main(): Promise<void> {
           controller = new AbortController()
           ordinaryDialogs.add(controller)
           const parent = currentDialogWindow()
-          progress = parent === undefined ? Promise.resolve() : updateDialog.show(parent, { type: 'info', title: locale.messages.updateCheckTitle,
-            message: locale.messages.updateChecking, buttons: [locale.messages.later], cancelId: 0, signal: controller.signal }).then(result => { checkDismissed = true; return result })
+          progress = parent === undefined ? Promise.resolve() : updateDialog.show(parent, {
+            type: 'info', title: locale.messages.updateCheckTitle, message: locale.messages.updateChecking,
+            buttons: [locale.messages.later], cancelId: 0, signal: controller.signal,
+          }).then((result) => { checkDismissed = true; return result })
           if (!joinedPolicyAuthentication) {
             void checkPolicyManually('deferred').catch((error: unknown) => { console.error(error) })
           }
@@ -913,7 +918,7 @@ async function main(): Promise<void> {
         if (state.phase === 'idle') {
           await ordinaryMessageBox({ type: 'info', title: locale.messages.updateCheckTitle,
             message: locale.messages.updateCurrent,
-            detail: formatDesktopMessage(locale.messages.updateCurrentDetail, { version: app.getVersion() }) })
+            detail: formatDesktopMessage(locale.messages.updateCurrentDetail, { version: desktopClientBuildVersion() }) })
           return
         }
         if (state.phase === 'ready' || (state.phase === 'error' && state.failedOperation === 'install')) {
@@ -1014,8 +1019,8 @@ async function main(): Promise<void> {
     : join(process.resourcesPath, 'icon.png')
   app.setAboutPanelOptions({
     applicationName: nextDistribution === undefined ? 'DeepSeek Harness' : NEXT_DESKTOP_IDENTITY.productName,
-    applicationVersion: app.getVersion(),
-    // The release has no separate build number; omit Electron's bundle version.
+    applicationVersion: desktopClientBuildVersion(),
+    // The shared build identity is already in applicationVersion; omit Electron's separate bundle version.
     version: '',
     copyright: '',
     iconPath: applicationIconPath,

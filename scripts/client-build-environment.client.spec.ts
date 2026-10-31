@@ -84,6 +84,7 @@ describe('client build environment', () => {
   it('requires an exact public environment for a named artifact profile', () => {
     const expected = {
       DSH_CLIENT_BUILD_PROFILE: 'official',
+      DSH_CLIENT_BUILD_VERSION: '1.2.3-0123456',
       DSH_CLIENT_COMMIT_HASH: COMMIT_HASH.slice(0, 7),
       DSH_CLIENT_TITLE: 'DeepSeek Harness',
       DSH_CLIENT_VERSION: '1.2.3',
@@ -114,6 +115,7 @@ describe('client build environment', () => {
     })
     expect(resolveClientBuildEnvironment(parent)).toEqual({
       DSH_CLIENT_BUILD_PROFILE: 'official',
+      DSH_CLIENT_BUILD_VERSION: '1.2.3-0123456',
       DSH_CLIENT_COMMIT_HASH: COMMIT_HASH.slice(0, 7),
       DSH_CLIENT_TITLE: 'DeepSeek Harness',
       DSH_CLIENT_VERSION: '1.2.3',
@@ -130,12 +132,14 @@ describe('client build environment', () => {
     expect(() => { resolveClientBuildEnvironment({}, 'unknown') }).toThrow(/unknown client build profile/)
     expect(clientBuildProcessEnvironment(parent, {
       DSH_CLIENT_BUILD_PROFILE: 'official',
+      DSH_CLIENT_BUILD_VERSION: '1.2.3-0123456',
       DSH_CLIENT_COMMIT_HASH: COMMIT_HASH.slice(0, 7),
       DSH_CLIENT_TITLE: 'DeepSeek Harness',
       DSH_CLIENT_VERSION: '1.2.3',
     })).toEqual({
       PATH: '/bin',
       DSH_CLIENT_BUILD_PROFILE: 'official',
+      DSH_CLIENT_BUILD_VERSION: '1.2.3-0123456',
       DSH_CLIENT_COMMIT_HASH: COMMIT_HASH.slice(0, 7),
       DSH_CLIENT_TITLE: 'DeepSeek Harness',
       DSH_CLIENT_VERSION: '1.2.3',
@@ -156,6 +160,7 @@ describe('client build environment', () => {
     const local = resolveClientBuildEnvironment(parent, 'local')
     expect(local).toEqual({
       DSH_CLIENT_BUILD_PROFILE: 'local',
+      DSH_CLIENT_BUILD_VERSION: '1.2.3-0123456' + (dirty === 'true' ? '-dirty' : ''),
       DSH_CLIENT_COMMIT_HASH: COMMIT_HASH.slice(0, 7),
       DSH_CLIENT_VERSION: '1.2.3',
       ...(dirty === 'true' ? { DSH_CLIENT_GIT_DIRTY: 'true' } : {}),
@@ -164,6 +169,7 @@ describe('client build environment', () => {
     expect(resolveClientBuildEnvironment({ ...parent, DSH_BUILD_CLIENT_PROFILE: 'local' })).toEqual(local)
     expect(resolveClientBuildEnvironment({ ...parent, ...local }, 'official')).toEqual({
       DSH_CLIENT_BUILD_PROFILE: 'official',
+      DSH_CLIENT_BUILD_VERSION: '1.2.3-0123456',
       DSH_CLIENT_COMMIT_HASH: COMMIT_HASH.slice(0, 7),
       DSH_CLIENT_TITLE: 'DeepSeek Harness',
       DSH_CLIENT_VERSION: '1.2.3',
@@ -191,10 +197,12 @@ describe('client build environment', () => {
     })).toEqual({
       DSH_CLIENT_COMMIT_HASH: COMMIT_HASH.slice(0, 7),
       DSH_CLIENT_EXTRA: 'preserved',
+      DSH_CLIENT_BUILD_VERSION: '1.2.3-rc.4-0123456',
       DSH_CLIENT_VERSION: '1.2.3-rc.4',
     })
     expect(officialClientBuildEnvironment(fixtureRoot)).toEqual({
       DSH_CLIENT_BUILD_PROFILE: 'official',
+      DSH_CLIENT_BUILD_VERSION: '1.2.3-rc.4-' + commit,
       DSH_CLIENT_COMMIT_HASH: commit,
       DSH_CLIENT_TITLE: 'DeepSeek Harness',
       DSH_CLIENT_VERSION: '1.2.3-rc.4',
@@ -225,6 +233,7 @@ describe('client build environment', () => {
     })).toEqual({
       DSH_CLIENT_COMMIT_HASH: COMMIT_HASH.slice(0, 7),
       DSH_CLIENT_GIT_DIRTY: 'true',
+      DSH_CLIENT_BUILD_VERSION: '1.2.3-rc.4-0123456-dirty',
       DSH_CLIENT_VERSION: '1.2.3-rc.4',
     })
 
@@ -248,6 +257,7 @@ describe('client build environment', () => {
       DSH_CLIENT_GIT_DIRTY: 'true',
     })).toEqual({
       DSH_CLIENT_COMMIT_HASH: COMMIT_HASH.slice(0, 7),
+      DSH_CLIENT_BUILD_VERSION: '2.0.0-0123456',
       DSH_CLIENT_VERSION: '2.0.0',
     })
   })
@@ -304,6 +314,7 @@ describe('client build environment', () => {
   it('binds the recorded environment to a complete set of client artifacts', () => {
     const officialEnvironment = {
       DSH_CLIENT_BUILD_PROFILE: 'official',
+      DSH_CLIENT_BUILD_VERSION: '1.2.3-0123456',
       DSH_CLIENT_COMMIT_HASH: COMMIT_HASH.slice(0, 7),
       DSH_CLIENT_TITLE: 'DeepSeek Harness',
       DSH_CLIENT_VERSION: '1.2.3',

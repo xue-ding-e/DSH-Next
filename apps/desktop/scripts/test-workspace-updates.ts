@@ -19,7 +19,7 @@ const root = await mkdtemp(join(evidence, 'electron-workspace-updates-'))
 const application = join(root, 'app')
 const project = join(application, '.desktop-build/development/project')
 const profile = join(root, 'home/profiles/desktop')
-const manifest = JSON.parse(await readFile(join(repo, 'apps/desktop/package.json'), 'utf8')) as { version: string }
+const manifest = JSON.parse(await readFile(join(repo, 'package.json'), 'utf8')) as { version: string }
 const pnpm = JSON.parse(await readFile(join(repo, 'apps/desktop/node_modules/pnpm/package.json'), 'utf8')) as { version: string }
 try {
   const require = createRequire(import.meta.url)

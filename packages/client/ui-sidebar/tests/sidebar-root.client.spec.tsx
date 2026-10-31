@@ -192,6 +192,7 @@ describe('SidebarRoot shell', () => {
     vi.stubEnv('DSH_CLIENT_COMMIT_HASH', '0123456')
     vi.stubEnv('DSH_CLIENT_GIT_DIRTY', 'true')
     vi.stubEnv('DSH_CLIENT_VERSION', '1.2.3-rc.4')
+    vi.stubEnv('DSH_CLIENT_BUILD_VERSION', '1.2.3-rc.4-0123456-dirty')
     const { container } = render(<SidebarRoot
       collapsed={false} width={300}
       useSessions={neverHook} useSessionStatus={useSessionStatus} useSessionRetainInfo={neverHook}
@@ -211,8 +212,8 @@ describe('SidebarRoot shell', () => {
   })
 
   it.each([
-    [{ DSH_CLIENT_VERSION: '1.2.3' }, '1.2.3'],
-    [{ DSH_CLIENT_COMMIT_HASH: 'abcdef0', DSH_CLIENT_VERSION: '1.2.3' }, '1.2.3-abcdef0'],
+    [{ DSH_CLIENT_BUILD_VERSION: '1.2.3' }, '1.2.3'],
+    [{ DSH_CLIENT_BUILD_VERSION: '1.2.3-abcdef0' }, '1.2.3-abcdef0'],
   ])('omits unavailable build-version suffixes from %j', (environment, expected) => {
     for (const [name, value] of Object.entries(environment)) vi.stubEnv(name, value)
     render(<SidebarRoot
@@ -234,8 +235,7 @@ describe('SidebarRoot shell', () => {
 
   it.each([false, true])('copies the local-build version from the fallback mark and name (darwin=%s)', async (darwin) => {
     if (darwin) document.documentElement.dataset.platform = 'darwin'
-    vi.stubEnv('DSH_CLIENT_COMMIT_HASH', 'abcdef0')
-    vi.stubEnv('DSH_CLIENT_VERSION', '1.2.3')
+    vi.stubEnv('DSH_CLIENT_BUILD_VERSION', '1.2.3-abcdef0')
     const writeText = vi.fn<(text: string) => Promise<void>>()
       .mockResolvedValueOnce(undefined)
       .mockRejectedValueOnce(new Error('denied'))

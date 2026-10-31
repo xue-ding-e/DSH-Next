@@ -1,0 +1,73 @@
+name: DSH Next · Build and release
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: dsh-next-release
+  cancel-in-progress: false
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 180
+    defaults:
+      run:
+        shell: pwsh
+    env:
+      DSH_TELEMETRY_DISABLED: '1'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.28.5
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24.9.0
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Resolve release version
+        id: version
+        run: |
+          $base = node -p "JSON.parse(require('fs').readFileSync('package.json', 'utf8')).version"
+          $date = [DateTime]::UtcNow.ToString('yyyyMMdd')
+          $version = "$base.$date.$env:GITHUB_RUN_NUMBER"
+          "version=$version" >> $env:GITHUB_OUTPUT
+          "tag=next-v$version" >> $env:GITHUB_OUTPUT
+          "NEXT_VERSION=$version" >> $env:GITHUB_ENV
+          "NEXT_TAG=next-v$version" >> $env:GITHUB_ENV
+
+      - name: Build unsigned DSH Next installer
+        run: pnpm run package:desktop:win:x64 -- --next --unsigned --build-version $env:NEXT_VERSION
+
+      - name: Verify release asset
+        run: |
+          $dir = 'apps/desktop/.desktop-build/targets/win-x64/unsigned-artifacts'
+          $installer = Join-Path $dir "dsh-next-$env:NEXT_VERSION-win-x64-unsigned.exe"
+          if (!(Test-Path -LiteralPath $installer)) { throw "Missing $installer" }
+          $hash = (Get-FileHash -LiteralPath $installer -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash *$(Split-Path -Leaf $installer)" | Set-Content -LiteralPath (Join-Path $dir 'SHA256SUMS') -Encoding utf8NoBOM
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $dir = 'apps/desktop/.desktop-build/targets/win-x64/unsigned-artifacts'
+          $installer = Join-Path $dir "dsh-next-$env:NEXT_VERSION-win-x64-unsigned.exe"
+          gh release create $env:NEXT_TAG --repo $env:GITHUB_REPOSITORY --target $env:GITHUB_SHA --title "DSH Next $env:NEXT_VERSION" --prerelease --notes "Automated DSH Next Windows x64 build from $env:GITHUB_SHA. The installer is unsigned; verify SHA256SUMS before installation."
+          gh release upload $env:NEXT_TAG $installer (Join-Path $dir 'SHA256SUMS') --repo $env:GITHUB_REPOSITORY

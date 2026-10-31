@@ -28,6 +28,9 @@ const CLIENT_COMMIT_HASH_VARIABLE = 'DSH_CLIENT_COMMIT_HASH'
 /** Public variable carrying the repository package version embedded in client artifacts. */
 const CLIENT_VERSION_VARIABLE = 'DSH_CLIENT_VERSION'
 
+/** Public variable carrying the one display identity embedded in client artifacts. */
+export const CLIENT_BUILD_VERSION_VARIABLE = 'DSH_CLIENT_BUILD_VERSION'
+
 /** Repository-relative path of the complete client build record. */
 export const CLIENT_BUILD_RECORD_PATH = '.dsh-build/client-build-environment.json'
 
@@ -43,6 +46,17 @@ const CLIENT_ARTIFACT_PATTERNS = [
 
 /** Public values embedded in one set of client artifacts. */
 export type ClientBuildEnvironment = Readonly<Record<string, string>>
+
+/**
+ * Format the display identity shared by the Web UI and the Desktop shell.
+ * @param version - Product version from the repository manifest.
+ * @param commit - Optional short source commit.
+ * @param dirty - Whether the source tree had changes when it was built.
+ * @returns One stable display value; callers must not rebuild this string separately.
+ */
+export function formatClientBuildVersion(version: string, commit?: string, dirty = false): string {
+  return version + (commit === undefined ? '' : `-${commit}`) + (dirty ? '-dirty' : '')
+}
 
 /**
  * Resolve the short source commit used by browser build metadata.
@@ -124,12 +138,16 @@ export function repositoryClientBuildEnvironment(
   delete inherited.DSH_CLIENT_COMMIT_HASH
   delete inherited.DSH_CLIENT_GIT_DIRTY
   delete inherited.DSH_CLIENT_VERSION
+  delete inherited.DSH_CLIENT_BUILD_VERSION
+  const commit = repositoryCommitHash(root, environment)
+  const version = repositoryVersion(root)
   const dirty = repositoryGitDirty(root)
   return {
     ...inherited,
-    DSH_CLIENT_COMMIT_HASH: repositoryCommitHash(root, environment),
+    DSH_CLIENT_COMMIT_HASH: commit,
     ...(dirty === true ? { DSH_CLIENT_GIT_DIRTY: 'true' } : {}),
-    DSH_CLIENT_VERSION: repositoryVersion(root),
+    DSH_CLIENT_VERSION: version,
+    [CLIENT_BUILD_VERSION_VARIABLE]: formatClientBuildVersion(version, commit, dirty === true),
   }
 }
 
@@ -143,9 +161,12 @@ export function officialClientBuildEnvironment(
   root: string,
   environment: NodeJS.ProcessEnv = process.env,
 ): Readonly<Record<`DSH_CLIENT_${string}`, string>> {
+  const commit = repositoryCommitHash(root, environment)
+  const version = repositoryVersion(root)
   return {
-    DSH_CLIENT_COMMIT_HASH: repositoryCommitHash(root, environment),
-    DSH_CLIENT_VERSION: repositoryVersion(root),
+    DSH_CLIENT_COMMIT_HASH: commit,
+    DSH_CLIENT_VERSION: version,
+    [CLIENT_BUILD_VERSION_VARIABLE]: formatClientBuildVersion(version, commit),
     ...OFFICIAL_CLIENT_BUILD_ENVIRONMENT,
   }
 }
@@ -201,12 +222,15 @@ export function resolveClientBuildEnvironment(
     if (version === undefined) {
       throw new Error(`${CLIENT_VERSION_VARIABLE} is required for the ${profile} client build profile`)
     }
+    const commit = repositoryCommitHash('.', { [CLIENT_COMMIT_HASH_VARIABLE]: commitHash })
+    const dirty = profile === 'local' && environment.DSH_CLIENT_GIT_DIRTY === 'true'
     return {
-      DSH_CLIENT_COMMIT_HASH: commitHash,
+      DSH_CLIENT_COMMIT_HASH: commit,
       DSH_CLIENT_VERSION: version,
+      [CLIENT_BUILD_VERSION_VARIABLE]: formatClientBuildVersion(version, commit, dirty),
       ...(profile === 'official' ? OFFICIAL_CLIENT_BUILD_ENVIRONMENT : {
         DSH_CLIENT_BUILD_PROFILE: 'local',
-        ...(environment.DSH_CLIENT_GIT_DIRTY === 'true' ? { DSH_CLIENT_GIT_DIRTY: 'true' } : {}),
+        ...(dirty ? { DSH_CLIENT_GIT_DIRTY: 'true' } : {}),
       }),
     }
   }

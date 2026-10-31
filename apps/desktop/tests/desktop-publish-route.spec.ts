@@ -5,7 +5,7 @@ function fixture() {
   const run = { id: 42, run_attempt: 2, head_sha: 'a'.repeat(40), path: '.github/workflows/macos-package.yml',
     conclusion: 'success', event: 'workflow_dispatch', repository: { full_name: 'owner/repo' } }
   const source = { repository: 'owner/repo', runId: '42', attempt: '2', commit: run.head_sha, runnerName: 'mini',
-    workflowCommit: run.head_sha, sourceRef: 'master', channel: 'nightly',
+    workflowCommit: run.head_sha, sourceRef: 'main', channel: 'nightly',
     target: 'mac-arm64', preset: 'test', publishRequested: true, qualification: 'notarized' }
   const jobs = [{ name: 'package', runner_name: 'mini', conclusion: 'success', labels: ['self-hosted', 'dsh-mini'] }]
   const routes = { mini: { label: 'dsh-mini', target: 'mac-arm64' } }

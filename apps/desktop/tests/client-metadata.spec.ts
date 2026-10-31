@@ -1,11 +1,13 @@
 import { afterEach, expect, it, vi } from 'vitest'
-import { desktopClientMetadata, desktopClientVersion } from '../src/client-metadata.ts'
+import { desktopClientBuildVersion, desktopClientMetadata, desktopClientVersion } from '../src/client-metadata.ts'
 
 afterEach(() => { vi.unstubAllEnvs() })
 
 it('reports the inlined client build version and the requested language', () => {
   vi.stubEnv('DSH_CLIENT_VERSION', '1.2.3')
+  vi.stubEnv('DSH_CLIENT_BUILD_VERSION', '1.2.3-abcdef0-dirty')
   expect(desktopClientVersion()).toBe('1.2.3')
+  expect(desktopClientBuildVersion()).toBe('1.2.3-abcdef0-dirty')
   expect(desktopClientMetadata('zh-CN')).toMatchObject({ version: '1.2.3', locale: 'zh-CN',
     timezoneOffsetSeconds: -new Date().getTimezoneOffset() * 60 })
 })

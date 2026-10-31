@@ -668,8 +668,9 @@ export class ClientModuleRegistry extends Service {
    */
   constructor(ctx: Context) {
     super(ctx, 'clientModules')
-    const { version } = createRequire(import.meta.url)('../package.json') as { version: string }
-    // The client build fixes this read into the built Host artifact.
+    const packageVersion = (createRequire(import.meta.url)('../package.json') as { version: string }).version
+    // Complete builds inject the repository version; the package manifest remains a source-launch fallback.
+    const version = process.env.DSH_CLIENT_VERSION ?? packageVersion
     const commit = process.env.DSH_CLIENT_COMMIT_HASH
     this.release = commit === undefined ? { version } : { version, commit }
     // Subscribe before seeding so a fiber arriving mid-activation lands in the

@@ -27,6 +27,7 @@ import { requireDesktopToolchain } from './desktop-toolchain-preflight.ts'
 import { withMacOSNotarizationProxy } from './macos-notarization-proxy.ts'
 import { nextDesktopPackageEnvironment } from './next-package-environment.mjs'
 import { NEXT_DESKTOP_IDENTITY } from '../src/next-distribution.ts'
+import { repositoryVersion } from '../../../scripts/client-build-environment.ts'
 
 const APP_ROOT = resolve(import.meta.dirname, '..')
 const REPOSITORY_ROOT = resolve(APP_ROOT, '..', '..')
@@ -141,12 +142,12 @@ function writeReleaseRecord(
   environment: NodeJS.ProcessEnv,
   artifactsRoot: string,
 ): void {
+  const productVersion = repositoryVersion(REPOSITORY_ROOT)
   const desktopVersion = packageVersion(join(APP_ROOT, 'package.json'), 'desktop package')
-  const dshVersion = packageVersion(join(REPOSITORY_ROOT, 'package.json'), 'dsh package')
-  if (desktopVersion !== dshVersion) {
-    throw new Error(`desktop package: desktop version ${desktopVersion} does not match dsh version ${dshVersion}`)
+  if (desktopVersion !== productVersion) {
+    throw new Error(`desktop package: desktop version ${desktopVersion} does not match root version ${productVersion}`)
   }
-  const buildVersion = resolveDesktopBuildVersion(environment, dshVersion)
+  const buildVersion = resolveDesktopBuildVersion(environment, productVersion)
   const packaged = resolveDesktopBuildCommit(environment)
   const update = resolveDesktopAutoUpdateConfig(environment, target.platform, target.arch)
   const recordPath = join(artifactsRoot, desktopBuildRecordFilename(target.name))
@@ -355,11 +356,15 @@ async function main(): Promise<void> {
   }
   const environment = invocation.next ? nextDesktopPackageEnvironment()
     : target.platform === 'darwin' && invocation.unsigned
-    ? localMacOSPackageEnvironment()
-    : loadDesktopPackageEnvironment(target.platform, process.env, APP_ROOT, {
-      unsigned: invocation.unsigned, prepareOnly: invocation.prepareOnly,
-    })
-  const productVersion = packageVersion(join(APP_ROOT, 'package.json'), 'desktop package')
+      ? localMacOSPackageEnvironment()
+      : loadDesktopPackageEnvironment(target.platform, process.env, APP_ROOT, {
+        unsigned: invocation.unsigned, prepareOnly: invocation.prepareOnly,
+      })
+  const productVersion = repositoryVersion(REPOSITORY_ROOT)
+  const desktopVersion = packageVersion(join(APP_ROOT, 'package.json'), 'desktop package')
+  if (desktopVersion !== productVersion) {
+    throw new Error(`desktop package: desktop version ${desktopVersion} does not match root version ${productVersion}`)
+  }
   // Release settings come from the selected configuration files, so the version this run publishes is an
   // argument; the environment variable below only carries it to the child processes that build.
   const buildVersion = await resolveRequestedBuildVersion(invocation, productVersion, environment)
@@ -548,7 +553,7 @@ export async function packageTarget(
     await withMacOSNotarizationProxy(mac?.notarizationProxy, () => packageMacOSArtifacts({
       arch: target.arch,
       // electron-builder named these artifacts after the published version, so locating them uses the same identifier.
-      version: resolveDesktopBuildVersion(environment, packageVersion(join(APP_ROOT, 'package.json'), 'desktop package')),
+      version: resolveDesktopBuildVersion(environment, repositoryVersion(REPOSITORY_ROOT)),
       artifactsRoot: buildPaths.artifacts,
       environment: electronBuilderEnv,
     }, buildMacArtifact), undefined, undefined, proxyEvent)
