@@ -1,5 +1,6 @@
 /** Resolve a separately owned Next data root before either Desktop or CLI accesses a profile. */
-import { lstat, realpath } from 'node:fs/promises'
+import { cp, lstat, realpath, rename, rm } from 'node:fs/promises'
+import { randomUUID } from 'node:crypto'
 import { isAbsolute, join, parse, relative, resolve, sep, dirname } from 'node:path'
 import { canonicalizeWatchPath, expandHomePath } from '@deepseek-ai/dsh-home-paths'
 import { NEXT_DESKTOP_IDENTITY } from './next-distribution.ts'
@@ -21,6 +22,46 @@ export function nextDesktopHome(userHome: string, configured?: string): string {
     throw new Error('Next desktop: use a separate data directory, not the upstream Harness home')
   }
   return target
+}
+
+/** Copy the old Harness data once, preserving the source for rollback and recovery. */
+async function migrateUpstreamHome(upstream: string, target: string): Promise<void> {
+  let sourceExists = false
+  try {
+    sourceExists = (await lstat(upstream)).isDirectory()
+  } catch (error) {
+    if (!(error instanceof Error) || !('code' in error) || error.code !== 'ENOENT') throw error
+  }
+  if (!sourceExists) return
+  try {
+    await lstat(target)
+    return
+  } catch (error) {
+    if (!(error instanceof Error) || !('code' in error) || error.code !== 'ENOENT') throw error
+  }
+  const staging = `${target}.migration-${process.pid}-${randomUUID()}`
+  try {
+    await cp(upstream, staging, {
+      recursive: true,
+      force: false,
+      filter: (source) => {
+        const relativePath = relative(upstream, source)
+        const root = relativePath.split(sep, 1)[0]
+        return root !== 'cache' && root !== 'dsh-runtimes'
+      },
+    })
+    await rename(staging, target)
+    console.info(`Next desktop: migrated existing Harness data to ${target}`)
+  } catch (error) {
+    await rm(staging, { recursive: true, force: true }).catch(() => undefined)
+    try {
+      await lstat(target)
+      return
+    } catch (targetError) {
+      if (!(targetError instanceof Error) || !('code' in targetError) || targetError.code !== 'ENOENT') throw targetError
+    }
+    throw new Error(`Next desktop: failed to migrate existing Harness data: ${error instanceof Error ? error.message : String(error)}`)
+  }
 }
 
 /** Reject unresolved link ancestors instead of treating their target as an ordinary missing suffix. */
@@ -53,7 +94,9 @@ async function canonicalDataRoot(path: string): Promise<string> {
  * @param installationRoot Actual application installation, which replacement or uninstall removes.
  * @returns Separate canonical Next root, including a not-yet-created suffix.
  */
-export async function resolveNextDesktopHome(userHome: string, configured?: string, upstreamHome?: string, installationRoot?: string): Promise<string> {
+export async function resolveNextDesktopHome(
+  userHome: string, configured?: string, upstreamHome?: string, installationRoot?: string,
+): Promise<string> {
   const target = await canonicalDataRoot(nextDesktopHome(userHome, configured))
   const protectedRoots = [join(userHome, '.dsh')]
   if (installationRoot !== undefined) protectedRoots.push(installationRoot)
@@ -80,13 +123,16 @@ export async function resolveNextDesktopHome(userHome: string, configured?: stri
  * @param installationRoot Actual application installation directory.
  * @returns Child environment with a canonical separate home and original upstream ownership.
  */
-export async function nextDesktopEnvironment(userHome: string, environment: NodeJS.ProcessEnv, installationRoot?: string): Promise<NodeJS.ProcessEnv> {
+export async function nextDesktopEnvironment(
+  userHome: string, environment: NodeJS.ProcessEnv, installationRoot?: string,
+): Promise<NodeJS.ProcessEnv> {
   const inheritedNext = environment.DSH_NEXT_ACTIVE_HOME !== undefined
     && environment.DSH_HOME === environment.DSH_NEXT_ACTIVE_HOME
     && environment.DSH_NEXT_UPSTREAM_HOME !== undefined
   const upstream = (inheritedNext ? environment.DSH_NEXT_UPSTREAM_HOME : environment.DSH_HOME)?.trim()
     || join(userHome, '.dsh')
   const root = await resolveNextDesktopHome(userHome, environment.DSH_NEXT_HOME, upstream, installationRoot)
+  if (!environment.DSH_NEXT_HOME?.trim()) await migrateUpstreamHome(upstream, root)
   return { ...environment, DSH_HOME: root, DSH_NEXT_ACTIVE_HOME: root, DSH_NEXT_UPSTREAM_HOME: upstream }
 }
 
