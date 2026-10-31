@@ -50,7 +50,18 @@ async function migrateUpstreamHome(upstream: string, target: string): Promise<vo
         return root !== 'cache' && root !== 'dsh-runtimes'
       },
     })
-    await rename(staging, target)
+    let delay = 50
+    for (let attempt = 0; ; attempt += 1) {
+      try {
+        await rename(staging, target)
+        break
+      } catch (error) {
+        const code = error instanceof Error && 'code' in error ? error.code : undefined
+        if (!['EACCES', 'EBUSY', 'EPERM'].includes(String(code)) || attempt >= 8) throw error
+        await new Promise(resolvePromise => setTimeout(resolvePromise, delay))
+        delay = Math.min(delay * 2, 500)
+      }
+    }
     console.info(`Next desktop: migrated existing Harness data to ${target}`)
   } catch (error) {
     await rm(staging, { recursive: true, force: true }).catch(() => undefined)
