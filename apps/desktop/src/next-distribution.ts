@@ -12,9 +12,9 @@ export const NEXT_DESKTOP_IDENTITY = {
   repositoryId: 1437727533,
 } as const
 
-/** Packaged Next updates are manual until a separately validated signing configuration exists. */
+/** Packaged Next updates use the public GitHub Release feed and install through electron-updater. */
 export interface NextDesktopDistribution {
-  readonly updateMode: 'manual'
+  readonly updateMode: 'auto'
   readonly channel: 'latest' | 'nightly'
 }
 
@@ -34,7 +34,7 @@ export function nextDesktopDistribution(manifest: unknown): NextDesktopDistribut
     || !('schemaVersion' in next) || next.schemaVersion !== 1
     || !('repositoryId' in next) || next.repositoryId !== NEXT_DESKTOP_IDENTITY.repositoryId
     || !('repository' in next) || next.repository !== NEXT_DESKTOP_IDENTITY.repository
-    || !('updateMode' in next) || next.updateMode !== 'manual'
+    || !('updateMode' in next) || next.updateMode !== 'auto'
     || !('productName' in manifest) || manifest.productName !== NEXT_DESKTOP_IDENTITY.productName
     || !('name' in manifest) || manifest.name !== NEXT_DESKTOP_IDENTITY.packageName
     || !('dshDesktopAppId' in manifest) || manifest.dshDesktopAppId !== NEXT_DESKTOP_IDENTITY.appId
@@ -43,5 +43,5 @@ export function nextDesktopDistribution(manifest: unknown): NextDesktopDistribut
     || (manifest.dshDesktopUpdateChannel !== 'nightly' && manifest.dshDesktopUpdateChannel !== 'latest')) {
     throw new Error('Next desktop: packaged distribution identity is invalid')
   }
-  return { updateMode: 'manual', channel: manifest.dshDesktopUpdateChannel }
+  return { updateMode: 'auto', channel: manifest.dshDesktopUpdateChannel }
 }

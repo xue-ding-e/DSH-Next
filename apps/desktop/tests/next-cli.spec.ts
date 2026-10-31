@@ -27,7 +27,7 @@ async function fixture(distribution: 'official' | 'next' = 'next') {
     type: 'module', name: NEXT_DESKTOP_IDENTITY.packageName, productName: NEXT_DESKTOP_IDENTITY.productName,
     dshDesktopAppId: NEXT_DESKTOP_IDENTITY.appId, dshDesktopUpdateChannel: 'latest',
     dshNext: { schemaVersion: 1, repository: NEXT_DESKTOP_IDENTITY.repository,
-      repositoryId: NEXT_DESKTOP_IDENTITY.repositoryId, updateMode: 'manual' },
+      repositoryId: NEXT_DESKTOP_IDENTITY.repositoryId, updateMode: 'auto' },
   }
   await writeFile(join(archive, 'package.json'), JSON.stringify(manifest))
   await writeFile(join(host, 'package.json'), '{"type":"module"}\n')

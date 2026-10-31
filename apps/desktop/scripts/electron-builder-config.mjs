@@ -99,13 +99,15 @@ export function createElectronBuilderConfig(
   if (windowsSigner !== undefined) {
     installWindowsNsisBootstrapSigner({ sign: windowsSigner })
   }
-  const update = unsigned ? undefined : resolveDesktopAutoUpdateConfig(env, resolvedPlatform, resolvedArch)
   if (preparedRuntime !== undefined) buildPaths.dsh = preparedRuntime
   // electron-builder merges extraMetadata into the packaged manifest, so a build version here reaches
   // the artifact names, the update feed, and the installed app.getVersion() the updater compares against.
   // The repository manifest is the only product-version source; workspace manifests are synchronized copies.
   const productVersion = JSON.parse(readFileSync(fileURLToPath(new URL('../../../package.json', import.meta.url)), 'utf8')).version
   const buildVersion = resolveDesktopBuildVersion(env, productVersion)
+  const update = next
+    ? { channel: buildVersion.includes('-') ? 'nightly' : 'latest' }
+    : unsigned ? undefined : resolveDesktopAutoUpdateConfig(env, resolvedPlatform, resolvedArch)
   if (update?.channel === 'latest' && buildVersion.includes('-')) throw new Error('desktop package: latest requires a stable version')
   const packaged = resolveDesktopBuildCommit(env)
   return {
@@ -118,7 +120,7 @@ export function createElectronBuilderConfig(
         name: NEXT_DESKTOP_IDENTITY.packageName,
         productName: NEXT_DESKTOP_IDENTITY.productName,
         dshNext: { schemaVersion: 1, repository: NEXT_DESKTOP_IDENTITY.repository,
-          repositoryId: NEXT_DESKTOP_IDENTITY.repositoryId, updateMode: 'manual' },
+          repositoryId: NEXT_DESKTOP_IDENTITY.repositoryId, updateMode: 'auto' },
       } : {}),
       // Always write the root product version into the packaged manifest so a stale workspace copy cannot leak into Electron.
       version: buildVersion,
@@ -282,6 +284,8 @@ export function createElectronBuilderConfig(
       differentialPackage: true,
     },
     detectUpdateChannel: false,
-    publish: update === undefined ? null : [{ provider: 'generic', url: update.publicUrl, channel: update.channel }],
+    publish: update === undefined ? null : next
+      ? [{ provider: 'github', owner: 'xue-ding-e', repo: 'DSH-Next', releaseType: 'prerelease', channel: update.channel }]
+      : [{ provider: 'generic', url: update.publicUrl, channel: update.channel }],
   }
 }

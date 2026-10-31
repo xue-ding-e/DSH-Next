@@ -66,7 +66,6 @@ import { DesktopTray } from './tray.ts'
 import { DesktopBackgroundNotice } from './background-notice.ts'
 import { NEXT_DESKTOP_IDENTITY, nextDesktopDistribution } from './next-distribution.ts'
 import { nextDesktopEnvironment, nextDesktopInstallRoot } from './next-profile.ts'
-import { checkNextManualRelease, NextManualUpdateCoordinator } from './next-manual-update.ts'
 
 let focusPrimaryWindow = (): void => {}
 let stopForRecovery = async (): Promise<void> => {}
@@ -687,10 +686,8 @@ async function main(): Promise<void> {
     updateChannel,
   )
 
-  const manualUpdates = nextDistribution === undefined ? undefined : new NextManualUpdateCoordinator(publishUpdate,
-    () => checkNextManualRelease(nextDistribution.channel, app.getVersion(), process.platform, process.arch))
-  const activeUpdates = manualUpdates ?? updates
-  const updateSchedule = new DesktopUpdateSchedule(activeUpdates, resolveDesktopUpdateScheduleConfig(process.env))
+  const activeUpdates = updates
+  const updateSchedule = new DesktopUpdateSchedule(updates, resolveDesktopUpdateScheduleConfig(process.env))
 
   const downloadUpdate = async (version: string): Promise<DesktopUpdateState> => {
     void track('desktop_upgrade_click', {})
@@ -864,7 +861,6 @@ async function main(): Promise<void> {
       }
       let controller: AbortController | undefined
       let progress: Promise<unknown> | undefined
-      let checkDismissed = false
       try {
         let state = activeUpdates.state
         if (manual || state.phase === 'idle' || (state.phase === 'error' && state.failedOperation === 'check')) {
@@ -874,44 +870,11 @@ async function main(): Promise<void> {
           progress = parent === undefined ? Promise.resolve() : updateDialog.show(parent, {
             type: 'info', title: locale.messages.updateCheckTitle, message: locale.messages.updateChecking,
             buttons: [locale.messages.later], cancelId: 0, signal: controller.signal,
-          }).then((result) => { checkDismissed = true; return result })
+          })
           if (!joinedPolicyAuthentication) {
             void checkPolicyManually('deferred').catch((error: unknown) => { console.error(error) })
           }
-          const checked = updateSchedule.check(true)
-          if (manualUpdates !== undefined && parent !== undefined) {
-            // Dismissal ends this UI operation, not the shared network lookup. A later click may
-            // show a fresh progress dialog while joining that same lookup; this controller owns
-            // only the dismissed dialog, so its cleanup cannot close the new operation's window.
-            const outcome = await Promise.race([
-              checked.then(value => ({ kind: 'checked', value }) as const),
-              progress.then(() => ({ kind: 'dismissed' }) as const),
-            ])
-            if (outcome.kind === 'dismissed') return
-            state = outcome.value
-          } else state = await checked
-        }
-        if (manualUpdates !== undefined) {
-          // A dismissed progress dialog must not reopen UI when the shared lookup returns later.
-          if (checkDismissed || quitting) return
-          const result = manualUpdates.result
-          const message = result.kind === 'available'
-            ? formatDesktopMessage(locale.messages.updateAvailable, { version: result.version })
-            : result.kind === 'current' ? locale.messages.updateCurrent
-              : result.kind === 'error' ? (result.reason === 'network' ? locale.messages.updateCheckNetworkFailed
-                : result.reason === 'identity' ? locale.messages.nextUpdateIdentityFailed
-                  : result.reason === 'access' ? locale.messages.nextUpdateAccessFailed : locale.messages.nextUpdateInvalidResponse)
-                : locale.messages.nextUpdateUnavailable
-          const response = await ordinaryMessageBox({ type: result.kind === 'error' ? 'error' : 'info',
-            title: locale.messages.updateCheckTitle, message,
-            detail: `${locale.messages.nextUpdateManualDetail}\n\n${formatDesktopMessage(locale.messages.updateCurrentDetail, { version: app.getVersion() })}`,
-            buttons: result.kind === 'error' ? [locale.messages.updateAcknowledge]
-              : [locale.messages.nextUpdateOpenRelease, locale.messages.later], cancelId: result.kind === 'error' ? 0 : 1 })
-          if (result.kind !== 'error' && response.response === 0) {
-            await shell.openExternal(result.kind === 'available' ? result.page
-              : `https://github.com/${NEXT_DESKTOP_IDENTITY.repository}/releases`)
-          }
-          return
+          state = await updateSchedule.check(true)
         }
         if (isMandatory()) { mandatoryUI?.focus(); return }
         if (state.phase === 'error' && state.failedOperation === 'check') { await showUpdateFailure(state); return }
@@ -929,7 +892,7 @@ async function main(): Promise<void> {
           return
         }
         if (state.phase !== 'available' && !(state.phase === 'error' && state.failedOperation === 'download')) return
-        if (manual) {
+        if (nextDistribution === undefined && manual) {
           const result = await ordinaryMessageBox({ title: locale.messages.updateCheckTitle,
             message: formatDesktopMessage(locale.messages.updateAvailable, { version: state.version ?? '' }),
             detail: locale.messages.updateDetail,
@@ -1003,16 +966,24 @@ async function main(): Promise<void> {
     return policy
   }
 
+  const checkAndInstallNextUpdate = async (): Promise<void> => {
+    if (nextDistribution === undefined || quitting) return
+    const state = await updateSchedule.check()
+    if (state.phase !== 'available' || state.version === undefined) return
+    const result = await downloadUpdate(state.version)
+    if (result.phase === 'error') console.error(`Next desktop update failed: ${result.message}`)
+  }
+
   const automaticCheck = (): void => {
     if (!quitting) void mandatoryPolicy?.check('foreground-or-resume').catch((error: unknown) => { console.error(error) })
-    if (!quitting) void updateSchedule.check().catch((error: unknown) => { console.error(error) })
+    if (!quitting) void (nextDistribution === undefined ? updateSchedule.check() : checkAndInstallNextUpdate())
+      .catch((error: unknown) => { console.error(error) })
   }
   powerMonitor.on('resume', automaticCheck)
   app.on('will-quit', () => {
     updateSchedule.dispose()
     powerMonitor.off('resume', automaticCheck)
     updates.dispose()
-    manualUpdates?.dispose()
   })
 
   const applicationIconPath = development ? join(app.getAppPath(), 'resources', 'icon-windows.png')
