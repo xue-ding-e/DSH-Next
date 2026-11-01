@@ -52,6 +52,9 @@
     },
     {
       "path": "../../subagent/subagent"
+    },
+    {
+      "path": "../../api/remote-access/tsconfig.host.json"
     }
   ]
 }
