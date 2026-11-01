@@ -10,6 +10,7 @@ import { brandString } from '@deepseek-ai/dsh-brand'
 import type { SessionId } from '@deepseek-ai/dsh-session'
 import { defineDomain, domainTable } from '@deepseek-ai/dsh-storage-domain'
 import type { WorkspaceId } from './types.ts'
+import { fullyQualifiedWorkspacePath } from './paths.ts'
 
 /** Workspace id schema at the durable boundary; branding has no runtime representation. */
 const workspaceId = z.string().transform(value => value as WorkspaceId)
@@ -23,6 +24,11 @@ const sessionId = z.string().transform(value => brandString<SessionId>(value))
  */
 export const workspaceRecord = z.object({
   path: z.string(),
+  // Missing in released single-directory records; preserve their primary path.
+  additionalRoots: z.array(z.object({
+    path: z.string().refine(path => fullyQualifiedWorkspacePath(path) && !path.includes('\0')),
+    access: z.enum(['reference', 'write']),
+  })).default([]),
   title: z.string(),
   sessionIds: z.array(sessionId),
   createdAt: z.string(),

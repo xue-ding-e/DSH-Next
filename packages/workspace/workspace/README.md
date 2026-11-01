@@ -59,6 +59,8 @@ await project.setTitle('Renamed')
 ctx.workspaceRegistry.list() // shows the project, newest first
 ```
 
+`additionalRoots` stores directory selection defaults separately from the immutable primary `path`. `setAdditionalRoots()` validates existing physical directories, deduplicates canonical paths, and persists the ordered selections. `reference` means “do not request additional write access”; `write` records a write-access request, not a permission grant. Conflicting reference/write ancestor selections are rejected, including reference overlap with the primary project. Old records default to an empty list; missing directories remain recorded on restart and are never recreated.
+
 <a id="first-use-workspace"></a>
 ### First-use Workspace
 
@@ -165,6 +167,7 @@ Independent of live requests: the package never touches a request prefix, so it 
 
 These limits define when the project list is a poor fit or needs special operational care. They are current package constraints, not a task backlog.
 
+- **Additional roots are metadata only** — no Session snapshot, permission admission, or directory-management UI consumes these defaults yet. They do not change current or newly created Sessions, grant writes, or isolate reads.
 - **Removal never deletes data** — removing a project leaves its folder, files, and session histories in place; those sessions become ungrouped, and session deletion or folder removal are separate, absent capabilities.
 - **Missing paths retain recorded ownership, not verified symlink history** — a removed symlink and an incorrect but missing absolute cwd cannot be distinguished from existing records; both preserve an already-accounted id. No unaccounted session is assigned by this exception, and an account already removed from storage is not reconstructed.
 - **External changes are seen late** — if another process deletes or damages a directory, the project reflects it only at the next refresh or restart.

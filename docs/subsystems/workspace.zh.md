@@ -23,6 +23,16 @@ type WorkspaceId = Branded<'WorkspaceId'>
 消费方只看到 `Workspace` 接口；实现保持包内私有。
 
 ```ts type-equiv
+/** A directory selection default; it is not an execution permission grant. */
+interface WorkspaceAdditionalRoot {
+  /** Canonical physical Host directory, explicitly selected by the user. */
+  readonly path: string
+  /** Reference adds no write grant; write requests one at future Session admission. Neither restricts reads. */
+  readonly access: 'reference' | 'write'
+}
+```
+
+```ts type-equiv
 /**
  * One workspace: a stable id over an existing directory, a display title, and
  * an ordered candidate account of sessions. Membership validates header cwd
@@ -40,6 +50,16 @@ interface Workspace {
    * afterwards, even when the directory disappears (see {@link status}).
    */
   readonly path: string
+
+  /** Defaults for future Sessions only; changing these never changes a live Session's permissions. */
+  readonly additionalRoots: readonly WorkspaceAdditionalRoot[]
+
+  /**
+   * Replace directory selection defaults, without granting execution access.
+   * @param roots - Explicit existing directories and requested access.
+   * @returns resolution after validation and durability.
+   */
+  setAdditionalRoots(roots: readonly WorkspaceAdditionalRoot[]): Promise<void>
 
   /** Display title. Defaults to the final path segment, or a filesystem root's own spelling; duplicates are allowed. */
   readonly title: string

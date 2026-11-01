@@ -11,9 +11,10 @@
 import { stat } from 'node:fs/promises'
 import type { SessionHeader, SessionId } from '@deepseek-ai/dsh-session'
 import type { KvTable } from '@deepseek-ai/dsh-storage-domain'
-import type { WorkspaceRecord } from './spec.ts'
-import type { Workspace, WorkspaceId } from './types.ts'
+import { workspaceRecord, type WorkspaceRecord } from './spec.ts'
+import type { Workspace, WorkspaceAdditionalRoot, WorkspaceId } from './types.ts'
 import { realpathNormalize } from './paths.ts'
+import { normalizeAdditionalRoots } from './additional-roots.ts'
 
 /** An insertSessionBefore request named a session or anchor not on the account (storage failures stay plain errors). */
 export class WorkspaceMoveInvalidError extends Error {
@@ -85,6 +86,22 @@ export class WorkspaceEntity implements Workspace {
 
   get path(): string {
     return this.record.path
+  }
+
+  get additionalRoots(): readonly WorkspaceAdditionalRoot[] {
+    return Object.freeze(this.record.additionalRoots.map(root => Object.freeze({ ...root })))
+  }
+
+  async setAdditionalRoots(roots: readonly WorkspaceAdditionalRoot[]): Promise<void> {
+    // Domain updates do not parse records on write. Validate the persisted field
+    // here so untyped Host consumers cannot store a record that fails on restart.
+    const normalized = await normalizeAdditionalRoots(this.path, workspaceRecord.shape.additionalRoots.parse(roots))
+    await this.mutate((record) => {
+      if (record.additionalRoots.length === normalized.length && record.additionalRoots.every(
+        (root, index) => root.path === normalized[index]?.path && root.access === normalized[index].access,
+      )) return record
+      return { ...record, additionalRoots: [...normalized] }
+    })
   }
 
   get title(): string {
