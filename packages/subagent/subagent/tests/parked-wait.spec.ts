@@ -131,6 +131,8 @@ describe('completion around parked child inboxes', () => {
       await expect(waiting).resolves.toBe(true)
       expect(first.status).toBe('idle')
       expect(second.inbox.nextStep).toHaveLength(1)
+      expect(ctx.subagents.hasOwnerActivity(parent)).toBe(true)
+      expect(ctx.subagents.hasOwnerActivity(first)).toBe(false)
     } finally {
       await harness.dispose()
     }
@@ -141,6 +143,8 @@ describe('completion around parked child inboxes', () => {
     const { ctx, parent, gate, track } = harness
     try {
       const { child: owner } = await harness.park()
+      expect(ctx.subagents.hasOwnerActivity(parent)).toBe(true)
+      expect(ctx.subagents.hasOwnerActivity(owner)).toBe(false)
       const preparing = gate()
       const releasePrepare = gate()
       ctx.subagents.registerProvider({
@@ -166,6 +170,8 @@ describe('completion around parked child inboxes', () => {
       const started = harness.start(owner, 'preparing')
       const rejected = outcome === 'rollback' ? expect(started).rejects.toThrow('preparation rejected') : undefined
       await preparing.promise
+      expect(ctx.subagents.hasOwnerActivity(parent)).toBe(true)
+      expect(ctx.subagents.hasOwnerActivity(owner)).toBe(true)
       let settled = false
       const waiting = track(ctx.subagents.waitForChildren(parent).then((value) => { settled = true; return value }))
       await setImmediate()
