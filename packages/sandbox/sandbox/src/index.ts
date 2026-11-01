@@ -21,13 +21,8 @@ export {
 export type { EscalationApproval, EscalationApprover, EscalationOutcome, EscalationRequest } from './escalation.ts'
 export { canonicalPath, workspaceWritableRoots, writableRoots, SandboxInvalidRootError } from './roots.ts'
 
-/**
- * File-effect policy for confined processes. `read-only` permits only required
- * sinks such as `/dev/null`; `workspace-write` also permits the workspace,
- * explicit extra roots, and backend-defined temp areas; `danger-full-access` bypasses confinement. Network
- * and process visibility are outside this vocabulary.
- */
-export type SandboxMode = 'read-only' | 'workspace-write' | 'danger-full-access'
+import type { SandboxMode } from './types.ts'
+export type { SandboxMode } from './types.ts'
 
 /** A confining (non-`danger-full-access`) mode — the modes a {@link SandboxPolicy} can carry. */
 export type ConfinedSandboxMode = Exclude<SandboxMode, 'danger-full-access'>
@@ -175,6 +170,17 @@ export abstract class SandboxProvider extends Service {
   /* v8 ignore next -- abstract service construction is covered through concrete provider packages. */
   constructor(ctx: Context) {
     super(ctx, 'sandbox')
+  }
+
+  /**
+   * Whether the selected backend consumes explicit additional writable roots.
+   * Unknown providers fail closed; this is capability, not a successful execution probe.
+   * @param mode - the current file-effect mode to confirm.
+   * @returns true only when this provider supports explicit grants in that mode.
+   */
+  supportsAdditionalWritableRoots(mode: SandboxMode): boolean {
+    void mode
+    return false
   }
 
   /**

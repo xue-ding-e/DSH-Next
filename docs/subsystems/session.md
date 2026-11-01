@@ -817,6 +817,33 @@ The backends that consume this contract are on [persistence.md](persistence.md).
 
 The optional `application` selects a registered file handler without changing the system default; `workspacePathApplications({ path })` returns current handlers, names, icons, and default selection after Host path verification.
 
+```ts type-equiv
+/** Select one live Session's saved directory requests; identity comes from the Peer, never this payload. */
+interface SessionRootsPrepareRequest {
+  readonly sessionId: SessionId
+}
+
+```
+
+```ts type-equiv
+/** Confirm or cancel the exact preview issued to this Peer. */
+interface SessionRootsConfirmRequest extends SessionRootsPrepareRequest {
+  readonly nonce: string
+}
+
+```
+
+```ts type-equiv
+/** Peer-bound directory preview with explicit current mode and deployment grants. */
+type SessionRootsPreview = import('@deepseek-ai/dsh-sandbox-policy/types').RootApprovalPreview
+
+```
+
+```ts type-equiv
+/** Process-local directory grant; importing this value conveys no authorization. */
+type SessionRootsReceipt = import('@deepseek-ai/dsh-sandbox-policy/types').RootApprovalReceipt
+```
+
 <!-- BEGIN GENERATED cordis-surface (gen-cordis-catalog.ts) — do not edit between markers -->
 
 <a id="cordis-surface"></a>
@@ -957,6 +984,26 @@ workspaceDesktop(): { name: string; available: boolean; fileManager: 'finder' | 
  * @returns acknowledgement that cancellation was requested.
  */
 @Remote('cancel') cancel(request: SessionCancelRequest): SessionCancelValue
+
+/**
+ * Preview saved directory requests for this authenticated owner Peer.
+ * @param request - exact live Session to preview; no principal is accepted.
+ * @returns an expiring one-use preview; this operation grants no permissions.
+ */
+@Remote('prepareRoots') prepareRoots(request: SessionRootsPrepareRequest): Promise<SessionRootsPreview>
+
+/**
+ * Confirm a preview under true-idle and resource admission fences.
+ * @param request - exact Session and Peer-bound preview nonce.
+ * @returns a process-local permission receipt, never a portable grant.
+ */
+@Remote('confirmRoots') confirmRoots(request: SessionRootsConfirmRequest): Promise<SessionRootsReceipt>
+
+/**
+ * Cancel the owner's matching preview without changing active permissions.
+ * @param request - exact Session and preview nonce to withdraw.
+ */
+@Remote('cancelRoots') cancelRoots(request: SessionRootsConfirmRequest): Promise<void>
 
 /**
  * Read one cold-safe, message-aligned Session history page.

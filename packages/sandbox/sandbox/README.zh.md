@@ -158,6 +158,8 @@ sandbox mode "<mode>" is requested but no sandbox backend is usable on this host
 
 ## 已知限制与延期工作
 
+`supportsAdditionalWritableRoots(mode)` 是后端显式声明的能力：基础 provider 返回 false。该能力不授予权限，也不保证后续命令一定执行成功；执行 provider 仍须在每次执行时验证目录。浏览器客户端从 `@deepseek-ai/dsh-sandbox/types` 导入 `SandboxMode`；原包入口仍重新导出同一类型。
+
 <a id="known-limitations-and-deferred-work"></a>
 
 

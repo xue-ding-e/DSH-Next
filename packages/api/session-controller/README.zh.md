@@ -110,7 +110,7 @@ GUI 模型选择要求确切提供方／模型对出现在可用目录中；不�
 
 Blockquote 作为普通 prompt 文本传递，不携带 quote 元数据。本地提交回显与持久消息使用同一文本渲染规则；队列编辑替换 content，同时保留 prompt 关联信息。
 
-新建 Workspace 会话在 Agent setup 中捕获非空附加目录默认值，早于发布和回合准入。Setup 失败不会留下已注册的可执行 Agent。空白会话复用与恢复不刷新默认值；分叉保留选定事件前缀，而非最新 Workspace 默认值。必需快照事件只记录待确认请求：导入历史与写入请求都不授予执行访问。所有者确认激活与目录选择 UI 尚待实现。
+新建 Workspace 会话在 Agent setup 中捕获非空附加目录默认值，早于发布和回合准入。Setup 失败不会留下已注册的可执行 Agent。空白会话复用与恢复不刷新默认值；分叉保留选定事件前缀，而非最新 Workspace 默认值。必需快照事件只记录待确认请求：导入历史与写入请求都不授予执行访问。仅所有者可通过存活 Peer 与空闲/资源门调用 `prepareRoots` / `confirmRoots` / `cancelRoots`，激活一次性预览；生命周期与后端限制见 [sandbox-policy](../../sandbox/sandbox-policy/README.zh.md)。目录选择 UI 尚待实现。
 
 <a id="model-experience"></a>
 ## 模型体验

@@ -171,8 +171,8 @@
   en: 2c0a97b7deab4da1
   zh: 806159779baa2380
 /session-persistence-event-catalog/events/sandbox/sandbox-roots-requested-log-only:
-  en: a6847e670cc57d50
-  zh: 38997e817a81c6a7
+  en: 26947932a590d4e6
+  zh: 3783644c492d108a
 /session-persistence-event-catalog/events/schedule:
   en: e5b55405bd2b69f5
   zh: e5b55405bd2b69f5
@@ -1197,11 +1197,11 @@
   en: 544039047a28b6bb
   zh: c691f0bb1e23db08
 /session-persistence-event-catalog/resolved-persistence-types/requestheaderreason:
-  en: 1f691c223f54ab2c
-  zh: f88fef3ee9745c91
+  en: 2a11bdf15f78d61d
+  zh: e7f240ba9a18c338
 /session-persistence-event-catalog/resolved-persistence-types/sandboxmode:
-  en: c9fa5343ea99733b
-  zh: d6de41351c57a73f
+  en: e24c31bedfbf08fb
+  zh: 8499d7494290f473
 /session-persistence-event-catalog/resolved-persistence-types/schedulechange:
   en: 16be53be76c16720
   zh: 38fd164dde86ccac
@@ -1215,11 +1215,11 @@
   en: 0536dab0d2eed6ad
   zh: 54396338c9917818
 /session-persistence-event-catalog/resolved-persistence-types/sessionreferencesource:
-  en: 11797937d42c2bf2
-  zh: 04800e5052289e34
+  en: 777bb508fe31d330
+  zh: 24e0890419e055ad
 /session-persistence-event-catalog/resolved-persistence-types/sessionrootrequest:
-  en: e5d3b5cb20b4f5bb
-  zh: a5a71abaaa6a236b
+  en: c385f761080f0589
+  zh: 8aa0de4bbaf2927d
 /session-persistence-event-catalog/resolved-persistence-types/sessionrootrequest~2:
   en: 8ce9d2c91ad7ac0b
   zh: d5804e7d6b7c8c97
@@ -1368,8 +1368,8 @@
   en: dd9a25c8601f2539
   zh: 465b1142bb808219
 /session-persistence-event-catalog/resolved-persistence-types/string:
-  en: ef4b4a8f58068dff
-  zh: 6b5660f81ca0b1d2
+  en: 6e17fd471e856e37
+  zh: 76747a282b43148d
 /session-persistence-event-catalog/resolved-persistence-types/string~2:
   en: 0089620bf4638263
   zh: 1922bef1713094bb
@@ -1878,8 +1878,8 @@
   en: 5a0bbf4c76266ac5
   zh: 0b20854f90f9d74d
 /session-persistence-event-catalog/resolved-persistence-types/kind-user:
-  en: a1659af8a7b9dd6e
-  zh: f9adc3265a935cd7
+  en: 3aa48b100b1083f3
+  zh: aa9a350992f209d4
 /session-persistence-event-catalog/resolved-persistence-types/kind-user-approval:
   en: a52d2dfbaf844127
   zh: 4c5306ca40f20873
@@ -1944,8 +1944,8 @@
   en: fc9d18e5c78506af
   zh: 02a93e3ac8026be8
 /session-persistence-event-catalog/resolved-persistence-types/roots:
-  en: 5fced3230f8a4ce1
-  zh: 12942f95211b8067
+  en: 0e58e47056b746a3
+  zh: 55f5925f082b0ace
 /session-persistence-event-catalog/resolved-persistence-types/sessionformatversion-sessionid-throughseq:
   en: 8aaa02b06896492d
   zh: 4dd0e1ee40d8f22d

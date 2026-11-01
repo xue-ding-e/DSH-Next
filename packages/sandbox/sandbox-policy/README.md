@@ -106,6 +106,9 @@ Start with the subsystem reference for the shared vocabulary, then the seam cont
 
 Pending directory selections are separate from effective policy. `initializeRequestedRoots(session, roots)` records a detached, required `sandbox/roots-requested` event once, before any turn starts; `requestedRootsOf(session)` returns its snapshot or `null` for older Sessions. Both `reference` and `write` remain requests, not grants. Replay, import, and fork preserve pending metadata without activating permissions or changing the immutable cwd. Missing directories remain recorded without filesystem creation; reference selections do not impose a read sandbox.
 
+
+Explicit activation uses `session/prepareRoots`, `session/confirmRoots`, and `session/cancelRoots` through an authenticated owner Peer. The preview is one-use, expires after 60 seconds, and binds the exact live Agent, Session, selection revisions, providers, and deployment policy. Confirmation requires true idle and no terminals, active/stopping jobs, or descendant work. The grant is process-local: restart, restore, import, and ordinary fork require fresh confirmation; children do not inherit it. Changing mode or recording a new selection invalidates it, even if values later return to the old selection. Missing directories and overlapping reference/writable directories are refused. `reference` adds no write permission and does not restrict reads. Windows ACL and unknown providers do not support additional write activation; a supported backend must explicitly advertise capability. Directory selection UI and trusted child delegation are not provided here.
+
 <a id="model-experience"></a>
 ## Model Experience
 
@@ -154,7 +157,7 @@ The stable system prompt remains byte-identical across mode changes. A changed f
 
 These limits define the policy surface this package provides. They are current package constraints, not a general sandbox comparison or a task backlog.
 
-- **Deployment-scoped extra grants** — additional directories come from configuration; they are not per-session permission settings. Backend support is defined by [sandbox-local](../sandbox-local/README.md).
+- **Deployment-scoped extra grants** — configuration grants remain deployment-wide; explicitly confirmed live-Agent grants are separate and never recovered from logs. Backend support is defined by [sandbox-local](../sandbox-local/README.md).
 - **File-effect modes only** — `SandboxMode` governs file effects; network and process policy are outside its vocabulary, so no knob here restricts them.
 - **Temporary areas are deliberately summarized** — enforcing backends grant different platform temporary areas, which are selected after policy resolution and therefore cannot be enumerated truthfully in the current context.
 
