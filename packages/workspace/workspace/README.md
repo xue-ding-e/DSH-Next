@@ -167,7 +167,7 @@ Independent of live requests: the package never touches a request prefix, so it 
 
 These limits define when the project list is a poor fit or needs special operational care. They are current package constraints, not a task backlog.
 
-- **Additional roots are metadata only** — no Session snapshot, permission admission, or directory-management UI consumes these defaults yet. They do not change current or newly created Sessions, grant writes, or isolate reads.
+- **Additional roots remain pending metadata** — the API Session Controller snapshots non-empty defaults for newly created Sessions before publishing their Agent. Existing Sessions and fork prefixes keep their own snapshots. Permission admission and directory-management UI remain deferred: these requests neither grant writes nor isolate reads.
 - **Removal never deletes data** — removing a project leaves its folder, files, and session histories in place; those sessions become ungrouped, and session deletion or folder removal are separate, absent capabilities.
 - **Missing paths retain recorded ownership, not verified symlink history** — a removed symlink and an incorrect but missing absolute cwd cannot be distinguished from existing records; both preserve an already-accounted id. No unaccounted session is assigned by this exception, and an account already removed from storage is not reconstructed.
 - **External changes are seen late** — if another process deletes or damages a directory, the project reflects it only at the next refresh or restart.

@@ -1383,6 +1383,11 @@
     },
     {
       "doc": "docs/subsystems/sandbox.md",
+      "symbol": "SessionRootRequest",
+      "source": "packages/sandbox/sandbox-policy/src/session-roots.ts"
+    },
+    {
+      "doc": "docs/subsystems/sandbox.md",
       "symbol": "SandboxPolicyRequest",
       "source": "packages/sandbox/sandbox-policy/src/index.ts"
     },

@@ -1,0 +1,28 @@
+# Bilingual-pair consistency record for 2026-11-01-pending-session-roots.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write docs/persistence-changes/2026-11-01-pending-session-roots.md
+/:
+  en: 3d5a424ae7d7e46b
+  zh: c22a8e4a62d8cc1a
+/2026-11-01-pending-session-roots:
+  en: f2826473cf81d958
+  zh: 37dd9a17084ad1d9
+/2026-11-01-pending-session-roots/summary:
+  en: 5087ae831e0a9b9f
+  zh: f1ba820b8c527cfc
+/2026-11-01-pending-session-roots/table-of-contents:
+  en: 6cf314a069ceb451
+  zh: 9adff678e9ecab3b
+/2026-11-01-pending-session-roots/declaration:
+  en: 6907136f28e48c90
+  zh: 02f8298485f3d8e7
+/2026-11-01-pending-session-roots/compatibility:
+  en: 24750ca2d251b9bc
+  zh: 933a9486f60fdd77
+/2026-11-01-pending-session-roots/verification:
+  en: 9d10a4dae63c1dc6
+  zh: cd4b78a2fb253434
+/2026-11-01-pending-session-roots/dev-note:
+  en: b75c8458928b72b9
+  zh: 003ba4e17b4b5269
