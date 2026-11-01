@@ -39,6 +39,7 @@ export async function stageSessionReference(
   signal: AbortSignal,
 ): Promise<'inserted' | 'duplicate' | 'unavailable' | 'changed'> {
   const before = input.state.getSnapshot()
+  const insertion = input.captureInsertion()
   signal.throwIfAborted()
   const candidates = await lookup(sourceId, signal)
   signal.throwIfAborted()
@@ -53,5 +54,5 @@ export async function stageSessionReference(
   return input.insertReference({
     source: 'reference', ref: candidate.mention, label: candidate.displayTitle ?? candidate.label,
     appearance: 'session', clipboardText: candidate.mention,
-  }, { start: before.draft.length, end: before.draft.length, draftRev: before.draftRev }) ? 'inserted' : 'changed'
+  }, { ...insertion, start: insertion.end }) ? 'inserted' : 'changed'
 }

@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { $getRoot } from 'lexical'
 import { Context } from '@deepseek-ai/cordis'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { afterEach, expect, it, vi } from 'vitest'
@@ -90,4 +91,32 @@ it('routes only its own composer drops and aborts pending work on unmount', () =
   expect(signal?.aborted).toBe(false)
   view.unmount()
   expect(signal?.aborted).toBe(true)
+})
+
+
+it('stages a second distinct session after an existing chip using editor coordinates', async () => {
+  const { input, sink } = shell()
+  try {
+    expect(await stageSessionReference(input, source, async () => candidates, new AbortController().signal)).toBe('inserted')
+    const second = SessionId('synthetic-second')
+    const next = [{ ...candidates[0]!, sessionId: second, mention: formatSessionReferenceMention({ sessionId: second, label: 'Second' }) }]
+    expect(await stageSessionReference(input, second, async () => next, new AbortController().signal)).toBe('inserted')
+    expect(input.state.getSnapshot().occurrences).toHaveLength(2)
+    expect(sink).not.toHaveBeenCalled()
+  } finally { input.dispose() }
+})
+
+
+it.each([[3, 3], [3, 5]])('inserts after a middle selection %i..%i without deleting Chinese or emoji text', async (start, end) => {
+  const { input, sink } = shell()
+  try {
+    input.setDraft('前😀中后文')
+    input.editor.update(() => { $getRoot().getAllTextNodes()[0]!.select(start, end) }, { discrete: true })
+    const insertion = input.actions.captureInsertion()
+    expect(await stageSessionReference(input, source, async () => candidates, new AbortController().signal)).toBe('inserted')
+    const current = input.state.getSnapshot()
+    expect(current.occurrences[0]?.offset).toBe(insertion.end)
+    expect(current.draft.replace(mention + ' ', '')).toBe('前😀中后文')
+    expect(sink).not.toHaveBeenCalled()
+  } finally { input.dispose() }
 })

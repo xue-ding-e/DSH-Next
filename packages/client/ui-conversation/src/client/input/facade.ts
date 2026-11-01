@@ -138,7 +138,7 @@ export class SessionInputShell implements SessionInput {
   /** The public provide-channel action face (one stable identity per session). */
   readonly actions: InputActions = {
     insertQuote: text => this.insertQuote(text),
-    captureInsertion: () => ({ ...this.caretSpan(), draftRev: this.rev }),
+    captureInsertion: () => this.captureInsertion(),
     insertText: (text, span) => {
       if (this.recall !== undefined || this.snapshot.phase === 'adjudicating' || this.snapshot.phase === 'submitting' || this.disposed) return false
       if (span.draftRev !== this.rev) return false
@@ -618,6 +618,11 @@ export class SessionInputShell implements SessionInput {
     if (!applied) return false
     this.dispatchRun(({ type: 'claim', claim }))
     return true
+  }
+
+  /** Capture editor-owned coordinates; clipboard text expands chips and is not a valid span. */
+  captureInsertion(): TokenSpan {
+    return { ...this.caretSpan(), draftRev: this.rev }
   }
 
   /**

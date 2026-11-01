@@ -182,6 +182,9 @@ export interface InputTarget {
 
 /** Per-session input facade owned by the conversation wiring layer. */
 export interface SessionInput extends InputTarget {
+  /** Capture the current detect-coordinate selection and revision for asynchronous reference insertion. */
+  captureInsertion(): TokenSpan
+
   /** Insert selected transcript text as an atomic quote. @param text - nonblank selection. @returns whether editing accepted it. */
   insertQuote(text: string): boolean
 
