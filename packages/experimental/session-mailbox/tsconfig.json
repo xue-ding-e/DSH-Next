@@ -6,6 +6,13 @@
     { "path": "../../util/brand" },
     { "path": "../../core/session" },
     { "path": "../../storage/storage-domain" },
-    { "path": "../../typert/protocol" }
+    { "path": "../../typert/protocol" },
+    { "path": "../../../vendor/cordis" },
+    { "path": "../../util/atomic-write" },
+    { "path": "../../storage/storage" },
+    { "path": "../../storage/storage-json" },
+    { "path": "../../api/remote-access/tsconfig.host.json" },
+    { "path": "../../workspace/workspace" },
+    { "path": "../../session/session-persistence" }
   ]
 }
