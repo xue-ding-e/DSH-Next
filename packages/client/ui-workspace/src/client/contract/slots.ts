@@ -233,7 +233,25 @@ export type DirectoryPickingHooks = PropsHooks<DirectoryPickingInjected['hooks']
  * Data reads use the global framework hooks; these are the Host actions the
  * browsing region drives.
  */
+/** Session-reference drag owner; the browser never interprets transfer content. */
+export interface SessionReferenceDrag {
+  /** Optional bridge probe; absent on a directly mounted owner. */
+  available?(): boolean
+  start(sessionId: SessionId, transfer: DataTransfer): void
+  /** True when a composer consumed the drag, so row reordering must be cancelled. */
+  end(): boolean | void
+}
+
+declare module '@deepseek-ai/cordis' {
+  interface Context {
+    sessionReferenceDrag: SessionReferenceDrag
+  }
+}
+
 export type WorkspaceBrowserInjected = {
+  /** Optional reference feature alongside existing row reordering. */
+  referenceDrag?: SessionReferenceDrag | undefined
+
   hooks: DirectoryPickingInjected['hooks'] & {
     /**
      * Fixed Host facts, reached through a hook rather than injected as values:

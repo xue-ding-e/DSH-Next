@@ -272,6 +272,11 @@ export function apply(ctx: Context): void {
     dismissToast: () => { rowToast.set(null) },
   })
   const browserInjected = (): WorkspaceBrowserInjected => ({
+    referenceDrag: {
+      available: () => ctx.get('sessionReferenceDrag') !== undefined,
+      start: (id, transfer) => { ctx.get('sessionReferenceDrag')?.start(id, transfer) },
+      end: () => ctx.get('sessionReferenceDrag')?.end(),
+    },
     // Explicit group actions keep their target; unscoped New Session inherits
     // the current Session Workspace before the recent-Workspace fallback.
     startSession: (workspaceId, options) => { uiWorkspace.startSession(workspaceId, options) },

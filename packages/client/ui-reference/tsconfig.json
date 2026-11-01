@@ -52,6 +52,12 @@
     },
     {
       "path": "../ui-sidebar-right"
+    },
+    {
+      "path": "../ui-workspace"
+    },
+    {
+      "path": "../../util/crypto"
     }
   ]
 }

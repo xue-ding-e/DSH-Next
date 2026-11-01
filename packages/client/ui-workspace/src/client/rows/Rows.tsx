@@ -38,7 +38,7 @@ type RowMenuAnchor =
 function useRowMenu() {
   const [anchor, setAnchor] = useState<RowMenuAnchor | null>(null)
   const setMenuOpen = useCallback<Dispatch<SetStateAction<boolean>>>((next) => {
-    setAnchor(current => {
+    setAnchor((current) => {
       const open = typeof next === 'function' ? next(current !== null) : next
       return open ? current ?? { kind: 'trigger' } : null
     })
@@ -221,6 +221,8 @@ export interface RowDragProps {
   marker: 'before' | 'after' | null
   /** Report the hovered half while a compatible drag passes over this row. */
   hover: (half: 'before' | 'after') => void
+  /** Clear a row drag without committing its last marker. */
+  cancel?: () => void
   drop: (half: 'before' | 'after') => void
   end: () => void
 }
@@ -597,7 +599,7 @@ export function SearchResultItem({
   onOpen: (id: SearchResultNode['id']) => void
   onUnarchive: (id: SearchResultNode['id']) => void
   t: RowTranslate
-} & Pick<WorkspaceBrowserProps, 'useSessionAccess'>) {
+} & Pick<WorkspaceBrowserProps, 'useSessionAccess' | 'referenceDrag'>) {
   const selected = result.id === currentId
   const canUnarchive = useSessionAccess(result.id, 'workspace/unarchiveSession')
   const statuses = sessionStatuses(result, t)
@@ -675,7 +677,7 @@ export function SearchResultItem({
  * @returns the session row.
  */
 export function SessionNodeItem({
-  node, currentId, now, onOpen, onRenameRequest, renderSlot, onReveal, drag, home, useSessionAccess, t,
+  node, currentId, now, onOpen, onRenameRequest, renderSlot, onReveal, drag, home, useSessionAccess, referenceDrag, t,
 }: {
   node: SessionNode
   currentId: string | undefined
@@ -690,7 +692,7 @@ export function SessionNodeItem({
   /** Host account home; POSIX home-rooted hover paths display as `~`. */
   home?: string | undefined
   t: RowTranslate
-} & Pick<WorkspaceBrowserProps, 'useSessionAccess'> & PropsRenderSlots<
+} & Pick<WorkspaceBrowserProps, 'useSessionAccess' | 'referenceDrag'> & PropsRenderSlots<
   | 'sidebar.workspaces.session.menu.item'
   | 'sidebar.workspaces.session.row.action'
   | 'sidebar.session.row.trailing'
@@ -710,7 +712,9 @@ export function SessionNodeItem({
   // cannot start a drag still accepts drops from rows that can.
   const renamable = useSessionAccess(node.id, 'session/rename')
   const reorderable = useSessionAccess(node.id, 'workspace/insertSessionBefore')
-  const draggable = drag !== undefined && reorderable && !row.blank && !row.archived
+  const readable = useSessionAccess(node.id, 'session/page')
+  const referenceable = referenceDrag !== undefined && referenceDrag.available?.() !== false && readable
+  const draggable = ((drag !== undefined && reorderable) || referenceable) && !row.blank && !row.archived
   const { menuOpen, setMenuOpen, anchorProps, closeOnPointerLeave, openAtPointer, openAtRow } = useRowMenu()
   const dragPreview = useRowDragPreview(css.dragPreview as string)
   // The menu's open state, bound into the row entries' `useMenuOpenState` hook.
@@ -771,12 +775,18 @@ export function SessionNodeItem({
       onDragStart={!draggable
         ? undefined
         : (e) => {
-          e.dataTransfer.effectAllowed = 'move'
+          e.dataTransfer.effectAllowed = referenceable ? (reorderable ? 'copyMove' : 'copy') : 'move'
           e.dataTransfer.setData('text/plain', node.id)
-          drag.start()
+          if (referenceable) referenceDrag.start(node.id, e.dataTransfer)
+          if (reorderable) drag?.start()
           dragPreview.start(e)
         }}
-      onDragEnd={() => { if (dragPreview.clear()) drag?.end() }}
+      onDragEnd={() => {
+        const consumed = referenceDrag?.end() === true
+        if (!dragPreview.clear() || !reorderable) return
+        if (consumed) drag?.cancel?.()
+        else drag?.end()
+      }}
       onDragOver={drag === undefined
         ? undefined
         : (e) => {

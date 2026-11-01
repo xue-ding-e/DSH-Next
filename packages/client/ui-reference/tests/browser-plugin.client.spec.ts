@@ -18,6 +18,9 @@ import type {
 } from '@deepseek-ai/dsh-client-ui-input-trigger/client'
 import type { FileReferenceCandidate } from '@deepseek-ai/dsh-file-reference/types'
 import type { SessionReferenceMentionCandidate } from '@deepseek-ai/dsh-session-reference/types'
+import { SessionInputShell } from '../../ui-conversation/src/client/input/facade.ts'
+import type { SessionReferenceDropInjected } from '../src/client/SessionReferenceDrop.tsx'
+import { SESSION_REFERENCE_DRAG } from '../src/client/session-drag.ts'
 import { apply, inject } from '../src/client/index.ts'
 import { apply as nodeApply } from '../src/index.ts'
 
@@ -60,7 +63,7 @@ function request(
   }
 }
 
-function TextSlotDeclaration(_props: PropsRenderSlots<'conversation.user.text.node'>): null {
+function TextSlotDeclaration(_props: PropsRenderSlots<'conversation.user.text.node' | 'conversation.input.overlay'>): null {
   return null
 }
 
@@ -69,7 +72,7 @@ async function installTextSlots(ctx: Context, sessions: TestSessions): Promise<v
   await ctx.plugin(SlotRegistry).await()
   ctx.slots.register({
     name: 'root',
-    children: { 'conversation.user.text.node': { kind: 'keyed', scope: 'session' } },
+    children: { 'conversation.user.text.node': { kind: 'keyed', scope: 'session' }, 'conversation.input.overlay': { kind: 'list', scope: 'session' } },
   }, TextSlotDeclaration)
 }
 
@@ -140,6 +143,29 @@ async function bench(
 }
 
 describe('apply', () => {
+  it('connects a workspace token through the registered target overlay to a real draft without sending', async () => {
+    const lookup = vi.fn<RemoteLookup<SessionReferenceMentionCandidate>>(async () => ({ ok: true, value: [{
+      sessionId: sid('source'), label: 'Synthetic source', mention: '@[Synthetic source](dsh-session:cwBvAHUAcgBjAGUA)',
+      sameWorkspace: false, createdAt: CREATED_AT,
+    }] }))
+    const h = await bench(undefined, lookup)
+    const scope = h.sessions.scope(session.sessionId)!
+    const sink = vi.fn()
+    const input = new SessionInputShell({ actx: scope, defaultSink: sink, commandAttachments: { serialize: async () => [], release: () => {}, unsupportedNotice: () => '' } })
+    onTestFinished(() => { input.dispose() })
+    scope.provide('conversation', { input: { for: () => input } })
+    const entry = h.ctx.slots.entries('conversation.input.overlay')[0]!
+    const injectDrop = entry.inject as NonNullable<typeof entry.inject> & ((id: SessionId) => SessionReferenceDropInjected)
+    const data = new Map<string, string>()
+    const transfer = { setData: (type: string, value: string) => { data.set(type, value) }, getData: (type: string) => data.get(type) ?? '' } as unknown as DataTransfer
+    h.ctx.sessionReferenceDrag.start(sid('source'), transfer)
+    expect(data.get(SESSION_REFERENCE_DRAG)).toBeTruthy()
+    await injectDrop(session.sessionId).drop(transfer, new AbortController().signal)
+    expect(lookup).toHaveBeenCalledWith(session.sessionId, sid('source'), expect.any(AbortSignal))
+    expect(input.state.getSnapshot().occurrences).toMatchObject([{ source: 'reference', appearance: 'session' }])
+    expect(sink).not.toHaveBeenCalled()
+  })
+
   it('declares its services and releases the @ reference registration on disposal', async () => {
     expect(inject).toEqual([
       'inputTriggers', 'locale', 'sessions', 'remote', 'remote.fileReferences',

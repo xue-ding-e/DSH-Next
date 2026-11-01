@@ -33,6 +33,8 @@ A file closes completion as an atomic inline reference displayed with a file gly
 
 A session pick inserts an atomic inline reference whose hidden `ref` and clipboard representation is the canonical `@[label](dsh-session:…)` mention returned by the Host; its visible form is a chat-bubble glyph plus the session title. Sending carries the mention through `session.prompt`, and the session-reference service validates it and captures model context at `agent/pre-step`.
 
+Drag a non-archived session row into a composer to stage the same atomic reference. The drag carries a one-use token scoped to this client, not authority or a transcript; the Host resolves the source identity and checks access before insertion. Dropping never sends a message or starts an agent. Repeated drops of the same source are ignored, and a changed draft or cancelled lookup is not overwritten. Keyboard users can use the existing `@` picker. Source content is captured only when the message is sent, not at drag time. This entry supports session rows; file dragging is a separate feature.
+
 ### Failure behavior
 
 One unavailable or failed candidate domain yields no rows for that domain while the other still lists. A session-reference preparation failure occurs after prompt acceptance and terminates that agent turn.

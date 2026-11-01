@@ -162,7 +162,7 @@ function fireDrag(row: HTMLElement, kind: 'dragOver' | 'drop', clientY: number):
 }
 
 describe('native row drag previews', () => {
-  function fixture(kind: 'workspace' | 'session') {
+  function fixture(kind: 'workspace' | 'session', referenceDrag?: SessionNodeItemProps['referenceDrag'], useSessionAccess: SessionNodeItemProps['useSessionAccess'] = allowAllAccess.useSessionAccess) {
     const drag = dragProps()
     const view = render(kind === 'workspace'
       ? <ProjectRowItem group={{
@@ -172,7 +172,7 @@ describe('native row drag previews', () => {
       : <SessionNodeItem node={{
         id: sid('session'), title: 'Draggable row', blank: false, running: false,
         runningSubagentCount: 0, completed: false, updatedAt: 0, pinned: false, archived: false,
-      }} currentId={undefined} now={0} onOpen={vi.fn()} drag={drag} t={t} />)
+      }} currentId={undefined} now={0} onOpen={vi.fn()} drag={drag} referenceDrag={referenceDrag} useSessionAccess={useSessionAccess} t={t} />)
     const row = screen.getByRole('treeitem')
     stubRect(row)
     row.style.paddingInlineStart = '32px'
@@ -188,6 +188,50 @@ describe('native row drag previews', () => {
     }
     return { ...view, row, drag, transfer, start }
   }
+
+  it('starts and clears the reference owner without losing session reorder behavior', () => {
+    const referenceDrag = { start: vi.fn(), end: vi.fn() }
+    const { row, drag, transfer, start } = fixture('session', referenceDrag)
+    start()
+    expect(referenceDrag.start).toHaveBeenCalledWith(sid('session'), transfer)
+    expect(transfer.effectAllowed).toBe('copyMove')
+    expect(drag.start).toHaveBeenCalledTimes(1)
+    fireEvent.dragEnd(row)
+    expect(referenceDrag.end).toHaveBeenCalledTimes(1)
+    expect(drag.end).toHaveBeenCalledTimes(1)
+  })
+
+  it('allows an authorized reference drag without granting session reorder permission', () => {
+    const referenceDrag = { start: vi.fn(), end: vi.fn() }
+    const { row, drag, transfer, start } = fixture('session', referenceDrag, (_id, action) => action === 'session/page')
+    expect(row.draggable).toBe(true)
+    start()
+    expect(referenceDrag.start).toHaveBeenCalledTimes(1)
+    expect(transfer.effectAllowed).toBe('copy')
+    expect(drag.start).not.toHaveBeenCalled()
+    fireEvent.dragEnd(row)
+    expect(referenceDrag.end).toHaveBeenCalledTimes(1)
+    expect(drag.end).not.toHaveBeenCalled()
+  })
+
+  it('does not offer reference dragging when the optional owner is absent', () => {
+    const referenceDrag = { available: () => false, start: vi.fn(), end: vi.fn() }
+    const { row } = fixture('session', referenceDrag, (_id, action) => action === 'session/page')
+    expect(row.draggable).toBe(false)
+    fireEvent.dragStart(row)
+    expect(referenceDrag.start).not.toHaveBeenCalled()
+  })
+
+  it('does not commit an old reorder marker after the composer consumes the drag', () => {
+    const referenceDrag = { start: vi.fn(), end: vi.fn(() => true) }
+    const { row, drag, start } = fixture('session', referenceDrag)
+    const cancel = vi.fn()
+    Object.assign(drag, { cancel })
+    start()
+    fireEvent.dragEnd(row)
+    expect(cancel).toHaveBeenCalledTimes(1)
+    expect(drag.end).not.toHaveBeenCalled()
+  })
 
   it.each(['workspace', 'session'] as const)('uses an inert offscreen %s copy without changing the source row', (kind) => {
     const { row, drag, transfer, start } = fixture(kind)

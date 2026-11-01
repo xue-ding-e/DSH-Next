@@ -253,7 +253,7 @@ type SessionTreeProps = Pick<
   WorkspaceBrowserProps,
   'useSessionStatus' | 'startSession' | 'open'
   | 'insertWorkspaceBefore' | 'openWorkspaceFolder' | 't' | 'usePanelInfo'
-  | 'useRemoteAccess' | 'useSessionAccess' | 'useWorkspaceAccess'
+  | 'useRemoteAccess' | 'useSessionAccess' | 'referenceDrag' | 'useWorkspaceAccess'
 > & PropsRenderSlots<
   | 'sidebar.workspaces.session.menu.item'
   | 'sidebar.workspaces.session.row.action'
@@ -318,7 +318,7 @@ function EmptySessions({ rowState, onLeaveArchivedOnly, t }: Pick<SessionTreePro
 function SessionTree({
   list, useSessionStatus, startSession, open, workspaces, ungroupedSessionIds,
   rowState, onLeaveArchivedOnly,
-  workspaceReady, animationResetKey, usePanelInfo, useRemoteAccess, useSessionAccess, useWorkspaceAccess,
+  workspaceReady, animationResetKey, usePanelInfo, useRemoteAccess, useSessionAccess, referenceDrag, useWorkspaceAccess,
   onRenameRequest, onDeleteRequest, onSessionRenameRequest,
   renderSlot,
   insertWorkspaceBefore, openWorkspaceFolder,
@@ -620,6 +620,7 @@ function SessionTree({
               if (drag === null) return
               commitSessionDrag(drag, { id: node.id, half: normalizeHalf(half) })
             },
+            cancel: () => { setDrag(null); sessionDropCommitted.current = false },
             end: () => {
               if (drag?.over !== null && drag?.over !== undefined) commitSessionDrag(drag, drag.over)
               else setDrag(null)
@@ -641,6 +642,7 @@ function SessionTree({
               drag={dragProps}
               home={home}
               useSessionAccess={useSessionAccess}
+              referenceDrag={referenceDrag}
               t={t}
             />
           )
@@ -696,13 +698,13 @@ function SessionTree({
 
 /** The flat "In one list" body: every session is one draggable top-level row. */
 function FlatList({
-  list, sessionIds, rowState, onLeaveArchivedOnly, useSessionStatus, useSessionAccess, open, onSessionRenameRequest,
+  list, sessionIds, rowState, onLeaveArchivedOnly, useSessionStatus, useSessionAccess, referenceDrag, open, onSessionRenameRequest,
   usePanelInfo, setSessionOrder, workspaceReady, animationResetKey,
   revealSessionId, onSessionRevealed, renderSlot, home, t,
 }: Pick<
   SessionTreeProps,
   | 'useSessionStatus'
-  | 'useSessionAccess'
+  | 'useSessionAccess' | 'referenceDrag'
   | 'open'
   | 'onSessionRenameRequest'
   | 'renderSlot'
@@ -770,6 +772,7 @@ function FlatList({
                 ? () => { onSessionRevealed(node.id) }
                 : undefined}
               useSessionAccess={useSessionAccess}
+              referenceDrag={referenceDrag}
               drag={{
                 start: () => {
                   dropCommitted.current = false
@@ -785,6 +788,7 @@ function FlatList({
                 drop: (half) => {
                   if (drag !== null) commitDrag(drag, { id: node.id, half: normalizeHalf(half) })
                 },
+                cancel: () => { setDrag(null); dropCommitted.current = false },
                 end: () => {
                   if (drag?.over !== null && drag?.over !== undefined) commitDrag(drag, drag.over)
                   else setDrag(null)
@@ -822,9 +826,9 @@ function SearchResults({
   remote,
   resultLimit,
   usePanelInfo,
-  useSessionAccess,
+  useSessionAccess, referenceDrag,
   t,
-}: Pick<WorkspaceBrowserProps, 'useSessions' | 'useSessionStatus' | 'open' | 't' | 'usePanelInfo' | 'useSessionAccess'> & {
+}: Pick<WorkspaceBrowserProps, 'useSessions' | 'useSessionStatus' | 'open' | 't' | 'usePanelInfo' | 'useSessionAccess' | 'referenceDrag'> & {
   workspaces: readonly WorkspaceView[]
   archivedSessionIds: readonly SessionNode['id'][]
   /** Search matches follow the archived filter selected for the list. */
@@ -871,6 +875,7 @@ function SearchResults({
               onOpen={open}
               onUnarchive={onUnarchive}
               useSessionAccess={useSessionAccess}
+              referenceDrag={referenceDrag}
               t={t}
             />
           ))}
@@ -916,7 +921,7 @@ export function WorkspaceBrowser({
   useSessions,
   useSessionStatus,
   useRemoteAccess,
-  useSessionAccess,
+  useSessionAccess, referenceDrag,
   useWorkspaceAccess,
   useWorkspaces,
   useStore,
@@ -1424,6 +1429,7 @@ export function WorkspaceBrowser({
             <SearchResults
               usePanelInfo={usePanelInfo}
               useSessionAccess={useSessionAccess}
+              referenceDrag={referenceDrag}
               useSessions={useSessions}
               useSessionStatus={useSessionStatus}
               open={openSearchResult}
@@ -1441,6 +1447,7 @@ export function WorkspaceBrowser({
             ? (
               <FlatList
                 useSessionAccess={useSessionAccess}
+                referenceDrag={referenceDrag}
                 usePanelInfo={usePanelInfo}
                 list={list}
                 sessionIds={orderedFlatSessionIds}
@@ -1463,6 +1470,7 @@ export function WorkspaceBrowser({
               <SessionTree
                 useRemoteAccess={useRemoteAccess}
                 useSessionAccess={useSessionAccess}
+                referenceDrag={referenceDrag}
                 useWorkspaceAccess={useWorkspaceAccess}
                 usePanelInfo={usePanelInfo}
                 list={list}

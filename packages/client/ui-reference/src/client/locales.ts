@@ -13,6 +13,7 @@ export const NS = 'reference'
  * bucketing they name is the one shared {@link relativeTime} in ui-primitives.
  */
 export const zh = {
+  'drag.unavailable': '无法添加引用：会话不可用或草稿已改变。请使用 @ 重新选择。',
   'section.files': '文件与文件夹',
   'section.subagents': '子智能体',
   'section.sessions': '对话',
@@ -42,6 +43,7 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
 
 /** English dictionary, checked complete against the zh key set. */
 export const en = {
+  'drag.unavailable': 'Could not add the reference: the session is unavailable or the draft changed. Select it again with @.',
   'section.files': 'Files & folders',
   'section.subagents': 'Subagents',
   'section.sessions': 'Sessions',
@@ -61,6 +63,7 @@ export const en = {
 
 /** Japanese copy, checked against the English keys. */
 export const ja = {
+  'drag.unavailable': '参照を追加できません。会話が利用できないか、下書きが変更されました。@ で選び直してください。',
   'section.files': 'ファイルとフォルダ',
   'section.subagents': 'サブエージェント',
   'section.sessions': 'セッション',
@@ -80,6 +83,7 @@ export const ja = {
 
 /** Spanish dictionary, checked against the English keys. */
 export const es = {
+  'drag.unavailable': 'No se pudo añadir la referencia: la sesión no está disponible o cambió el borrador. Selecciónala de nuevo con @.',
   'section.files': 'Archivos y carpetas',
   'section.subagents': 'Subagentes',
   'section.sessions': 'Sesiones',
@@ -99,6 +103,7 @@ export const es = {
 
 /** French dictionary, checked against the English keys. */
 export const fr = {
+  'drag.unavailable': 'Référence indisponible ou brouillon modifié. Sélectionnez-la à nouveau avec @.',
   'section.files': 'Fichiers et dossiers',
   'section.subagents': 'Sous-agents',
   'section.sessions': 'Séances',
@@ -118,6 +123,7 @@ export const fr = {
 
 /** German dictionary, checked against the English keys. */
 export const de = {
+  'drag.unavailable': 'Verweis nicht verfügbar oder Entwurf geändert. Bitte erneut mit @ auswählen.',
   'section.files': 'Dateien und Ordner',
   'section.subagents': 'Subagenten',
   'section.sessions': 'Sitzungen',
@@ -137,6 +143,7 @@ export const de = {
 
 /** Russian dictionary, checked against the English keys. */
 export const ru = {
+  'drag.unavailable': 'Ссылка недоступна или черновик изменён. Выберите снова через @.',
   'section.files': 'Файлы и папки',
   'section.subagents': 'Субагенты',
   'section.sessions': 'Сессии',
@@ -156,6 +163,7 @@ export const ru = {
 
 /** Portuguese dictionary, checked against the English keys. */
 export const pt = {
+  'drag.unavailable': 'Referência indisponível ou rascunho alterado. Selecione novamente com @.',
   'section.files': 'Arquivos e pastas',
   'section.subagents': 'Subagentes',
   'section.sessions': 'Sessões',
