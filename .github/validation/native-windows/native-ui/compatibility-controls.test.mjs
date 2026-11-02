@@ -41,3 +41,31 @@ for(const point of ['root','profiles','desktop'])test('retention refuses '+point
   else{mkdirSync(join(inside,'profiles'));symlinkSync(outside,join(inside,'profiles/desktop'),'junction');assert.throws(()=>capture(inside))}
  }finally{rmSync(base,{recursive:true,force:true})}
 })
+
+import {runInNewContext} from 'node:vm'
+import {openSessionMenu} from './probe-compatibility.mjs'
+function hoverFixture(){
+ let hovered=false;const events=[],queries=[]
+ const row={scrollIntoView(){},getBoundingClientRect(){return {x:10,y:20,width:200,height:30}}}
+ const button={scrollIntoView(){},getBoundingClientRect(){return hovered?{x:180,y:25,width:16,height:16}:{x:0,y:0,width:0,height:0}}}
+ const document={querySelector(s){queries.push(s);assert(s.includes('session:native-menu-a-20261102'));return s.includes('button')?button:row}}
+ const c={async send(method,p){assert.equal(method,'Input.dispatchMouseEvent');events.push(p);if(p.type==='mouseMoved'&&p.x===110&&p.y===35)hovered=true}}
+ const wait=async(expr,p)=>{const v=runInNewContext(expr,{document});assert(p(v),'hidden action measured before row hover');return v}
+ return {c,wait,events,queries}
+}
+test('real pointer hover precedes hidden ellipsis measurement and exact A click',async()=>{
+ const f=hoverFixture();await openSessionMenu(f.c,f.wait,'native-menu-a-20261102')
+ assert.deepEqual(f.events.map(e=>e.type),['mouseMoved','mouseMoved','mousePressed','mouseReleased'])
+ assert.equal(f.events[2].x,188);assert.equal(f.events[2].y,33);assert.equal(f.events[2].button,'left')
+ assert.equal(f.queries.length,2)
+})
+test('negative control reproduces absent-hover hidden action failure',async()=>{
+ const f=hoverFixture();const c={send:(m,p)=>p.type==='mouseMoved'?Promise.resolve():f.c.send(m,p)}
+ await assert.rejects(openSessionMenu(c,f.wait,'native-menu-a-20261102'),/hidden action measured before row hover/)
+ assert.equal(f.events.length,0)
+})
+test('foreign session ID rejected before DOM lookup or pointer operation',async()=>{
+ const f=hoverFixture();await assert.rejects(openSessionMenu(f.c,f.wait,'real-session'),/Only synthetic/)
+ assert.equal(f.queries.length,0);assert.equal(f.events.length,0)
+})
+test('compatibility uses reviewed hover helper, not a direct hidden-button click',()=>assert(probe.includes('const menu=id=>openSessionMenu(c,wait,id)')))

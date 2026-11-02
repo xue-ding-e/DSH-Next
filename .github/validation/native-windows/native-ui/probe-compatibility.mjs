@@ -4,6 +4,18 @@ import {fileURLToPath} from 'node:url'
 import {readdirSync,readFileSync,writeFileSync} from 'node:fs'
 import {join} from 'node:path'
 import {CASES} from './synthetic-sessions.mjs'
+// Hover the actual row before measuring its CSS-hidden trailing action.
+// No style mutation or private application API: only renderer reads and CDP input.
+export async function openSessionMenu(c,wait,id){
+ assert(CASES.some(s=>s.id===id),'Only synthetic session IDs are permitted')
+ const selector='[data-row-key="session:'+id+'"]',q=JSON.stringify
+ const point=expr=>`(()=>{const e=${expr};if(!e||e.disabled)return null;e.scrollIntoView({block:'nearest'});const r=e.getBoundingClientRect();return r.width&&r.height?{x:r.x+r.width/2,y:r.y+r.height/2}:null})()`
+ const rowPoint=await wait(point(`document.querySelector(${q(selector)})`),v=>!!v)
+ await c.send('Input.dispatchMouseEvent',{type:'mouseMoved',...rowPoint})
+ const buttonPoint=await wait(point(`document.querySelector(${q(selector+' button[aria-haspopup="menu"]')})`),v=>!!v)
+ await c.send('Input.dispatchMouseEvent',{type:'mouseMoved',...buttonPoint})
+ for(const type of ['mousePressed','mouseReleased'])await c.send('Input.dispatchMouseEvent',{type,button:'left',clickCount:1,...buttonPoint})
+}
 export async function verifyCompatibility(c,{stage,reportPath,ownerText,pwsh}){
  assert(['old','new'].includes(stage));const deadline=Date.now()+50000
  const q=JSON.stringify,row=id=>'[data-row-key="session:'+id+'"]'
@@ -12,7 +24,7 @@ export async function verifyCompatibility(c,{stage,reportPath,ownerText,pwsh}){
  async function hit(expr){const p=await wait(`(()=>{const e=${expr};if(!e||e.disabled)return null;e.scrollIntoView({block:'nearest'});const r=e.getBoundingClientRect();return r.width&&r.height?{x:r.x+r.width/2,y:r.y+r.height/2}:null})()`,v=>!!v);for(const type of ['mousePressed','mouseReleased'])await c.send('Input.dispatchMouseEvent',{type,button:'left',clickCount:1,...p})}
  const named=(names,scope='document')=>hit(`[...${scope}.querySelectorAll('button,[role="menuitem"]')].find(e=>${q(names)}.some(n=>e.textContent.trim()===n||e.getAttribute('aria-label')===n||(e.getAttribute('role')==='menuitem'&&e.textContent.trim().startsWith(n))))`)
  const key=async(key,code=key,modifiers=0)=>{for(const type of ['keyDown','keyUp'])await c.send('Input.dispatchKeyEvent',{type,key,code,modifiers})}
- const menu=async(id)=>hit(`document.querySelector(${q(row(id)+' button[aria-haspopup="menu"]')})`)
+ const menu=id=>openSessionMenu(c,wait,id)
  const A=CASES[0],B=CASES[1]
  if(stage==='old'){
   await named(['View options','视图选项']);await named(['In one list','单列表'])
