@@ -32,6 +32,9 @@ import type { ProjectionHandle } from '@deepseek-ai/dsh-session-projection'
 import type {} from '@deepseek-ai/dsh-system-prompt'
 
 export { SANDBOX_MODES, setSandboxMode } from './session-mode.ts'
+export type { SessionRootRequest } from './session-roots.ts'
+import { foldRequestedRoots, requestedRootsSchema, requestedRootsStateSchema } from './session-roots.ts'
+import type { RequestedRootsState, SessionRootRequest } from './session-roots.ts'
 
 /** Preserve execution-world spelling; enforcing providers resolve filesystem identity on their host. */
 function resolveWorkspaceRoot(path: string): string {
@@ -149,6 +152,7 @@ export class SandboxPolicyService extends Service {
   readonly workspaceRoot: string
   /** The frozen extra writable directories shared by every resolved policy, or `undefined` for none. */
   readonly additionalWritableRoots: readonly string[] | undefined
+  private requestedRootsProjectionHandle!: ProjectionHandle<RequestedRootsState>
   private sandboxModeProjectionHandle!: ProjectionHandle<SandboxMode | null>
 
   constructor(ctx: Context, config: Config) {
@@ -163,6 +167,13 @@ export class SandboxPolicyService extends Service {
 
   protected async [Service.init](): Promise<void> {
     const ctx = this.ctx
+    this.requestedRootsProjectionHandle = await ctx.sessionProjections.register({
+      key: 'sandboxRequestedRoots',
+      stateVersion: 1,
+      stateSchema: requestedRootsStateSchema,
+      init: () => ({ roots: null, started: false }),
+      apply: foldRequestedRoots,
+    })
     this.sandboxModeProjectionHandle = await ctx.sessionProjections.register({
       key: 'sandboxMode',
       stateVersion: 1,
@@ -202,6 +213,29 @@ export class SandboxPolicyService extends Service {
       ...this.additionalWritableRoots === undefined ? {} : { additionalWritableRoots: this.additionalWritableRoots },
       ...session === undefined ? {} : { sessionId: session.id },
     }
+  }
+
+  /**
+   * Capture creation-time directory defaults before the first turn. The event
+   * records requests only: it cannot grant writes, even after import or replay.
+   * @param session - Fresh Session in unpublished Agent setup.
+   * @param roots - Complete explicit directory selection to detach and persist.
+   * @throws if this Session already records roots or has started a turn.
+   */
+  initializeRequestedRoots(session: Session, roots: readonly SessionRootRequest[]): void {
+    const state = this.requestedRootsProjectionHandle.stateOf(session)
+    if (state.roots !== null) throw new Error('sandbox-policy: Session directory requests are already captured')
+    if (state.started) throw new Error('sandbox-policy: cannot capture directory defaults after a turn has started')
+    session.append('sandbox/roots-requested', { roots: requestedRootsSchema.parse(roots) })
+  }
+
+  /**
+   * Read pending directory requests without filesystem checks or authorization.
+   * @param session - Session whose committed request snapshot is requested.
+   * @returns the immutable snapshot, or null for a Session without a capture.
+   */
+  requestedRootsOf(session: Session): readonly SessionRootRequest[] | null {
+    return this.requestedRootsProjectionHandle.stateOf(session).roots
   }
 
   /**

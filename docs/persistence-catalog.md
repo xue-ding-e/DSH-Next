@@ -54,6 +54,7 @@ The [format references](persistence-changes/historical-formats/README.md) cover 
 | `event:request/context` | event | `37cbc9cf06d494cfe5c67f078af1605eacb8e4c2c853e9e26455b73de0ee7ccf` | [`{ type: "request/context" }`](#persistence-type-sha256-37cbc9cf06d494cfe5c67f078af1605eacb8e4c2c853e9e26455b73de0ee7ccf) |
 | `event:request/header` | event | `4208123b50df5006b181481ab45fcf1cde807b88d3fd4d340090bc2e202fac41` | [`{ type: "request/header" }`](#persistence-type-sha256-4208123b50df5006b181481ab45fcf1cde807b88d3fd4d340090bc2e202fac41) |
 | `event:sandbox/mode` | event | `516da4cdd6d2f1e5ce488e648578ca51f40e458f707b803e5b24de870e799415` | [`{ type: "sandbox/mode" }`](#persistence-type-sha256-516da4cdd6d2f1e5ce488e648578ca51f40e458f707b803e5b24de870e799415) |
+| `event:sandbox/roots-requested` | event | `fa8800e5c6dcf0bdb48dc544297cb31de6d1093472f31c8fccc1a5a95afa88ce` | [`{ type: "sandbox/roots-requested" }`](#persistence-type-sha256-fa8800e5c6dcf0bdb48dc544297cb31de6d1093472f31c8fccc1a5a95afa88ce) |
 | `event:schedule/change` | event | `a0a2e5c42e1c929445ecd1cd70f49be6b66441894ec72c08e8ae332821d4a3cb` | [`{ type: "schedule/change" }`](#persistence-type-sha256-a0a2e5c42e1c929445ecd1cd70f49be6b66441894ec72c08e8ae332821d4a3cb) |
 | `event:session-log-deepseek/delivery-accepted` | event | `d63b8b8ffad9c02fd80c43a17df4f240c1fe8118ecca9de34f9d5871838ab5b9` | [`{ type: "session-log-deepseek/delivery-accepted" }`](#persistence-type-sha256-d63b8b8ffad9c02fd80c43a17df4f240c1fe8118ecca9de34f9d5871838ab5b9) |
 | `event:session/end-seed` | event | `5e6db6e24948d4a853c71cb9fabd252ad051ce93d4672c1266cf837c1c17b84e` | [`{ type: "session/end-seed" }`](#persistence-type-sha256-5e6db6e24948d4a853c71cb9fabd252ad051ce93d4672c1266cf837c1c17b84e) |
@@ -798,6 +799,19 @@ Source: [`packages/core/session/src/types.ts:398`](../packages/core/session/src/
 ```
 
 Source: [`packages/sandbox/sandbox-policy/src/session-mode.ts:33`](../packages/sandbox/sandbox-policy/src/session-mode.ts)
+
+<a id="sandboxroots-requested--log-only"></a>
+
+#### `sandbox/roots-requested` — log-only
+
+```ts persistence-catalog
+/** Required-on-read complete directory request snapshot; never proof of user authorization. */
+'sandbox/roots-requested': {
+  roots: readonly SessionRootRequest[]
+}
+```
+
+Source: [`packages/sandbox/sandbox-policy/src/session-roots.ts:17`](../packages/sandbox/sandbox-policy/src/session-roots.ts)
 
 ### `schedule/*`
 
@@ -2357,6 +2371,14 @@ SHA-256: `383cf73ae4748e5beb281ae74857ba1ffb92ae01075b9fbf51af78b666007a8f`
 
 `"recall"`
 
+<a id="persistence-type-sha256-f5bbfc0db6452a783410ed0efed6a516f69a9e2deae69a764cc2f9cfcfe802ef"></a>
+
+### `"reference"`
+
+SHA-256: `f5bbfc0db6452a783410ed0efed6a516f69a9e2deae69a764cc2f9cfcfe802ef`
+
+`"reference"`
+
 <a id="persistence-type-sha256-fab35c4520883c0d69e42d079c9f543fc5ac7a2d15b537b5572fcd99059c7018"></a>
 
 ### `"rejected"`
@@ -2444,6 +2466,14 @@ SHA-256: `24b10f7cdae64928f89c49afc2eca0af9eb4a2f135e16f3416e6b8461fef1748`
 SHA-256: `ca085dba2c877feceebf3c62f9d39c6c2a4d2314d97b94b3927a780fe8fe2bb2`
 
 `"sandbox/mode"`
+
+<a id="persistence-type-sha256-091fa4e43ff7eec92c1f343224fd392241945b717154e417a32d84cd1ffd115d"></a>
+
+### `"sandbox/roots-requested"`
+
+SHA-256: `091fa4e43ff7eec92c1f343224fd392241945b717154e417a32d84cd1ffd115d`
+
+`"sandbox/roots-requested"`
 
 <a id="persistence-type-sha256-d9edf1862e4471d6ad8a106a3f4160e0643874368707d50ecd8e27e5ee7a2567"></a>
 
@@ -3044,6 +3074,14 @@ SHA-256: `a3edd1efd1fef21b72c55e213c8a8b24196b091abde2b89db52be0b2aaae3cfa`
 SHA-256: `8e8155594e07812356b67d732196dda894b0f9c91a5969d51612cf490b0a016d`
 
 `"workspace/changes"`
+
+<a id="persistence-type-sha256-18ecff74ae9ce1a1b76d9eff9339b5c273d3aefbc4db31dca30c43b9cd3c5b0f"></a>
+
+### `"write"`
+
+SHA-256: `18ecff74ae9ce1a1b76d9eff9339b5c273d3aefbc4db31dca30c43b9cd3c5b0f`
+
+`"write"`
 
 <a id="persistence-type-sha256-93d38436347f67c9022aacbc4472e283d722bcab8eb73fc376aaf7b6a6b9fb35"></a>
 
@@ -4691,6 +4729,31 @@ Sources: [`packages/context/session-reference/src/types.ts:13`](../packages/cont
 | `references` | required | [`{ capturedFormatVersion?, capturedThroughSeq, compacted, inputIndex, … }[]`](#persistence-type-sha256-df843efd87c78cf8de98f8e0d0216956cd568d0d0e56a22c853663e274aa1a18) |
 | `version` | required | `1` |
 
+<a id="persistence-type-sha256-4e4719175aa974338efb0547a7447b7f6700c5d821fbff46542645d7d1eb4ef1"></a>
+
+<a id="persistence-type-packagessandboxsandbox-policysrcsession-rootstssessionrootrequest"></a>
+
+<a id="persistence-type-sessionrootrequest"></a>
+
+### `SessionRootRequest`
+
+SHA-256: `4e4719175aa974338efb0547a7447b7f6700c5d821fbff46542645d7d1eb4ef1`
+
+Sources: [`packages/sandbox/sandbox-policy/src/session-roots.ts:7`](../packages/sandbox/sandbox-policy/src/session-roots.ts)
+
+| Property | Presence | Type |
+|---|---|---|
+| `access` | required | [`union (2 variants)`](#persistence-type-sha256-f04069e74e5936e31554c7962d8c3a94bf5b708e1d2d49f8488cc13f5afee56c) |
+| `path` | required | `string` |
+
+<a id="persistence-type-sha256-8c20ea42148c953d4ff29470e203ffb5535c0e0a198b78248179dcddc33b3092"></a>
+
+### `SessionRootRequest[]`
+
+SHA-256: `8c20ea42148c953d4ff29470e203ffb5535c0e0a198b78248179dcddc33b3092`
+
+Array of [`SessionRootRequest`](#persistence-type-sha256-4e4719175aa974338efb0547a7447b7f6700c5d821fbff46542645d7d1eb4ef1).
+
 <a id="persistence-type-sha256-b56f6a885da3dc394c69a3e3cc5c0cfc4da15601b63fda4989eee8f40efc5be4"></a>
 
 <a id="persistence-type-packagessessionsession-titlesrctypestssessiontitleeventdata"></a>
@@ -5688,6 +5751,17 @@ One of:
 
 - [`{ compactionId, llmStreamCall, maxTokens?, model, … }`](#persistence-type-sha256-a99ec0993c62c058e50af9f68922202a3b54f5e259bc2abf1915a73381d2316d)
 - [`{ compactionId, maxTokens?, model, provider, … }`](#persistence-type-sha256-576a2de8355eb09850963ff5953420b172e274d9283666eb7d889097db120796)
+
+<a id="persistence-type-sha256-f04069e74e5936e31554c7962d8c3a94bf5b708e1d2d49f8488cc13f5afee56c"></a>
+
+### `union (2 variants)`
+
+SHA-256: `f04069e74e5936e31554c7962d8c3a94bf5b708e1d2d49f8488cc13f5afee56c`
+
+One of:
+
+- `"reference"`
+- `"write"`
 
 <a id="persistence-type-sha256-5776e5553ff2dfe3f5bc202dbb1e7c9f93e35a531aebb7764c23b2b6153b2ccc"></a>
 
@@ -7944,6 +8018,18 @@ Sources: [`packages/web/web-search-deepseek/src/provider.ts:64`](../packages/web
 | `content` | required | [`tuple (1 positions)`](#persistence-type-sha256-8f6d609794bf5afc01d7ccf3e03811d32f4b8047f58a2c9a98db0154c2ad7cb9) |
 | `role` | required | `"user"` |
 
+<a id="persistence-type-sha256-a529b7dfd8672c05cb5099acde0d5ee12f4aba4e646d20ee4f09df60e43c1018"></a>
+
+### `{ roots }`
+
+SHA-256: `a529b7dfd8672c05cb5099acde0d5ee12f4aba4e646d20ee4f09df60e43c1018`
+
+Sources: [`packages/sandbox/sandbox-policy/src/session-roots.ts:17`](../packages/sandbox/sandbox-policy/src/session-roots.ts)
+
+| Property | Presence | Type |
+|---|---|---|
+| `roots` | required | [`SessionRootRequest[]`](#persistence-type-sha256-8c20ea42148c953d4ff29470e203ffb5535c0e0a198b78248179dcddc33b3092) |
+
 <a id="persistence-type-sha256-8bb8c3751a6ce64b61aba1ec7ae798c00a5803c4d868a0430873216c6569ed52"></a>
 
 ### `{ sessionFormatVersion?, sessionId, throughSeq }`
@@ -8661,6 +8747,22 @@ SHA-256: `516da4cdd6d2f1e5ce488e648578ca51f40e458f707b803e5b24de870e799415`
 | `seq` | required | `number` |
 | `time` | required | `number` |
 | `type` | required | `"sandbox/mode"` |
+
+<a id="persistence-type-sha256-fa8800e5c6dcf0bdb48dc544297cb31de6d1093472f31c8fccc1a5a95afa88ce"></a>
+
+<a id="persistence-type-eventsandboxroots-requested"></a>
+
+### `{ type: "sandbox/roots-requested" }`
+
+SHA-256: `fa8800e5c6dcf0bdb48dc544297cb31de6d1093472f31c8fccc1a5a95afa88ce`
+
+| Property | Presence | Type |
+|---|---|---|
+| `data` | required | [`{ roots }`](#persistence-type-sha256-a529b7dfd8672c05cb5099acde0d5ee12f4aba4e646d20ee4f09df60e43c1018) |
+| `ignorable` | optional | `true` |
+| `seq` | required | `number` |
+| `time` | required | `number` |
+| `type` | required | `"sandbox/roots-requested"` |
 
 <a id="persistence-type-sha256-a0a2e5c42e1c929445ecd1cd70f49be6b66441894ec72c08e8ae332821d4a3cb"></a>
 

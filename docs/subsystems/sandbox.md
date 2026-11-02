@@ -73,6 +73,18 @@ interface SandboxExecutionPolicy {
 
 `ctx.sandboxPolicy.resolve()` accepts the active session and, for an approved retry, an explicit mode. The service owns precedence and root fallback so bash and fs do not repeat it.
 
+Session directory selections are pending metadata, never execution grants. Replay and fork retain requests without authorization; the immutable cwd and resolved execution policy remain unchanged.
+
+```ts type-equiv
+/** One explicit selection; reference does not impose a read sandbox. */
+interface SessionRootRequest {
+  /** Absolute execution-world directory selected by the Host. */
+  readonly path: string
+  /** A write request is pending, not a permission grant. */
+  readonly access: 'reference' | 'write'
+}
+```
+
 ```ts type-equiv
 /** Inputs that select the sandbox policy for one capability call. */
 interface SandboxPolicyRequest {
@@ -213,6 +225,22 @@ The sandbox-policy service (`ctx.sandboxPolicy`). Owns the deployment default mo
  * @returns the fully resolved per-call mode and absolute workspace root.
  */
 resolve(request: SandboxPolicyRequest = {}): SandboxExecutionPolicy
+
+/**
+ * Capture creation-time directory defaults before the first turn. The event
+ * records requests only: it cannot grant writes, even after import or replay.
+ * @param session - Fresh Session in unpublished Agent setup.
+ * @param roots - Complete explicit directory selection to detach and persist.
+ * @throws if this Session already records roots or has started a turn.
+ */
+initializeRequestedRoots(session: Session, roots: readonly SessionRootRequest[]): void
+
+/**
+ * Read pending directory requests without filesystem checks or authorization.
+ * @param session - Session whose committed request snapshot is requested.
+ * @returns the immutable snapshot, or null for a Session without a capture.
+ */
+requestedRootsOf(session: Session): readonly SessionRootRequest[] | null
 
 /**
  * Read the session override without applying the deployment default.

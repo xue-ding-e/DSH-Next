@@ -112,6 +112,8 @@ The generated [configuration catalog](../../../docs/config-catalog.md#deepseek-a
 
 Blockquotes travel as ordinary prompt text without quote metadata. Local submission echoes and durable messages use the same text rendering rules; queue edits replace content while retaining prompt correlation.
 
+New Workspace Sessions capture non-empty additional-directory defaults during Agent setup, before publication and turn admission. Setup failure leaves no executable Agent registered. Blank-session reuse and resume do not refresh defaults; forks retain the selected event prefix rather than the latest Workspace defaults. The required snapshot event records pending requests only: neither imported history nor a write request grants execution access. Owner-confirmed activation and directory-selection UI remain deferred.
+
 <a id="model-experience"></a>
 ## Model Experience
 

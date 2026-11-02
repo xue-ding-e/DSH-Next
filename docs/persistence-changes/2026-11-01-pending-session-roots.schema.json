@@ -1,0 +1,20 @@
+{
+  "formatVersion": 2,
+  "roots": [
+    {"key":"event:sandbox/roots-requested","kind":"event","event":"sandbox/roots-requested","surface":false,"digest":"fa8800e5c6dcf0bdb48dc544297cb31de6d1093472f31c8fccc1a5a95afa88ce"}
+  ],
+  "types": [],
+  "nodes": {
+    "0657d3ca5ac4e7bf": {"kind":"primitive","type":"number"},
+    "091fa4e43ff7eec9": {"kind":"literal","value":"sandbox/roots-requested"},
+    "18ecff74ae9ce1a1": {"kind":"literal","value":"write"},
+    "4cd48f3e5108bd6e": {"kind":"primitive","type":"string"},
+    "4e4719175aa97433": {"kind":"object","properties":[{"name":"access","type":"f04069e74e5936e3","optional":false},{"name":"path","type":"4cd48f3e5108bd6e","optional":false}],"indices":[]},
+    "8c20ea42148c953d": {"kind":"array","element":"4e4719175aa97433"},
+    "a529b7dfd8672c05": {"kind":"object","properties":[{"name":"roots","type":"8c20ea42148c953d","optional":false}],"indices":[]},
+    "dacf3d5f3e4ff619": {"kind":"literal","value":true},
+    "f04069e74e5936e3": {"kind":"union","types":["18ecff74ae9ce1a1","f5bbfc0db6452a78"]},
+    "f5bbfc0db6452a78": {"kind":"literal","value":"reference"},
+    "fa8800e5c6dcf0bd": {"kind":"object","properties":[{"name":"data","type":"a529b7dfd8672c05","optional":false},{"name":"ignorable","type":"dacf3d5f3e4ff619","optional":true},{"name":"seq","type":"0657d3ca5ac4e7bf","optional":false},{"name":"time","type":"0657d3ca5ac4e7bf","optional":false},{"name":"type","type":"091fa4e43ff7eec9","optional":false}],"indices":[]}
+  }
+}

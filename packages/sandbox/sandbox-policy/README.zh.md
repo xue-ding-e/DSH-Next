@@ -104,6 +104,8 @@ kind: "package-reference"
 
 -----
 
+待确认目录选择独立于有效策略。`initializeRequestedRoots(session, roots)` 在任何回合开始前，以脱离调用方对象的必需事件 `sandbox/roots-requested` 记录一次选择；`requestedRootsOf(session)` 返回其快照，旧会话则返回 `null`。`reference` 与 `write` 都是请求而非授权。重放、导入和分叉保留待确认元数据，不激活权限，也不改变不可变 cwd。缺失目录保留记录但不会被创建；参考目录不构成读取沙箱。
+
 <a id="model-experience"></a>
 ## 模型体验
 

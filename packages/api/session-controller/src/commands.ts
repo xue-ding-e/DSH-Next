@@ -132,6 +132,7 @@ export class SessionCommandController {
       created = await this.agents.createSession({
         ...(request.sessionId === undefined ? {} : { sessionId: request.sessionId }),
         cwd,
+        ...(workspace === undefined || workspace.additionalRoots.length === 0 ? {} : { requestedRoots: workspace.additionalRoots }),
         ...(request.agentPreset === undefined ? {} : { agentPreset: request.agentPreset }),
         reusable: sessionId => !this.ctx.workspaceRegistry.archivedSessionIds.includes(sessionId)
           && (workspace === undefined || workspace.sessionIds.includes(sessionId)),

@@ -104,6 +104,8 @@ Start with the subsystem reference for the shared vocabulary, then the seam cont
 
 -----
 
+Pending directory selections are separate from effective policy. `initializeRequestedRoots(session, roots)` records a detached, required `sandbox/roots-requested` event once, before any turn starts; `requestedRootsOf(session)` returns its snapshot or `null` for older Sessions. Both `reference` and `write` remain requests, not grants. Replay, import, and fork preserve pending metadata without activating permissions or changing the immutable cwd. Missing directories remain recorded without filesystem creation; reference selections do not impose a read sandbox.
+
 <a id="model-experience"></a>
 ## Model Experience
 

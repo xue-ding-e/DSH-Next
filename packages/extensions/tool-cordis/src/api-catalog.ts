@@ -2212,6 +2212,18 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         returns: 'the fully resolved per-call mode and absolute workspace root.',
       },
       {
+        signature: 'initializeRequestedRoots(session: Session, roots: readonly SessionRootRequest[]): void',
+        description: 'Capture creation-time directory defaults before the first turn. The event records requests only: it cannot grant writes, even after import or replay.',
+        parameters: [{ name: 'session', description: 'Fresh Session in unpublished Agent setup.' }, { name: 'roots', description: 'Complete explicit directory selection to detach and persist.' }],
+        throws: ['if this Session already records roots or has started a turn.'],
+      },
+      {
+        signature: 'requestedRootsOf(session: Session): readonly SessionRootRequest[] | null',
+        description: 'Read pending directory requests without filesystem checks or authorization.',
+        parameters: [{ name: 'session', description: 'Session whose committed request snapshot is requested.' }],
+        returns: 'the immutable snapshot, or null for a Session without a capture.',
+      },
+      {
         signature: 'overrideOf(session: Session): SandboxMode | undefined',
         description: 'Read the session override without applying the deployment default.',
         parameters: [{ name: 'session', description: 'session whose log supplies the override.' }],
@@ -7823,6 +7835,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface SessionResultRange {\n    from?: number;\n    to?: number;\n}',
   },
   {
+    name: 'SessionRootRequest',
+    declaration: 'export interface SessionRootRequest {\n    readonly path: string;\n    readonly access: \'reference\' | \'write\';\n}',
+  },
+  {
     name: 'SessionSearchCursor',
     declaration: 'export type SessionSearchCursor = Branded<\'SessionSearchCursor\'>;',
   },
@@ -9184,7 +9200,11 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'Workspace',
-    declaration: 'export interface Workspace {\n    readonly id: WorkspaceId;\n    readonly path: string;\n    readonly title: string;\n    readonly createdAt: string;\n    readonly updatedAt: string;\n    readonly sessionIds: readonly SessionId[];\n    setTitle(title: string): Promise<void>;\n    attachSession(sessionId: SessionId): Promise<void>;\n    insertSessionBefore(sessionId: SessionId, beforeSessionId?: SessionId): Promise<void>;\n    detachSession(sessionId: SessionId): Promise<void>;\n    status(): Promise<\'ok\' | \'missing-dir\'>;\n}',
+    declaration: 'export interface Workspace {\n    readonly id: WorkspaceId;\n    readonly path: string;\n    readonly additionalRoots: readonly WorkspaceAdditionalRoot[];\n    setAdditionalRoots(roots: readonly WorkspaceAdditionalRoot[]): Promise<void>;\n    readonly title: string;\n    readonly createdAt: string;\n    readonly updatedAt: string;\n    readonly sessionIds: readonly SessionId[];\n    setTitle(title: string): Promise<void>;\n    attachSession(sessionId: SessionId): Promise<void>;\n    insertSessionBefore(sessionId: SessionId, beforeSessionId?: SessionId): Promise<void>;\n    detachSession(sessionId: SessionId): Promise<void>;\n    status(): Promise<\'ok\' | \'missing-dir\'>;\n}',
+  },
+  {
+    name: 'WorkspaceAdditionalRoot',
+    declaration: 'export interface WorkspaceAdditionalRoot {\n    readonly path: string;\n    readonly access: \'reference\' | \'write\';\n}',
   },
   {
     name: 'WorkspaceArchiveSessionRequest',

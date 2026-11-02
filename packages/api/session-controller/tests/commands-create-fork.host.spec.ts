@@ -75,6 +75,25 @@ describe('Session creation failures', () => {
     await ctx.fiber.dispose()
   })
 
+  it('forwards Workspace defaults without changing the primary cwd', async () => {
+    const ctx = await baseContext()
+    const additionalRoots = [{ path: '/reference', access: 'reference' as const }]
+    const attachSession = vi.fn().mockResolvedValue(undefined)
+    const workspace = {
+      id: 'workspace-roots' as WorkspaceId,
+      path: '/primary',
+      additionalRoots,
+      attachSession,
+    } as unknown as Workspace
+    ctx.provide('workspaceRegistry', { get: () => workspace, list: () => [workspace], archivedSessionIds: [] } as never)
+    const createSession = vi.fn(publishedSession(ctx, SessionId('selected-roots')))
+    const controller = new SessionCommandController(ctx, controllerAgents(ctx, { createSession }), '/fallback')
+    await controller.create({ workspaceId: workspace.id })
+    expect(createSession.mock.calls[0]?.[0]).toMatchObject({ cwd: '/primary', requestedRoots: additionalRoots })
+    expect(attachSession).toHaveBeenCalledWith(SessionId('selected-roots'))
+    await ctx.fiber.dispose()
+  })
+
   it('maps missing Workspaces and attachment failures', async () => {
     const missing = await baseContext()
     missing.provide('workspaceRegistry', { get: () => undefined, list: () => [] } as never)
@@ -92,6 +111,7 @@ describe('Session creation failures', () => {
     const workspace = {
       id: 'workspace-1' as WorkspaceId,
       path: '/workspace',
+      additionalRoots: [],
       attachSession: () => Promise.reject(new Error('read-only workspace')),
     } as unknown as Workspace
     failed.provide('workspaceRegistry', {
