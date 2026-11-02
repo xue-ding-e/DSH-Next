@@ -18,6 +18,7 @@ import {
 } from '@deepseek-ai/dsh-session'
 import type {} from '@deepseek-ai/dsh-session-reference/types'
 import type {} from '@deepseek-ai/dsh-session-title'
+import type {} from '@deepseek-ai/dsh-api-session-controller'
 import {
   assertFixtureInventory,
   captureStableAria,
@@ -421,4 +422,165 @@ describe.skipIf(MODE === 'record')('web e2e: file and session references through
     expect(tripwire.warnings).toEqual([])
     await assertFixtureInventory(SNAPSHOT_DIR, ['menu.expected.md', 'order.expected.md'])
   })
+
+  it('native mouse drags stage session references without sending or reordering', async () => {
+    onTestFailed(() => saveFailureShot(page, 'web-e2e-reference-native-drag'))
+    await scaffold.ctx.sessionController.rename({ sessionId: SessionId(SOURCE_SESSION_ID), title: 'Drag source notes' })
+    await scaffold.ctx.sessionController.rename({ sessionId: SessionId(TARGET_SESSION_ID), title: 'Drag target notes' })
+    const target = page.getByRole('treeitem').filter({ has: page.getByText('Drag target notes', { exact: true }) })
+    const source = page.getByRole('treeitem').filter({ has: page.getByText('Drag source notes', { exact: true }) })
+    await target.waitFor({ timeout: 15_000 })
+    await source.waitFor({ timeout: 15_000 })
+    await source.click()
+    await target.click()
+    const input = page.locator('[data-composer-input]').first()
+    const card = page.locator('[data-composer-card]').first()
+    await writeComposerDraft(page, input, 'Review 中文🙂 ')
+    const selectedUrl = page.url()
+    const sourceAgent = scaffold.ctx.agents.get(SessionId(SOURCE_SESSION_ID))
+    const targetAgent = scaffold.ctx.agents.get(SessionId(TARGET_SESSION_ID))
+    if (sourceAgent === undefined || targetAgent === undefined) throw new Error('Both synthetic sessions must be live')
+    const agents = [sourceAgent, targetAgent]
+    // Settle opening/rename before taking the no-send cut; flush must have a
+    // real durability listener, not merely read an older on-disk prefix.
+    for (const agent of agents) {
+      await agent.whenIdle()
+      expect(agent.status).toBe('idle')
+      expect(agent.inbox.nextTurn).toEqual([])
+      expect(agent.inbox.nextStep).toEqual([])
+      expect(await scaffold.ctx.sessions.flush(agent.session)).toBe(true)
+    }
+    const beforeLive = agents.map(agent => agent.session.snapshotEvents())
+    const beforeSource = await readPersistedEvents(scaffold, SessionId(SOURCE_SESSION_ID))
+    const beforeTarget = await readPersistedEvents(scaffold, SessionId(TARGET_SESSION_ID))
+    const beforeRows = await page.getByRole('treeitem').allTextContents()
+    const evidenceDir = fileURLToPath(new URL('../../../.artifacts', import.meta.url))
+    await mkdir(evidenceDir, { recursive: true })
+    await page.screenshot({ path: join(evidenceDir, 'dsh-next-reference-drag-before.png'), fullPage: true })
+    // Observe genuine browser events only. No constructed DragEvent/DataTransfer,
+    // shared fake wrapper, or dispatchEvent drives this gesture.
+    await page.evaluate(() => {
+      const mimes = ['application/x-dsh-session-reference', 'application/x-dsh-file-reference']
+      const rows: { type: string; trusted: boolean; distinctStart: boolean; distinctDrop: boolean; text: string; types: string[] }[] = []
+      let start: DataTransfer | null = null
+      let drop: DataTransfer | null = null
+      const observe = (event: DragEvent): void => {
+        const transfer = event.dataTransfer
+        if (event.type === 'dragstart') {
+          start = transfer
+          drop = null
+        } else if (start === null) return
+        if (event.type === 'drop') drop = transfer
+        rows.push({ type: event.type, trusted: event.isTrusted,
+          distinctStart: transfer !== start, distinctDrop: transfer !== drop,
+          text: event.type === 'dragend' ? mimes.map(mime => transfer?.getData(mime) ?? '').join('') : '',
+          types: [...transfer?.types ?? []] })
+      }
+      document.addEventListener('dragstart', observe, true)
+      document.addEventListener('drop', observe, true)
+      document.addEventListener('dragend', observe, true)
+      Object.assign(window, { referenceDragEvidence: rows, stopReferenceDragEvidence: () => {
+        document.removeEventListener('dragstart', observe, true)
+        document.removeEventListener('drop', observe, true)
+        document.removeEventListener('dragend', observe, true)
+      } })
+    })
+    try {
+      await source.dragTo(card)
+      await expect.poll(() => input.locator('[data-composer-chip]').allTextContents(), { timeout: 15_000 })
+        .toEqual(['Drag source notes'])
+      expect(await input.textContent()).toContain('Review 中文🙂 ')
+      // A second native gesture of the same source must not add a duplicate.
+      // The product refocuses the editor only after asynchronous lookup settles.
+      await input.evaluate((element) => { (element as HTMLElement).blur() })
+      await source.dragTo(card)
+      await expect.poll(() => input.evaluate(element => element === document.activeElement)).toBe(true)
+      await expect.poll(async () => page.evaluate(() => {
+        const state = window as typeof window & { referenceDragEvidence: { type: string }[] }
+        return state.referenceDragEvidence.filter(event => event.type === 'dragend').length
+      })).toBe(2)
+      expect(await input.locator('[data-composer-chip]').count()).toBe(1)
+      expect(page.url()).toBe(selectedUrl)
+      expect(await target.getAttribute('aria-selected')).toBe('true')
+      expect(await source.getAttribute('aria-selected')).toBe('false')
+      expect(await page.getByRole('treeitem').allTextContents()).toEqual(beforeRows)
+      // Search results use a different row component but the same reference owner.
+      await writeComposerDraft(page, input, 'Search 中文🙂 ')
+      await page.getByRole('button', { name: 'Search sessions', exact: true }).click()
+      const search = page.getByPlaceholder('Search session names', { exact: true })
+      await search.fill('Drag source notes')
+      await expect.poll(() => page.getByRole('treeitem').count()).toBe(1)
+      const searchSource = page.getByRole('treeitem').filter({ hasText: 'Drag source notes' })
+      await searchSource.dragTo(card)
+      await expect.poll(() => input.locator('[data-composer-chip]').allTextContents(), { timeout: 15_000 })
+        .toEqual(['Drag source notes'])
+      expect(page.url()).toBe(selectedUrl)
+      await search.fill('')
+
+      // Real Files UI -> Host path resolver -> existing @file chip; no upload.
+      const expand = page.locator('[data-sidebar-right-expand]')
+      if (await expand.isVisible()) await expand.click()
+      const guide = page.locator('[data-sidebar-right-guide-entry="files"]')
+      if (await guide.isVisible()) await guide.click()
+      const folder = page.locator('[data-files-entry="directory"] > button').filter({ hasText: /^workspace$/ })
+      await folder.waitFor({ timeout: 15_000 })
+      if (await folder.getAttribute('aria-expanded') !== 'true') await folder.click()
+      const file = page.locator('[data-files-entry="file"]').getByRole('button', { name: 'reference.txt', exact: true })
+      await file.waitFor({ timeout: 15_000 })
+      await file.dragTo(card)
+      await expect.poll(() => input.locator('[data-composer-chip]').count(), { timeout: 15_000 }).toBe(2)
+      expect(await input.locator('[data-composer-chip]').last().textContent()).toContain('reference.txt')
+      expect(page.url()).toBe(selectedUrl)
+      const evidence = await page.evaluate(() => {
+        const state = window as typeof window & { referenceDragEvidence: {
+          type: string
+          trusted: boolean
+          distinctStart: boolean
+          distinctDrop: boolean
+          text: string
+          types: string[]
+        }[] }
+        return state.referenceDragEvidence
+      })
+      expect(evidence.map(event => event.type)).toEqual(Array.from({ length: 4 }, () => ['dragstart', 'drop', 'dragend']).flat())
+      expect(evidence.filter(event => event.type === 'drop').map(event => event.types.filter(type =>
+        type.startsWith('application/x-dsh-') && type.endsWith('-reference')))).toEqual([
+        ['application/x-dsh-session-reference'], ['application/x-dsh-session-reference'],
+        ['application/x-dsh-session-reference'], ['application/x-dsh-file-reference'],
+      ])
+      expect(evidence.every(event => event.trusted)).toBe(true)
+      expect(evidence.filter(event => event.type === 'drop').every(event => event.distinctStart)).toBe(true)
+      expect(evidence.filter(event => event.type === 'dragend').every(event =>
+        event.distinctStart && event.distinctDrop && event.text === '')).toBe(true)
+      // Reject queued or active work synchronously before flush, then verify the
+      // same live cut again after durability settles. Do not wait a bad turn out.
+      const assertNoSend = (): void => {
+        for (const [index, agent] of agents.entries()) {
+          expect(scaffold.ctx.agents.get(agent.id)).toBe(agent)
+          expect(agent.status).toBe('idle')
+          expect(agent.inbox.nextTurn).toEqual([])
+          expect(agent.inbox.nextStep).toEqual([])
+          expect(agent.session.snapshotEvents()).toEqual(beforeLive[index])
+        }
+      }
+      assertNoSend()
+      for (const agent of agents) expect(await scaffold.ctx.sessions.flush(agent.session)).toBe(true)
+      assertNoSend()
+      // Compare the real durable logs, not a fake send callback. Existing seeded
+      // recall is not evidence of a new model call; no new turn/message is allowed.
+      expect(await readPersistedEvents(scaffold, SessionId(SOURCE_SESSION_ID))).toEqual(beforeSource)
+      expect(await readPersistedEvents(scaffold, SessionId(TARGET_SESSION_ID))).toEqual(beforeTarget)
+      await page.screenshot({ path: join(evidenceDir, 'dsh-next-reference-drag-after.png'), fullPage: true })
+      expect(tripwire.pageErrors).toEqual([])
+      expect(tripwire.warnings).toEqual([])
+    } finally {
+      await page.evaluate(() => {
+        const state = window as typeof window & { stopReferenceDragEvidence: () => void }
+        state.stopReferenceDragEvidence()
+        Reflect.deleteProperty(window, 'referenceDragEvidence')
+        Reflect.deleteProperty(window, 'stopReferenceDragEvidence')
+      })
+    }
+  })
+
 })
