@@ -1,5 +1,5 @@
 name: Next Windows native fixture validation
-# DRAFT DISABLED: placeholders must be replaced by reviewed bootstrap object and blob manifest.
+# Reviewed bootstrap identity and manifest gate. Phase A only; no installer execution.
 # The installed lifecycle script is deliberately NOT called in this Phase A workflow.
 on:
   push:
@@ -11,7 +11,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   fixture:
-    if: github.repository == 'xue-ding-e/DSH-Next' && github.ref == 'refs/heads/validation/released-windows-lifecycle' && github.event.before == 'REVIEWED_BOOTSTRAP_SHA_NOT_SET' && github.event.after == github.sha && github.event.created == false && github.event.deleted == false && github.event.forced == false
+    if: github.repository == 'xue-ding-e/DSH-Next' && github.ref == 'refs/heads/validation/released-windows-lifecycle' && github.event.before == '9d59a8f21d2a983de33f7a061f7cd09477f1b952' && github.event.after == github.sha && github.event.created == false && github.event.deleted == false && github.event.forced == false
     runs-on: windows-2025
     timeout-minutes: 10
     steps:
@@ -23,11 +23,10 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: '22.14.0'
-      - name: Fail closed until exact object and complete blob manifest review
+      - name: Verify exact source graph event and complete blob manifest
         shell: pwsh
         run: |
-          throw 'DRAFT: exact bootstrap SHA not yet materialized or independently reviewed'
-          node --input-type=module -e "import {run} from './.github/validation/native-windows/source-gate.mjs'; run(process.env,'REVIEWED_BOOTSTRAP_SHA_NOT_SET')"
+          node --input-type=module -e "import {run} from './.github/validation/native-windows/source-gate.mjs'; run(process.env,'9d59a8f21d2a983de33f7a061f7cd09477f1b952')"
           if ($LASTEXITCODE -ne 0) {throw 'Source/event identity gate failed'}
       - name: ASAR reader and actual CLI negative controls
         shell: pwsh
