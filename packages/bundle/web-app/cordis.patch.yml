@@ -110,6 +110,13 @@
       name: '@deepseek-ai/dsh-host-plugin-inventory'
 
     # Session commands, cold reads, and live control over Typert Remote.
+    # Explicit browser-selected queue-only delivery; never starts an Agent.
+    - id: session-mailbox-controller
+      name: '@deepseek-ai/dsh-api-session-mailbox-controller'
+      disabled: !!js "!ctx.get('profileContext')"
+      config:
+        privateRoot: !!js "ctx.get('profileContext').dir + '/session-mailbox'"
+
     - id: session-controller
       name: '@deepseek-ai/dsh-api-session-controller'
 
@@ -260,6 +267,9 @@
 
     - id: ui-renderer
       name: '@deepseek-ai/dsh-client-ui-renderer'
+
+    - id: ui-session-mailbox
+      name: '@deepseek-ai/dsh-client-ui-session-mailbox'
 
     - id: ui-session
       name: '@deepseek-ai/dsh-client-ui-session'

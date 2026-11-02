@@ -208,3 +208,17 @@ describe('queue-only mailbox on real JSON storage', () => {
     await expect(harness(h.root)).rejects.toThrow()
   })
 })
+
+it('proves no acceptance using complete escaped JSON bytes and keeps exact-boundary retries', async () => {
+  const h = await harness(undefined, { maxRecordBytes: 20_000 })
+  const { MailboxNotAcceptedError } = await import('../src/index.ts')
+  await expect(h.mailbox.send(h.sender, { ...request, text: '   ' }, signal)).rejects.toBeInstanceOf(MailboxNotAcceptedError)
+  await expect(h.mailbox.send(h.sender, { ...request, text: ('a\n').repeat(8192) }, signal)).rejects.toBeInstanceOf(MailboxNotAcceptedError)
+  expect(h.mailbox.list(h.recipient, 'inbox')).toEqual([])
+  const first = await h.mailbox.send(h.sender, request, signal)
+  const overhead = Buffer.byteLength(JSON.stringify({ ...first, text: '', status: 'acknowledged' }))
+  const exact = { ...request, requestId: 'retry-2', text: 'a'.repeat(20_000 - overhead) }
+  await expect(h.mailbox.send(h.sender, { ...exact, text: exact.text + 'a' }, signal)).rejects.toBeInstanceOf(MailboxNotAcceptedError)
+  await expect(h.mailbox.send(h.sender, exact, signal)).resolves.toMatchObject({ text: exact.text })
+  await expect(h.mailbox.send(h.sender, exact, signal)).resolves.toMatchObject({ text: exact.text })
+})
