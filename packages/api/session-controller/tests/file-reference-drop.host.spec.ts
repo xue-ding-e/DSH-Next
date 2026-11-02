@@ -48,6 +48,9 @@ async function setup(crossRoot = false, accessInstalled = true) {
   }) as Agent
   const source = makeAgent('source', root)
   const target = makeAgent('target', crossRoot ? other : root)
+  const detachSource = ctx.agents.enter(source, undefined)
+  const detachTarget = ctx.agents.enter(target, undefined)
+  cleanups.push(async () => { detachTarget(); detachSource() })
   const lookup = vi.fn(async (id: SessionId) => id === target.id ? target : source)
   ctx.typert.lookups.configure('agent', lookup)
   let grants: Extract<RemoteAccessBinding, { resource: { kind: 'session' } }>[] = [source.id, target.id].map(id => ({

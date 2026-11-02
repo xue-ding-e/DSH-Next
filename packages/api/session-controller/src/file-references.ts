@@ -46,18 +46,23 @@ export class SessionFileReferences extends TypertRemoteService {
   ): Promise<FileReferenceCandidate> {
     const unavailable = (): RemoteError => new RemoteError('file-reference/unavailable', 'File reference is unavailable.', {})
     const principal = principalOf(this.ctx.invocation)
+    const scopeChecks: Array<() => boolean> = []
     const check = (): void => {
       signal.throwIfAborted()
-      if (principal === undefined) return
-      const access = this.ctx.get('remoteAccess')
-      const grants = [
-        { id: sourceSessionId, action: 'fileReferences/list' as const },
-        { id: agent.id, action: 'fileReferences/list' as const },
-        { id: agent.id, action: 'session/prompt' as const },
-        { id: agent.id, action: 'fileReferences/resolveDrop' as const },
-      ]
-      if (access === undefined || grants.some(({ id, action }) =>
-        access.decide({ principal, action, resources: [{ kind: 'session', id }] }).kind !== 'allow')) throw unavailable()
+      if (principal !== undefined) {
+        const access = this.ctx.get('remoteAccess')
+        const grants = [
+          { id: sourceSessionId, action: 'fileReferences/list' as const },
+          { id: agent.id, action: 'fileReferences/list' as const },
+          { id: agent.id, action: 'session/prompt' as const },
+          { id: agent.id, action: 'fileReferences/resolveDrop' as const },
+        ]
+        if (access === undefined || grants.some(({ id, action }) =>
+          access.decide({ principal, action, resources: [{ kind: 'session', id }] }).kind !== 'allow')) throw unavailable()
+      }
+      // No provider metadata is inspected after a known resource denial.
+      try { if (scopeChecks.some(valid => !valid())) throw unavailable() }
+      catch { throw unavailable() }
     }
     check()
     if (!isAbsolute(path) || Buffer.byteLength(path, 'utf8') > 32768 || path.includes('\0')
@@ -71,12 +76,21 @@ export class SessionFileReferences extends TypertRemoteService {
     } catch { check(); throw unavailable() }
     check()
     if (source === undefined) throw unavailable()
+    // Keep both provider-owned scope generations through the whole two-sided
+    // lookup. A source grant can expire while the destination is awaiting I/O.
+    try { scopeChecks.push(this.ctx.fileReferences.captureScope(source), this.ctx.fileReferences.captureScope(agent)) }
+    catch { throw unavailable() }
+    check()
     for (const current of [source, agent]) {
       let candidates: FileReferenceCandidate[]
       try { candidates = await this.ctx.fileReferences.list(current, absolute, signal) }
       catch { check(); throw unavailable() }
       check()
-      if (!candidates.some(candidate => candidate.path === absolute && candidate.kind === kind)) throw unavailable()
+      const candidate = candidates.find(candidate => candidate.path === absolute && candidate.kind === kind)
+      if (candidate === undefined) throw unavailable()
+      try { scopeChecks.push(this.ctx.fileReferences.captureCandidate(current, candidate)) }
+      catch { throw unavailable() }
+      check()
     }
     check()
     return { path: absolute, kind }

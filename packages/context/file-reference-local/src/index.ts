@@ -5,7 +5,11 @@
  */
 
 import type {} from '@deepseek-ai/dsh-working-directory'
-import { Context } from '@deepseek-ai/cordis'
+import { Context, symbols } from '@deepseek-ai/cordis'
+import { isAbsolute, relative, resolve, sep } from 'node:path'
+import { lstat, realpath } from 'node:fs/promises'
+import { lstatSync, realpathSync } from 'node:fs'
+import type {} from '@deepseek-ai/dsh-sandbox-policy'
 import z from '@deepseek-ai/schemastery'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import FileReferenceService, {
@@ -50,8 +54,9 @@ export class LocalFileReferenceService extends FileReferenceService {
     excludedDirectories: z.array(z.string()).default([...DEFAULT_FILE_SEARCH_EXCLUDED_DIRECTORIES]),
   })
 
+  private readonly candidateChecks = new WeakMap<FileReferenceCandidate, { agent: Agent; valid: () => boolean }>()
   private readonly config: FileSearchConfig
-  private readonly searches = new Map<Agent, { cwd: string; search: WorkspaceFileSearch }>()
+  private readonly searches = new Map<Agent, { key: string; searches: Map<string, WorkspaceFileSearch> }>()
   private readonly promptFibers = new Map<Agent, ReturnType<Context['inject']>>()
   private readonly promptDisposals = new Set<Promise<void>>()
 
@@ -92,17 +97,17 @@ export class LocalFileReferenceService extends FileReferenceService {
     for (const agent of ctx.agents.list()) installPrompt(agent)
     ctx.on('agent/created', async ({ agent }) => { await installPrompt(agent) })
     ctx.on('agent/disposed', ({ agent }) => {
-      this.searches.get(agent)?.search.dispose()
+      this.searches.get(agent)?.searches.forEach((search) => { search.dispose() })
       this.searches.delete(agent)
       disposePrompt(agent)
     })
     ctx.on('session/event', (session, event) => {
       if (event.type !== 'tool/result') return
       const agent = ctx.agents.get(session.id)
-      if (agent !== undefined) this.searches.get(agent)?.search.invalidate()
+      if (agent !== undefined) this.searches.get(agent)?.searches.forEach((search) => { search.invalidate() })
     })
     ctx.effect(() => async () => {
-      for (const { search } of this.searches.values()) search.dispose()
+      for (const { searches } of this.searches.values()) searches.forEach((search) => { search.dispose() })
       this.searches.clear()
       const promptFibers = [...this.promptFibers.values()]
       this.promptFibers.clear()
@@ -113,19 +118,84 @@ export class LocalFileReferenceService extends FileReferenceService {
     }, 'file-reference-local: search cache')
   }
 
+  /** Capture exact live identity and the existing policy owner's confirmed selection, never pending roots. */
+  override captureScope(agent: Agent): () => boolean {
+    const session = agent.session
+    const workingDirectory = agent.ctx.get('workingDirectory')
+    if (workingDirectory === undefined) return () => false
+    const cwd = workingDirectory.get(session)
+    const policy = agent.ctx.get('sandboxPolicy')
+    const confirmed = policy?.confirmedRootsOf(session)
+    const directories = [...new Set([cwd, ...confirmed?.map(root => root.path) ?? []])]
+    const disk = directories.map(rootIdentitySync)
+    const fs = identity(agent.ctx.get('fs'))
+    const provider = identity(this.ctx.get('fileReferences'))
+    const directory = identity(agent.ctx.get('workingDirectory'))
+    return () => this.ctx.agents.get(agent.id) === agent && agent.session === session
+      && identity(this.ctx.get('fileReferences')) === provider
+      && identity(agent.ctx.get('workingDirectory')) === directory
+      && agent.ctx.get('workingDirectory')?.get(session) === cwd
+      && identity(agent.ctx.get('fs')) === fs
+      && directories.every((root, index) => rootIdentitySync(root) === disk[index])
+      && identity(agent.ctx.get('sandboxPolicy')) === identity(policy)
+      && (confirmed === undefined || confirmed.length === 0
+        ? (agent.ctx.get('sandboxPolicy')?.confirmedRootsOf(session).length ?? 0) === 0
+        : agent.ctx.get('sandboxPolicy')?.confirmedRootsOf(session) === confirmed)
+  }
+
+  /** Retain only genuine list results, including every directory and the leaf identity. */
+  override captureCandidate(agent: Agent, candidate: FileReferenceCandidate): () => boolean {
+    const captured = this.candidateChecks.get(candidate)
+    return captured?.agent === agent ? captured.valid : () => false
+  }
+
   override async list(
     agent: Agent,
     query: string,
     signal: AbortSignal,
   ): Promise<FileReferenceCandidate[]> {
-    const cwd = await this.ctx.workingDirectory.ensure(agent, signal)
+    const workingDirectory = agent.ctx.get('workingDirectory')
+    if (workingDirectory === undefined) return []
+    const cwd = await workingDirectory.ensure(agent, signal)
+    const valid = this.captureScope(agent)
+    if (!valid()) return []
+    const roots = [...new Set([cwd, ...agent.ctx.get('sandboxPolicy')?.confirmedRootsOf(agent.session).map(root => root.path) ?? []])]
+    const key = JSON.stringify(roots)
     let cached = this.searches.get(agent)
-    if (cached?.cwd !== cwd) {
-      cached?.search.dispose()
-      cached = { cwd, search: new WorkspaceFileSearch(cwd, this.config) }
+    if (cached?.key !== key) {
+      cached?.searches.forEach((search) => { search.dispose() })
+      const config = { ...this.config, maxEntries: Math.max(1, Math.floor(this.config.maxEntries / roots.length)) }
+      cached = { key, searches: new Map(roots.map(root => [root, new WorkspaceFileSearch(root, config)])) }
       this.searches.set(agent, cached)
     }
-    return cached.search.list(query, signal)
+    const candidates = new Map<string, FileReferenceCandidate>()
+    for (const [root, search] of cached.searches) {
+      // The granted root may have been replaced on disk since confirmation.
+      // Do not traverse a symbolic alias or return results from another inode.
+      const before = await rootIdentity(root)
+      signal.throwIfAborted()
+      if (!valid()) return []
+      if (before === undefined) continue
+      const found = await search.list(query, signal)
+      const after = await rootIdentity(root)
+      if (after !== before) return []
+      signal.throwIfAborted()
+      if (!valid()) return []
+      for (const candidate of found) {
+        // Primary relative spellings stay compatible. Additional roots retain
+        // absolute identity so same-named entries never silently rebind to cwd.
+        const path = root === cwd || isAbsolute(candidate.path) ? candidate.path : resolve(root, candidate.path).split(sep).join('/')
+        const snapshot = candidateIdentitySync(root, resolve(root, candidate.path), candidate.kind)
+        if (snapshot === undefined) continue
+        const listed = { ...candidate, path }
+        this.candidateChecks.set(listed, { agent, valid: () => valid()
+          && candidateIdentitySync(root, resolve(root, candidate.path), candidate.kind) === snapshot })
+        candidates.set(path, listed)
+      }
+    }
+    if (!valid()) return []
+    return [...candidates.values()].filter(candidate => this.captureCandidate(agent, candidate)())
+      .slice(0, this.config.maxResults)
   }
 }
 
@@ -142,3 +212,47 @@ function validateConfig(config: FileSearchConfig): void {
 }
 
 export default LocalFileReferenceService
+
+/** Compare underlying Cordis provider generations rather than contextual proxy wrappers. */
+function identity<T extends object>(service: T | undefined): T | undefined {
+  return service === undefined ? undefined : (service as T & { [symbols.original]?: T })[symbols.original] ?? service
+}
+
+/** Canonical directory identity, without following a replacement symbolic root. */
+async function rootIdentity(root: string): Promise<string | undefined> {
+  try {
+    const status = await lstat(root)
+    if (!status.isDirectory() || status.isSymbolicLink() || await realpath(root) !== resolve(root)) return undefined
+    return `${status.dev}:${status.ino}`
+  } catch { return undefined }
+}
+
+/** Final synchronous metadata check; a changed root never authorizes a stale lookup result. */
+function rootIdentitySync(root: string): string | undefined {
+  try {
+    const status = lstatSync(root)
+    if (!status.isDirectory() || status.isSymbolicLink() || realpathSync(root) !== resolve(root)) return undefined
+    return `${status.dev}:${status.ino}`
+  } catch { return undefined }
+}
+
+/** Path metadata only: reject aliases and replacements in every root-to-leaf component. */
+function candidateIdentitySync(root: string, path: string, kind: FileReferenceCandidate['kind']): string | undefined {
+  try {
+    const suffix = relative(root, path)
+    if (isAbsolute(suffix) || suffix.split(sep).includes('..')) return undefined
+    const components = suffix === '' ? [] : suffix.split(sep)
+    let current = resolve(root)
+    const identities: string[] = []
+    for (let index = 0; index <= components.length; index++) {
+      const component = components[index - 1]
+      if (component !== undefined) current = resolve(current, component)
+      const status = lstatSync(current)
+      const leaf = index === components.length
+      if (status.isSymbolicLink() || realpathSync(current) !== current
+        || (leaf && kind === 'file' ? !status.isFile() : !status.isDirectory())) return undefined
+      identities.push(`${status.dev}:${status.ino}`)
+    }
+    return identities.join('/')
+  } catch { return undefined }
+}

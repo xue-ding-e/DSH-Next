@@ -35,6 +35,8 @@ An `@path` token at the start of input or after whitespace triggers completion; 
 
 `ctx.fileReferences.list(agent, query, signal)` returns path-only file and directory candidates for one agent's working directory, deterministically ranked by the provider. Directory mentions render with a trailing `/` so completion can descend another level. Browser consumers call the Session Controller adapter as `ctx.remote.fileReferences.list`; the trailing signal cancels a slow autocomplete.
 
+`captureScope(agent)` returns a process-local validity check, never a grant. Callers retain the checks for both source and destination and run them again after asynchronous discovery and immediately before returning; dynamic providers bind their current directory and grant generations. Resource authorization remains the caller’s separate responsibility. `captureCandidate(agent, candidate)` retains the provider-owned validity of an exact listed result. Mutable providers must bind backing metadata, not just the discovery roots; callers recheck both candidate handles synchronously with resource and scope checks before returning.
+
 ### Pairing with a provider
 
 For a local filesystem, mount `@deepseek-ai/dsh-file-reference-local`; other namespaces (remote or virtual filesystems) need a provider whose discovery matches the effective tool. When the addressed agent can call `read`, a provider may install the stable `FILE_REFERENCE_PROMPT` guidance that tells the model to read a referenced file before claiming to have inspected it.

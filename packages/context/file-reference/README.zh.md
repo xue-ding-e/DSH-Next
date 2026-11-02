@@ -35,6 +35,8 @@ kind: "package-reference"
 
 `ctx.fileReferences.list(agent, query, signal)` 返回指定 agent 工作目录中仅含路径的文件与目录候选，由提供方确定性地排序。目录 mention 呈现时带尾随 `/`，使补全可以继续深入下一层。浏览器消费方通过 Session Controller 适配器的 `ctx.remote.fileReferences.list` 调用同一发现能力；末位 signal 参数可取消慢速自动补全。
 
+`captureScope(agent)` 返回仅进程内使用的有效性检查，绝不是授权。调用方保留来源与目标两端的检查，在异步发现之后及最终返回之前再次执行；动态提供方绑定当前目录和授权代际。资源授权仍由调用方单独负责。 `captureCandidate(agent, candidate)` 保留提供方对精确已列结果的有效性检查。可变提供方必须绑定候选的底层元数据，不能只检查发现根目录；调用方在返回前同步复核两端候选句柄、资源权限及作用域。
+
 ### 搭配提供方
 
 本地文件系统请挂载 `@deepseek-ai/dsh-file-reference-local`；其他命名空间（远程或虚拟文件系统）需要发现能力与生效工具一致的提供方。当指定 agent 可以调用 `read` 时，提供方可以安装稳定的 `FILE_REFERENCE_PROMPT` 指引，告诉模型先读取被引用文件、再声称检查过它。

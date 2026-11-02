@@ -4,7 +4,7 @@
  * @module @deepseek-ai/dsh-file-reference
  */
 
-import { Service, type Context } from '@deepseek-ai/cordis'
+import { Service, symbols, type Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 
 import type { FileReferenceCandidate } from './types.ts'
@@ -26,6 +26,32 @@ declare module '@deepseek-ai/cordis' {
 export abstract class FileReferenceService extends Service {
   constructor(ctx: Context) {
     super(ctx, 'fileReferences')
+  }
+
+  /**
+   * Capture synchronous validity of this provider's current discovery scope.
+   * This grants no access; callers must separately authorize every resource.
+   * @param agent - exact addressed live Agent.
+   * @returns final no-await check; dynamic providers additionally bind their own scope generation.
+   */
+  captureScope(agent: Agent): () => boolean {
+    const session = agent.session
+    const provider = this.ctx.get('fileReferences')
+    const original = (value: FileReferenceService | undefined): FileReferenceService | undefined =>
+      value === undefined ? undefined
+        : (value as FileReferenceService & { [symbols.original]?: FileReferenceService })[symbols.original] ?? value
+    return () => this.ctx.get('agents')?.get(agent.id) === agent && agent.session === session
+      && original(this.ctx.get('fileReferences')) === original(provider)
+  }
+
+  /**
+   * Retain a listed candidate's provider-owned validity until the caller returns it.
+   * @param agent - exact addressed Agent, independently authorized by the caller.
+   * @param _candidate - candidate returned by this provider's list operation.
+   * @returns synchronous guard; providers with mutable backing data bind its identity here.
+   */
+  captureCandidate(agent: Agent, _candidate: FileReferenceCandidate): () => boolean {
+    return this.captureScope(agent)
   }
 
   /**

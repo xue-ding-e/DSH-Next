@@ -25,6 +25,8 @@ Agents and host UIs can complete `@file` mentions with ranked paths from each ag
 <a id="use-this-package"></a>
 ## Use this package
 
+Confirmed additional directories are discovered through the actual Agent-scoped sandbox-policy owner. Pending or expired selections are never used. Reference selections expand path discovery, not tool write permission. Primary paths retain relative spellings; additional roots use absolute paths to distinguish equal filenames. A provider-owned synchronous scope handle rechecks both sides through the final drag result, including Agent/Session identity, current directory, provider generation, confirmed selection and directory inode. No file contents are read or uploaded. Listed candidates also retain root-to-leaf canonical, non-symlink inode identities, rechecked after asynchronous work and at final return. This is metadata validation at discovery time, not a pinned file descriptor or content snapshot: a later tool read still performs its own authorization and filesystem checks.
+
 Changing the Session's working directory discards the previous directory's search index; the next completion searches the new directory.
 
 Mount this provider when `@file` completion should discover the Harness host's own filesystem — the namespace the shipped `read` tool operates on. Each agent's workspace is indexed from its Session's current working directory.
