@@ -157,6 +157,8 @@ Read these pages when the package-level contract is not enough. They move from t
 
 -----
 
+`hasOwnerActivity(owner)` checks the exact Agent object for admitted or resident descendant work, including idle, external, and closing children. A single materialization admission starts before directory resolution, provider preparation, queued child locks, or cold-history reads and remains visible through publication or rollback cleanup. Scoped drain aborts that same operation and waits for its cleanup; no extra capacity slot is reserved during preparation. If the Agent service is unavailable or unloading, the query throws `CONTINUATION_UNAVAILABLE` rather than reporting inactivity. Callers must treat that failure as a closed admission boundary. This activity query does not itself authorize permission changes.
+
 <a id="model-experience"></a>
 ## Model Experience
 

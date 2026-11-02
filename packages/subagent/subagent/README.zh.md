@@ -157,6 +157,8 @@ kind: "package-reference"
 
 -----
 
+`hasOwnerActivity(owner)` 按确切 Agent 对象检查已准入或驻留的后代工作，包括空闲、外部和关闭中的子任务。同一物化准入在目录解析、提供方准备、子任务锁排队或冷历史读取前开始，并持续可见到发布或回滚清理完成。作用域 drain 中止同一操作并等待清理；准备阶段不会额外预留容量槽。Agent 服务不可用或正在卸载时，查询抛出 `CONTINUATION_UNAVAILABLE`，而不报告无活动；调用方必须将此失败视为禁止准入。该活动查询本身不授权权限变更。
+
 <a id="model-experience"></a>
 ## 模型体验
 

@@ -108,6 +108,7 @@ type MaterializeInputs = MaterializeBase & (
  * keep waiting even if an intermediate Agent leaves the registry meanwhile.
  */
 interface Materialization {
+  readonly signal: AbortSignal
   readonly lineage: readonly Agent[]
   readonly settled: Promise<void>
   readonly controller: AbortController
@@ -377,6 +378,14 @@ export class SubagentManager {
    * @returns the durable child id and accepted initial prompt message id.
    */
   async startLocal(spec: SubagentActivationSpec): Promise<SubagentActivation & { messageId: MessageId }> {
+    return this.admitMaterialization(spec.request.parent, spec.signal, admission =>
+      this.startLocalAdmitted({ ...spec, signal: admission.signal }, admission))
+  }
+
+  /** Prepare and publish a local child under its already-visible admission. */
+  private async startLocalAdmitted(
+    spec: SubagentActivationSpec, admission: Materialization,
+  ): Promise<SubagentActivation & { messageId: MessageId }> {
     const request = spec.request
     const parent = request.parent
     this.assertAdmitting(parent)
@@ -452,7 +461,7 @@ export class SubagentManager {
           signal: spec.signal,
           delivery: spec.delivery,
           outputSchema: spec.request.outputSchema,
-        })
+        }, admission)
         established = activation
         const child = requireLocalActivation(activation).handle.agent
         const childHeader = child.session.header
@@ -481,6 +490,12 @@ export class SubagentManager {
    * @returns the accepted activation and its result/disposal capabilities.
    */
   async startExternal(spec: SubagentActivationSpec): Promise<SubagentActivation> {
+    return this.admitMaterialization(spec.request.parent, spec.signal, admission =>
+      this.startExternalAdmitted({ ...spec, signal: admission.signal }, admission))
+  }
+
+  /** Prepare and publish an external child under its already-visible admission. */
+  private async startExternalAdmitted(spec: SubagentActivationSpec, admission: Materialization): Promise<SubagentActivation> {
     const parent = spec.request.parent
     this.assertAdmitting(parent)
     const pendingId = brandString<SessionId>(randomUUID())
@@ -498,7 +513,7 @@ export class SubagentManager {
         start: signal => this.host.startExternal(spec.provider, {
           ...spec.request, cwd, label: spec.label, signal,
         }),
-      })
+      }, admission)
       this.assertAdmitting(parent)
       this.assertLiveParent(parent, activation.childId)
       spec.signal.throwIfAborted()
@@ -734,32 +749,50 @@ export class SubagentManager {
   /**
    * Create or resume one child Agent and publish its Activation.
    * @param inputs - reconstruction and admission inputs for the residency epoch.
+   * @param admission - the preparation or delivery operation already owning this work.
    * @returns the published process-local Activation.
    */
-  private materialize(inputs: MaterializeInputs): Promise<Activation> {
+  private materialize(inputs: MaterializeInputs, admission: Materialization): Promise<Activation> {
     this.assertAdmitting(inputs.parent)
     inputs.signal.throwIfAborted()
-    const lineage = this.liveLineage(inputs.parent)
     const pool = this.resident.get(inputs.parent.id)?.pool ?? this.rootPool(inputs.parent)
     const releaseSlot = pool.reserve(this.maxActiveSubagents())
+    return this.materializeTracked(inputs, admission.lineage, pool, releaseSlot).catch((error: unknown) => {
+      releaseSlot()
+      throw error
+    })
+  }
+
+  /** Own preparation, queued locks, materialization and rollback as one operation. */
+  private async admitMaterialization<T>(
+    parent: Agent, signal: AbortSignal, operation: (admission: Materialization) => Promise<T>,
+  ): Promise<T> {
+    this.assertAdmitting(parent)
+    signal.throwIfAborted()
     const settled = Promise.withResolvers<void>()
     const controller = new AbortController()
-    const materialization: Materialization = {
-      lineage,
+    const admission: Materialization = {
+      lineage: this.liveLineage(parent),
+      signal: AbortSignal.any([signal, controller.signal]),
       settled: settled.promise,
       controller,
     }
-    this.materializations.add(materialization)
-    return this.materializeTracked(
-      { ...inputs, signal: AbortSignal.any([inputs.signal, controller.signal]) }, lineage, pool, releaseSlot,
-    ).catch((error: unknown) => {
-      releaseSlot()
-      if (error instanceof Error && error.name === 'AbortError') this.assertAdmitting(inputs.parent)
+    this.materializations.add(admission)
+    try {
+      return await operation(admission)
+    } catch (error: unknown) {
+      if (error instanceof Error && error.name === 'AbortError') this.assertAdmitting(parent)
       throw error
-    }).finally(() => {
-      this.materializations.delete(materialization)
+    } finally {
+      this.materializations.delete(admission)
       settled.resolve()
-    })
+    }
+  }
+
+  /** All admitted or resident descendant work, including idle and closing children. */
+  hasOwnerActivity(owner: Agent): boolean {
+    return [...this.materializations].some(item => item.lineage.includes(owner))
+      || [...this.resident.values()].some(activation => activationAgent(activation) !== owner && activation.ancestry.has(owner))
   }
 
   /**
@@ -1252,10 +1285,18 @@ export class SubagentManager {
     content: ContentBlock[],
     options: ChildDeliveryOptions,
   ): Promise<MessageId> {
+    return this.admitMaterialization(parent, options.signal, admission =>
+      this.deliverToChildAdmitted(parent, childId, content, { ...options, signal: admission.signal }, admission))
+  }
+
+  /** Deliver under an admission visible throughout queued locks and cold reads. */
+  private async deliverToChildAdmitted(
+    parent: Agent, childId: SessionId, content: ContentBlock[], options: ChildDeliveryOptions, admission: Materialization,
+  ): Promise<MessageId> {
     this.assertAdmitting(parent)
     const releaseHold = this.holdOwnership(parent, childId)
     try {
-      return await this.deliverFollowup(parent, childId, content, options)
+      return await this.deliverFollowup(parent, childId, content, options, admission)
     } catch (error: unknown) {
       releaseHold()
       throw error
@@ -1268,11 +1309,14 @@ export class SubagentManager {
     childId: SessionId,
     content: ContentBlock[],
     options: ChildDeliveryOptions,
+    admission: Materialization,
   ): Promise<MessageId> {
     while (true) {
       const live = await this.locks.run(childId, async () => {
+        options.signal.throwIfAborted()
+        this.assertAdmitting(parent)
         const activation = this.resident.get(childId)
-        if (activation === undefined) return this.coldResume(parent, childId, content, options)
+        if (activation === undefined) return this.coldResume(parent, childId, content, options, admission)
         requireLocalActivation(activation)
         const disposal = activation.closing
         /* v8 ignore next 3 -- the send-versus-dispose cutoff needs a delivery to
@@ -1351,6 +1395,7 @@ export class SubagentManager {
     childId: SessionId,
     content: ContentBlock[],
     options: ChildDeliveryOptions,
+    admission: Materialization,
   ): Promise<MessageId> {
     const query = this.requireSessionQuery()
     let observation: SessionObservation
@@ -1394,7 +1439,7 @@ export class SubagentManager {
         },
         composition: { agentPreset: agentPreset ?? undefined, persona: descriptor.persona, toolFilter: descriptor.toolFilter },
         signal: options.signal,
-      })
+      }, admission)
     } catch (error: unknown) {
       options.signal.throwIfAborted()
       if (error instanceof SubagentError) throw error

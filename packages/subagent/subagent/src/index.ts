@@ -286,6 +286,18 @@ export class SubagentRuntime extends TypertRemoteService {
   }
 
   /**
+   * Test whether an exact Agent owns pending, resident, or closing descendant work.
+   * Preparation and cold delivery count from their first asynchronous boundary;
+   * idle and external children remain active until their resources are released.
+   * @param owner - exact parent Agent, not a reconstructed Session identity.
+   * @returns true without a preparation-to-publication or rollback-cleanup gap.
+   * @throws {SubagentError} CONTINUATION_UNAVAILABLE while the Agent service is unavailable or unloading.
+   */
+  hasOwnerActivity(owner: Agent): boolean {
+    return this.requireManager().hasOwnerActivity(owner)
+  }
+
+  /**
    * Join progressing descendants without cancelling them. Idle descendants whose
    * inboxes require a later wake stay resident and do not delay host completion.
    * @param parent - the exact parent whose descendant work is observed.
