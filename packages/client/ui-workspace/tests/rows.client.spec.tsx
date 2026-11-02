@@ -172,7 +172,8 @@ describe('native row drag previews', () => {
       : <SessionNodeItem node={{
         id: sid('session'), title: 'Draggable row', blank: false, running: false,
         runningSubagentCount: 0, completed: false, updatedAt: 0, pinned: false, archived: false,
-      }} currentId={undefined} now={0} onOpen={vi.fn()} drag={drag} referenceDrag={referenceDrag} useSessionAccess={useSessionAccess} t={t} />)
+      }} currentId={undefined} now={0} onOpen={vi.fn()} drag={drag}
+      referenceDrag={referenceDrag} useSessionAccess={useSessionAccess} t={t} />)
     const row = screen.getByRole('treeitem')
     stubRect(row)
     row.style.paddingInlineStart = '32px'
@@ -1750,7 +1751,7 @@ describe('row menu positioning', () => {
     const rowRect = vi.fn(() => new DOMRect(40, 100, 240, 32))
     Object.defineProperty(row, 'getBoundingClientRect', { configurable: true, value: rowRect })
     const trigger = screen.getByRole('button', { name: /actions/i })
-    expect(row.getBoundingClientRect).not.toBe(trigger.getBoundingClientRect)
+    expect(Reflect.get(row, 'getBoundingClientRect')).not.toBe(Reflect.get(trigger, 'getBoundingClientRect'))
     expect(row.getBoundingClientRect()).toEqual(new DOMRect(40, 100, 240, 32))
     expect(trigger.getBoundingClientRect()).toEqual(new DOMRect(250, 100, 24, 24))
     return { row, rowRect, trigger, onOpen }
