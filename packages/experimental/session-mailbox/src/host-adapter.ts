@@ -1,11 +1,13 @@
 /** Internal Host adapter: explicit queue-only selection, read-only lifecycle probes, private-root ownership. */
+import { randomUUID } from 'node:crypto'
+import { z } from 'zod'
 import { mkdir, lstat, realpath } from 'node:fs/promises'
 import { isAbsolute, join } from 'node:path'
 import { Context } from '@deepseek-ai/cordis'
 import { brandString } from '@deepseek-ai/dsh-brand'
 import { withFileLock } from '@deepseek-ai/dsh-atomic-write'
 import Storage from '@deepseek-ai/dsh-storage'
-import { DomainFacility } from '@deepseek-ai/dsh-storage-domain'
+import { DomainFacility, defineDomain, domainTable } from '@deepseek-ai/dsh-storage-domain'
 import { JsonStorageBackend } from '@deepseek-ai/dsh-storage-json'
 import type { SessionId } from '@deepseek-ai/dsh-session'
 import type {} from '@deepseek-ai/dsh-session-persistence'
@@ -15,6 +17,10 @@ import { MailboxError, SessionMailbox, type MailboxActor, type MailboxPrincipalK
 import { HostMailboxSelections, type MailboxOperationLease } from './host-selection.ts'
 
 const OWNED_STORAGE = Symbol('owned-mailbox-storage')
+const identitySpec = defineDomain({
+  name: 'session_mailbox_identity', version: 1,
+  tables: { owners: domainTable<'owner', { realm: string }>(z.object({ realm: z.uuid() })) },
+})
 
 /** Host construction settings, never accepted as Remote method parameters. */
 export interface HostMailboxConfig {
@@ -35,14 +41,14 @@ export class MailboxOutcomeUnavailableError extends Error {
   /** The operation must be reconciled through a fresh authorized selection, not retried as a new request. */
   readonly code = 'outcome-unavailable'
   constructor() {
-    super('Mailbox operation may have committed; select it again with the same retry key to reconcile. No result content is available.')
+    super('Mailbox operation may have committed; select it again with the same operation identity (send requestId or acknowledgement receipt id) to reconcile. No result content is available.')
     this.name = 'MailboxOutcomeUnavailableError'
   }
 }
 
 /** Internal adapter, deliberately not a Remote namespace, tool, or Agent input provider. */
 export class HostMailboxAdapter {
-  /** Issuer reserved for future trusted user-selection handlers, not model callers. */
+  /** Issuer reserved for trusted user-selection handlers, not model callers. */
   readonly selections: HostMailboxSelections
   private readonly calls = new WeakMap<object, { ctx: Context; selected: MailboxOperationLease; actor: MailboxActor }>()
   private readonly actorCalls = new WeakMap<MailboxActor, { ctx: Context; selected: MailboxOperationLease }>()
@@ -50,7 +56,7 @@ export class HostMailboxAdapter {
   private closing = false
   private mailbox!: SessionMailbox
 
-  private constructor(private readonly host: Context, selectionTtlMs: number) {
+  private constructor(private readonly host: Context, selectionTtlMs: number, readonly realm: string) {
     this.selections = new HostMailboxSelections(selectionTtlMs)
   }
 
@@ -65,7 +71,16 @@ export class HostMailboxAdapter {
     host: Context, facility: DomainFacility, config: HostMailboxConfig, ownership: typeof OWNED_STORAGE,
   ): Promise<HostMailboxAdapter> {
     if (ownership !== OWNED_STORAGE) throw new MailboxError('denied')
-    const adapter = new HostMailboxAdapter(host, config.selectionTtlMs)
+    const identity = await facility.open(identitySpec)
+    let realm: string
+    try {
+      const owners = identity.table('owners')
+      const existing = owners.get('owner')
+      if (owners.size > 1 || owners.size !== 0 && !existing) throw new MailboxError('invalid')
+      realm = existing?.realm ?? randomUUID()
+      if (!existing) await owners.put('owner', { realm })
+    } finally { await identity.close() }
+    const adapter = new HostMailboxAdapter(host, config.selectionTtlMs, realm)
     adapter.mailbox = await SessionMailbox.open(facility, {
       maxRecords: config.maxRecords, maxRecordBytes: config.maxRecordBytes,
       resolve: token => adapter.calls.get(token)?.actor,
@@ -139,6 +154,7 @@ export class HostMailboxAdapter {
       } catch (error) {
         // Do not expose message content or imply that a committed write was rolled back.
         if (acceptedMutation) throw new MailboxOutcomeUnavailableError()
+        selected.check(ctx)
         throw error
       } finally {
         this.calls.delete(token)

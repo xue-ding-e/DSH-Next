@@ -68,6 +68,10 @@ export class MailboxError extends Error {
     this.name = 'MailboxError'
   }
 }
+/** Proven absent retry identity; no write was attempted for this send. */
+export class MailboxNotAcceptedError extends MailboxError {
+  constructor(code: 'invalid' | 'limit') { super(code); this.name = 'MailboxNotAcceptedError' }
+}
 /**
  * Internal service candidate. The Host must exclusively own the storage root.
  * Every mutation is serialized, including policy checks and duplicate lookup.
@@ -110,7 +114,6 @@ export class SessionMailbox {
       const actor = this.actor(caller)
       this.authorize(actor, 'send', actor.sessionId, input.target)
       if (actor.sessionId === input.target || !this.policy.canReceive(input.target)) throw new MailboxError('denied')
-      if (!input.requestId.trim() || !input.text.trim()) throw new MailboxError('invalid')
       const id = brandString<MailboxId>(createHash('sha256').update(JSON.stringify([actor.principalKey, actor.sessionId, input.requestId])).digest('hex'))
       const table = this.domain.table('messages')
       const prior = table.get(id)
@@ -118,8 +121,9 @@ export class SessionMailbox {
         if (prior.target !== input.target || prior.text !== input.text) throw new MailboxError('conflict')
         return structuredClone(prior)
       }
+      if (!input.requestId.trim() || !input.text.trim()) throw new MailboxNotAcceptedError('invalid')
       const record: MailboxRecord = { id, principalKey: actor.principalKey, source: actor.sessionId, target: input.target, requestId: input.requestId, text: input.text, trust: 'untrusted-agent-content', mode: 'queue-only', status: 'queued' }
-      if (table.size >= this.policy.maxRecords || Buffer.byteLength(JSON.stringify({ ...record, status: 'acknowledged' }), 'utf8') > this.policy.maxRecordBytes) throw new MailboxError('limit')
+      if (table.size >= this.policy.maxRecords || Buffer.byteLength(JSON.stringify({ ...record, status: 'acknowledged' }), 'utf8') > this.policy.maxRecordBytes) throw new MailboxNotAcceptedError('limit')
       await this.persist(record)
       return structuredClone(record)
     })

@@ -4,7 +4,7 @@ import type { SessionId } from '@deepseek-ai/dsh-session'
 import type { PeerScope } from '@deepseek-ai/dsh-typert-protocol'
 import { MailboxError, type MailboxId } from './index.ts'
 
-/** Exact operation selected by the user through a future trusted Host UI handler. */
+/** Exact operation selected by the user through a trusted Host UI handler. */
 export type MailboxSelection =
   | { readonly action: 'send'; readonly source: SessionId; readonly target: SessionId; readonly requestId: string; readonly text: string }
   | { readonly action: 'inbox'; readonly target: SessionId }
@@ -52,16 +52,20 @@ export class HostMailboxSelections {
    * @param ctx - trusted Host invocation context; never constructed from wire identity fields.
    * @param selection - explicit source, target and operation selected by the user.
    * @param cancelSignal - selection cancellation, distinct from successful completion of the issuing RPC.
+   * @param latestDeadline - optional Host monotonic deadline; can only shorten the configured selection lifetime.
    * @returns an opaque, single-claim process-local capability with no serializable identity fields.
    */
-  issue(ctx: Context, selection: MailboxSelection, cancelSignal: AbortSignal): object {
+  issue(ctx: Context, selection: MailboxSelection, cancelSignal: AbortSignal, latestDeadline?: number): object {
+    const now = this.now()
+    if (latestDeadline !== undefined && (!Number.isFinite(latestDeadline) || latestDeadline <= now)) throw new MailboxError('denied')
     const invocation = ctx.invocation
     // oxlint-disable-next-line typescript/no-unnecessary-condition -- principal kinds are merge-extensible across Host assemblies.
     if (!invocation || invocation.peer.principal.kind !== 'owner'
       || invocation.peer.signal.aborted || invocation.signal.aborted || cancelSignal.aborted) throw new MailboxError('denied')
     const token = Object.freeze({})
     this.selections.set(token, {
-      peer: invocation.peer, selection: Object.freeze({ ...selection }), cancelSignal, deadline: this.now() + this.ttlMs,
+      peer: invocation.peer, selection: Object.freeze({ ...selection }), cancelSignal,
+      deadline: Math.min(now + this.ttlMs, latestDeadline ?? Infinity),
     })
     return token
   }

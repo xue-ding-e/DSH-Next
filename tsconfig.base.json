@@ -28,6 +28,10 @@
     // not declaration path aliases, keep each package/vendor source compiled
     // under its own tsconfig boundary.
     "paths": {
+      "@deepseek-ai/dsh-client-ui-session-mailbox": ["./packages/client/ui-session-mailbox/src/index.ts"],
+      "@deepseek-ai/dsh-client-ui-session-mailbox/client": ["./packages/client/ui-session-mailbox/src/client/index.tsx"],
+      "@deepseek-ai/dsh-api-session-mailbox-controller/types": ["./packages/api/session-mailbox-controller/src/types.ts"],
+      "@deepseek-ai/dsh-api-session-mailbox-controller": ["./packages/api/session-mailbox-controller/src/index.ts"],
       "@deepseek-ai/dsh-experimental-session-mailbox/host": ["./packages/experimental/session-mailbox/src/host-adapter.ts"],
       "@deepseek-ai/dsh-experimental-session-mailbox": ["./packages/experimental/session-mailbox/src/index.ts"],
       "@deepseek-ai/dsh-client-ui-entry-customization": ["./packages/client/ui-entry-customization/src/index.ts"],

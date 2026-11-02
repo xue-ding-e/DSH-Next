@@ -2,7 +2,7 @@
 
 English | [中文](README.zh.md)
 
-Internal implementation candidate, not a registered plugin or an enabled cross-session product feature. `SessionMailbox` uses the existing storage-domain service and its JSON backend; one authoritative record supplies both inbox and outbox without a cross-Session transaction. The Host must own the storage root exclusively.
+Internal durable library consumed by the [browser mailbox controller](../../api/session-mailbox-controller/README.md); this package itself registers no Remote or model tool. `SessionMailbox` uses the existing storage-domain service and its JSON backend; one authoritative record supplies both inbox and outbox without a cross-Session transaction. The Host must own the storage root exclusively.
 
 ## Admission and delivery
 
@@ -32,10 +32,14 @@ The file lock is cooperative, same-host and same-PID-namespace only. It probes r
 
 No prompt, tool, model request, token cost or KV-cache effect: this candidate does not expose mailbox content to a model. Future input delivery must log a dedicated source-attributed Session event before model visibility.
 
+The adapter initializes a version-1 `session_mailbox_identity` domain under the same lock before publication. Its durable UUID is a non-secret logical partition marker, never an authorization credential; message records retain their existing format.
+
+A trusted Host may supply an earlier monotonic deadline when issuing a selection. It can only shorten the configured TTL, so a route grant cannot outlive its authority while queued or awaiting persistence.
+
 ## Known Limitations and Deferred Work
 
 - The raw `SessionMailbox` still requires a single Host writer. Its JSON backend does not enforce cross-process leases; a second process can overwrite records. Multiple independent facilities over the same root are unsupported. No multi-process safety claim is made.
-- No Remote endpoint, model tool, Loader registration, UI, production permission adapter, dispatch integration, or shipped bundle. This is not release-ready.
+- Browser Remote and UI composition are owned by the separate controller and UI packages. Model tools and dispatch integration are absent. The complete release checks remain outstanding.
 - No trigger-turn operation. A future separately authorized dispatcher must recheck target permissions and lifecycle at activation, require explicit user authorization, maintain a durable activation receipt, and cap route depth and activation budget. Queue acceptance alone must never authorize execution.
 - Original text only; no attachments, source transcript capture or forwarding. Automatic agent-to-agent forwarding is absent, so it cannot form an automatic wake loop. Manual repeated sends remain subject to policy and quota.
 - Records retain sender principal key and terminal result, but this candidate has no append-only denial/transition audit stream, timestamp, expiry or retention compactor. Deleting terminal records would invalidate the current retry guarantee.

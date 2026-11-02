@@ -1,4 +1,4 @@
-import { mkdtemp, rm, chmod, readFile } from 'node:fs/promises'
+import { mkdtemp, rm, chmod, readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -42,6 +42,7 @@ const cleanups: (() => Promise<void>)[] = []
 afterEach(async () => {
   publishGate.afterRename = undefined
   vi.restoreAllMocks()
+  vi.unstubAllEnvs()
   for (const cleanup of cleanups.splice(0).reverse()) await cleanup()
 })
 
@@ -73,7 +74,8 @@ function scoped(ctx: Context, principal: Principal = { kind: 'owner' }, priorPee
   return { ctx: ctx.extend({ invocation }), peer, signal }
 }
 async function harness() {
-  const root = await mkdtemp(join(tmpdir(), 'mailbox-host-'))
+  const root = await mkdtemp(join(tmpdir(), 'mailbox-host-fixture-'))
+  vi.stubEnv('DSH_HOME', root)
   cleanups.push(() => rm(root, { recursive: true, force: true }))
   const ctx = new Context()
   cleanups.push(() => ctx.fiber.dispose())
@@ -283,18 +285,18 @@ describe('internal Host mailbox adapter', () => {
     expect(() => { fresh.check(h.owner.ctx) }).toThrow(/denied/)
     expect(() => new HostMailboxSelections(30_001)).toThrow(/invalid/)
   })
-  it('consumes expired selections waiting behind another operation without allowing duplicate queued claims', async () => {
+  it.each([undefined, 100])('consumes queued selections across an optional shortened route deadline (%s)', async (deadline) => {
     const h = await harness()
     const clock = vi.spyOn(performance, 'now').mockReturnValue(0)
     const entered = Promise.withResolvers<undefined>()
     const release = Promise.withResolvers<undefined>()
     h.persistence.beforeStat = async () => { entered.resolve(undefined); await release.promise }
     await withHostMailbox(h.ctx, h.config, async (adapter) => {
-      const first = adapter.execute(h.owner.ctx, adapter.selections.issue(h.owner.ctx, { action: 'inbox', target: C }, h.selection.signal))
+      const first = adapter.execute(h.owner.ctx, adapter.selections.issue(h.owner.ctx, { action: 'inbox', target: C }, h.selection.signal, deadline))
       await entered.promise
-      const queued = adapter.selections.issue(h.owner.ctx, { action: 'inbox', target: B }, h.selection.signal)
+      const queued = adapter.selections.issue(h.owner.ctx, { action: 'inbox', target: B }, h.selection.signal, deadline)
       const outcomes = Promise.allSettled([first, adapter.execute(h.owner.ctx, queued), adapter.execute(h.owner.ctx, queued)])
-      clock.mockReturnValue(1000)
+      clock.mockReturnValue(deadline ?? 1000)
       release.resolve(undefined)
       expect((await outcomes).map(result => result.status)).toEqual(['rejected', 'rejected', 'rejected'])
       await expect(adapter.execute(h.owner.ctx, queued)).rejects.toMatchObject({ code: 'denied' })
@@ -319,17 +321,17 @@ describe('internal Host mailbox adapter', () => {
       })
     },
   )
-  it.each(['expiry', 'selection cancellation'] as const)('reports an unavailable outcome for %s during a real publish and reconciles a fresh selection', async (cause) => {
+  it.each(['expiry', 'route expiry', 'selection cancellation'] as const)('reports an unavailable outcome for %s during a real publish and reconciles a fresh selection', async (cause) => {
     const h = await harness()
     const clock = vi.spyOn(performance, 'now').mockReturnValue(0)
     const send = { action: 'send' as const, source: A, target: B, requestId: 'expired-publish', text: 'private payload marker' }
     await withHostMailbox(h.ctx, h.config, async (adapter) => {
       publishGate.afterRename = (to) => {
         if (to !== join(h.config.privateRoot, 'session_mailbox.json')) return
-        if (cause === 'expiry') clock.mockReturnValue(1000)
+        if (cause === 'expiry' || cause === 'route expiry') clock.mockReturnValue(cause === 'route expiry' ? 100 : 1000)
         else h.selection.abort('user cancelled while publication was in progress')
       }
-      const token = adapter.selections.issue(h.owner.ctx, send, h.selection.signal)
+      const token = adapter.selections.issue(h.owner.ctx, send, h.selection.signal, cause === 'route expiry' ? 100 : undefined)
       const outcome = await adapter.execute(h.owner.ctx, token).catch((error: unknown) => error)
       if (!(outcome instanceof Error)) throw new Error('expected an unavailable operation outcome')
       expect(outcome).toMatchObject({ code: 'outcome-unavailable' })
@@ -363,4 +365,63 @@ describe('internal Host mailbox adapter', () => {
     await chmod(h.config.privateRoot, 0o755)
     await expect(withHostMailbox(h.ctx, h.config, async () => undefined)).rejects.toMatchObject({ code: 'denied' })
   })
+})
+
+it('allows a Host route deadline to shorten but never extend selection lifetime', async () => {
+  const h = await harness()
+  let now = 100
+  const issuer = new HostMailboxSelections(1000, () => now)
+  const operation = { action: 'inbox' as const, target: B }
+  const short = issuer.issue(h.owner.ctx, operation, h.selection.signal, 150)
+  const long = issuer.issue(h.owner.ctx, operation, h.selection.signal, 5000)
+  const lease = issuer.claim(h.owner.ctx, short)
+  now = 150
+  expect(() => { lease.check(h.owner.ctx) }).toThrow()
+  expect(() => issuer.issue(h.owner.ctx, operation, h.selection.signal, now)).toThrow()
+  now = 1100
+  expect(() => issuer.claim(h.owner.ctx, long)).toThrow()
+})
+
+it('persists a non-secret logical realm under the same private-root lock and refuses corrupt identity', async () => {
+  const first = await harness()
+  let realm: string | undefined
+  await withHostMailbox(first.ctx, first.config, async (adapter) => { realm = adapter.realm })
+  await withHostMailbox(first.ctx, first.config, async (adapter) => { expect(adapter.realm).toBe(realm) })
+  const second = await harness()
+  await withHostMailbox(second.ctx, second.config, async (adapter) => { expect(adapter.realm).not.toBe(realm) })
+  await writeFile(join(first.config.privateRoot, 'session_mailbox_identity.json'), '{truncated')
+  await expect(withHostMailbox(first.ctx, first.config, async () => {})).rejects.toThrow()
+})
+
+it('initializes one realm under cooperative ownership and preserves queued records when adding identity metadata', async () => {
+  const h = await harness()
+  const config = { ...h.config, lockWaitMs: 1000 }
+  const realms = await Promise.all([
+    withHostMailbox(h.ctx, config, async adapter => adapter.realm),
+    withHostMailbox(h.ctx, config, async adapter => adapter.realm),
+  ])
+  expect(realms[0]).toBe(realms[1])
+  const send = { action: 'send' as const, source: A, target: B, requestId: 'pre-identity-record', text: 'keep the receipt' }
+  await withHostMailbox(h.ctx, config, async (adapter) => {
+    await adapter.execute(h.owner.ctx, adapter.selections.issue(h.owner.ctx, send, h.selection.signal))
+  })
+  // Model the earlier mailbox layout, which had message records but no identity domain.
+  await rm(join(config.privateRoot, 'session_mailbox_identity.json'))
+  await withHostMailbox(h.ctx, config, async (adapter) => {
+    expect(adapter.realm).not.toBe(realms[0])
+    const inbox = adapter.selections.issue(h.owner.ctx, { action: 'inbox', target: B }, h.selection.signal)
+    expect(await adapter.execute(h.owner.ctx, inbox)).toMatchObject([{ requestId: send.requestId, text: send.text }])
+  })
+})
+it('refuses to publish an adapter after identity persistence loses acknowledgement and reopens the committed identity', async () => {
+  const h = await harness()
+  const opened = vi.fn()
+  publishGate.afterRename = (to) => {
+    if (to === join(h.config.privateRoot, 'session_mailbox_identity.json')) throw new Error('identity acknowledgement lost')
+  }
+  await expect(withHostMailbox(h.ctx, h.config, async () => { opened() })).rejects.toThrow()
+  expect(opened).not.toHaveBeenCalled()
+  publishGate.afterRename = undefined
+  const published = await readFile(join(h.config.privateRoot, 'session_mailbox_identity.json'), 'utf8')
+  await withHostMailbox(h.ctx, h.config, async (adapter) => { expect(published).toContain(adapter.realm) })
 })
