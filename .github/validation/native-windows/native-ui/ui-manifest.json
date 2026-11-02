@@ -1,0 +1,12 @@
+{
+  "OwnedUiJob.cs": "08a288d355714ad5cfd28466bfc8d5094beaf88082d98405511413039d040fe9",
+  "attest-listener.ps1": "7c3d9ed0ed050d5de80e3759232682ad766be0faf51d881e1077991de374f0a6",
+  "cdp-endpoint.mjs": "eb36c39a8068990abdcb4ffb67a9e226ed276c05165f8f921b82194483f699c9",
+  "cdp-endpoint.test.mjs": "6939c2eb6ef5b8b731596b8d8ce8fb444f6efc1c8b1c9a5f834c507677323b7d",
+  "probe-welcome.mjs": "311f291f934f30c6ff41b8d1a1f94b6ffb8c0d6e4fbed3779421bbc9478bff84",
+  "test-owned-ui-job.ps1": "188247480730bc69a14816b03da4bd3d8ca6bfa079664108d2195260cf25f6c6",
+  "installed-ui-smoke.ps1": "dc7eab2e04ec45e3e4cd37a6ff80c0a7edc563dfe55929c00948a6a90f55f74c",
+  "validate-ui-fixture.ps1": "a6b48e2e59a84072d3422ccf6620010b6a2ca3d97063328cb59fe2ec827c0912",
+  "listener-policy.ps1": "a8f8b356cc7ccb6898148a73e83084d7774c856c05a6a322c37b2891e1288d43",
+  "test-listener-policy.ps1": "e5d8641930c8f298beec80f3e2aea5d4d63b22dbee34b2edf0edabe59b0a7000"
+}

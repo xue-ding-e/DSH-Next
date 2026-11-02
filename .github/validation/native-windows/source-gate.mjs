@@ -5,8 +5,10 @@ import assert from 'node:assert/strict'
 import {execFileSync} from 'node:child_process'
 import {readFileSync} from 'node:fs'
 import {createHash} from 'node:crypto'
-export const PREVIOUS='525161dc8eeec6f02217d99d54bb6e48ac2d40f4'
+export const PREVIOUS='807bc292a77707e4fc0f15030cf61808ff9577a8'
+export const PHASE_A='525161dc8eeec6f02217d99d54bb6e48ac2d40f4'
 export const FIRST_CONTROL='96b46246bfc60aa0b47e01b7870fa9ebbe8b3e86'
+export const UI_MANIFEST_SHA='027da4b76ee691423271ef5365ca78191e2cd802c37f0dd142d31d2e31738ee0'
 export const PRODUCT='275192ff0c4857c137eeaf96f5320d3034c19d35'
 export const BRANCH='refs/heads/validation/released-windows-lifecycle'
 export const ROOT='.github/validation/native-windows/'
@@ -34,12 +36,22 @@ export function run(env,bootstrap){
   const git=(...args)=>execFileSync('git',args,{encoding:'utf8'}).trim()
   assert.equal(git('rev-parse','HEAD'),env.GITHUB_SHA)
   assert.equal(git('show','-s','--format=%P','HEAD'),PREVIOUS)
-  assert.equal(git('show','-s','--format=%P',PREVIOUS),FIRST_CONTROL)
+  assert.equal(git('show','-s','--format=%P',PREVIOUS),PHASE_A)
+  assert.equal(git('show','-s','--format=%P',PHASE_A),FIRST_CONTROL)
   assert.equal(git('show','-s','--format=%P',FIRST_CONTROL),bootstrap)
   assert.equal(git('show','-s','--format=%P',bootstrap),PRODUCT)
   assert.equal(git('diff','--name-only',bootstrap,FIRST_CONTROL),WORKFLOW)
-  assert.deepEqual(git('diff','--name-only',FIRST_CONTROL,PREVIOUS).split('\n').sort(),[WORKFLOW,ROOT+'source-gate.mjs'].sort())
-  assert.deepEqual(git('diff','--name-only',PREVIOUS,'HEAD').split('\n').sort(),[WORKFLOW,ROOT+'source-gate.mjs'].sort())
+  for(const [a,b] of [[FIRST_CONTROL,PHASE_A],[PHASE_A,PREVIOUS]]) assert.deepEqual(git('diff','--name-only',a,b).split('\n').sort(),[WORKFLOW,ROOT+'source-gate.mjs'].sort())
+  const uiBytes=readFileSync(ROOT+'native-ui/ui-manifest.json')
+  assert.equal(createHash('sha256').update(uiBytes).digest('hex'),UI_MANIFEST_SHA)
+  const ui=JSON.parse(uiBytes)
+  for(const [name,hash] of Object.entries(ui)) {
+    assert(/^[A-Za-z0-9.-]+$/.test(name)&&/^[0-9a-f]{64}$/.test(hash))
+    assert.equal(createHash('sha256').update(readFileSync(ROOT+'native-ui/'+name)).digest('hex'),hash)
+  }
+  const added=[ROOT+'native-ui/ui-manifest.json',...Object.keys(ui).map(n=>ROOT+'native-ui/'+n)]
+  assert.deepEqual(git('diff','--name-only',PREVIOUS,'HEAD').split('\n').sort(),[WORKFLOW,ROOT+'source-gate.mjs',...added].sort())
+  assert.deepEqual(git('diff','--diff-filter=A','--name-only',PREVIOUS,'HEAD').split('\n').sort(),added.sort())
   const manifest=JSON.parse(git('show',bootstrap+':'+ROOT+'manifest.json'))
   validateManifest(manifest)
   const expected=[WORKFLOW,ROOT+'manifest.json',ROOT+'source-gate.mjs',...Object.keys(manifest.files).map(x=>ROOT+x)].sort()
@@ -51,5 +63,5 @@ export function run(env,bootstrap){
     assert.equal(git('rev-parse','HEAD:'+ROOT+name),git('rev-parse',bootstrap+':'+ROOT+name))
   }
   assert.equal(git('rev-parse',FIRST_CONTROL+':'+ROOT+'source-gate.mjs'),git('rev-parse',bootstrap+':'+ROOT+'source-gate.mjs'))
-  console.log(JSON.stringify({control:env.GITHUB_SHA,bootstrap,product:PRODUCT,scope:'Phase B pinned published installer lifecycle only; no UI or automatic update qualification'}))
+  console.log(JSON.stringify({control:env.GITHUB_SHA,bootstrap,product:PRODUCT,scope:'Phase C0 fixed installed renderer/welcome only; no session menu or automatic update qualification'}))
 }
