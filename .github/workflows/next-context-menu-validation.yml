@@ -1,6 +1,8 @@
 name: Next desktop version declaration validation
 # Validation-branch control only: never promote this file to main with the product fix.
 on:
+  push:
+    branches: [validation/desktop-build-version-channel]
   workflow_dispatch:
     inputs:
       expected_control_sha:
@@ -17,14 +19,14 @@ concurrency:
   group: next-reviewed-heavy-validation
   cancel-in-progress: false
 env:
-  EXPECTED_CONTROL_SHA: ${{ inputs.expected_control_sha }}
-  EXPECTED_PRODUCT_SHA: ${{ inputs.expected_product_sha }}
+  EXPECTED_CONTROL_SHA: ${{ github.event_name == 'push' && github.sha || inputs.expected_control_sha }}
+  EXPECTED_PRODUCT_SHA: ${{ github.event_name == 'push' && '275192ff0c4857c137eeaf96f5320d3034c19d35' || inputs.expected_product_sha }}
   DSH_TELEMETRY_DISABLED: '1'
   DSH_SNAPSHOT: replay
   DSH_GATE_CONCURRENCY: '1'
 jobs:
   validate:
-    if: github.repository == 'xue-ding-e/DSH-Next' && github.ref == 'refs/heads/validation/desktop-build-version-channel' && github.event_name == 'workflow_dispatch' && github.sha == inputs.expected_control_sha
+    if: github.repository == 'xue-ding-e/DSH-Next' && github.ref == 'refs/heads/validation/desktop-build-version-channel' && ((github.event_name == 'workflow_dispatch' && github.sha == inputs.expected_control_sha && inputs.expected_product_sha == '275192ff0c4857c137eeaf96f5320d3034c19d35') || (github.event_name == 'push' && github.event.before == '003b110343268cd563e81433d0b1cbce8b65924b' && github.event.after == github.sha && github.event.created == false && github.event.deleted == false && github.event.forced == false))
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     defaults:
@@ -37,13 +39,13 @@ jobs:
         with:
           ref: ${{ github.sha }}
           path: control
-          fetch-depth: 2
+          fetch-depth: 4
           persist-credentials: false
       - name: Checkout declaration-only product
         timeout-minutes: 5
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
-          ref: ${{ inputs.expected_product_sha }}
+          ref: ${{ env.EXPECTED_PRODUCT_SHA }}
           path: product
           fetch-depth: 2
           persist-credentials: false

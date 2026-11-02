@@ -1,12 +1,12 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { BASE, DECLARATION, BLOB, CONTROLS, checkIdentity, checkMemory, checkTests } from './build-version-guard.mjs'
+import { BASE, PRODUCT, PREVIOUS_CONTROL, PREVIOUS_BLOBS, DECLARATION, BLOB, CONTROLS, checkIdentity, checkMemory, checkTests } from './build-version-guard.mjs'
 const good = () => ({ repo: 'xue-ding-e/DSH-Next', event: 'workflow_dispatch', ref: 'refs/heads/validation/desktop-build-version-channel',
-  expectedControl: 'a'.repeat(40), expectedProduct: 'b'.repeat(40), eventSha: 'a'.repeat(40), control: 'a'.repeat(40), product: 'b'.repeat(40),
-  controlParents: ['b'.repeat(40)], productParents: [BASE], productFiles: [DECLARATION], controlFiles: [...CONTROLS], blob: BLOB,
+  expectedControl: 'a'.repeat(40), expectedProduct: PRODUCT, eventSha: 'a'.repeat(40), control: 'a'.repeat(40), product: PRODUCT,
+  controlParents: [PREVIOUS_CONTROL], previousControlParents: [PRODUCT], previousControlFiles: [...CONTROLS], previousControlBlobs: [...PREVIOUS_BLOBS], productToControlFiles: [...CONTROLS], productParents: [BASE], productFiles: [DECLARATION], controlFiles: [...CONTROLS], blob: BLOB,
   productStatus: '', controlStatus: '' })
 test('accept exact reviewed linear graph', () => checkIdentity(good()))
-for (const [field, value] of Object.entries({ repo: 'other/repo', event: 'push', ref: 'refs/heads/main', expectedControl: 'main',
+for (const [field, value] of Object.entries({ repo: 'other/repo', event: 'pull_request', ref: 'refs/heads/main', expectedControl: 'main',
   eventSha: 'c'.repeat(40), product: 'c'.repeat(40), controlParents: ['b'.repeat(40), 'c'.repeat(40)], productParents: ['c'.repeat(40)],
   productFiles: [DECLARATION, 'package.json'], controlFiles: [...CONTROLS, '.github/workflows/next-release.yml'], blob: 'c'.repeat(40),
   productStatus: ' M package.json', controlStatus: '?? extra' })) {
@@ -24,3 +24,8 @@ for (const [field,value] of Object.entries({success:false,numTotalTests:24,numPa
   test(`reject report ${field}`, () => assert.throws(() => checkTests({...report(),[field]:value})))
 test('wrong file rejected', () => { const r=report();r.testResults[0].name='/other.spec.ts';assert.throws(()=>checkTests(r)) })
 test('individual skip rejected', () => { const r=report();r.testResults[0].assertionResults[0].status='pending';assert.throws(()=>checkTests(r)) })
+
+const push = () => ({...good(), event:'push', before:PREVIOUS_CONTROL, after:'a'.repeat(40), created:false, deleted:false, forced:false})
+test('accept exact first reviewed push', () => checkIdentity(push()))
+for (const [field,value] of Object.entries({before:'c'.repeat(40),after:'c'.repeat(40),created:true,deleted:true,forced:true,previousControlParents:['c'.repeat(40)],previousControlBlobs:[],previousControlFiles:[],productToControlFiles:[...CONTROLS,'package.json']}))
+  test(`reject push ${field}`, () => assert.throws(()=>checkIdentity({...push(),[field]:value})))
