@@ -3,14 +3,18 @@
   "attest-listener.ps1": "7c3d9ed0ed050d5de80e3759232682ad766be0faf51d881e1077991de374f0a6",
   "cdp-endpoint.mjs": "eb36c39a8068990abdcb4ffb67a9e226ed276c05165f8f921b82194483f699c9",
   "cdp-endpoint.test.mjs": "6939c2eb6ef5b8b731596b8d8ce8fb444f6efc1c8b1c9a5f834c507677323b7d",
-  "installed-ui-smoke.ps1": "b631e4327854a90718457d146d2e34c96bfb67484108c80a2d5c0755f43f0b25",
+  "compatibility-controls.test.mjs": "015f8bc73989b3547a49c9a7f5b6e1668dbb4a185c5f3d31ac2d517289780dd7",
+  "installed-ui-smoke.ps1": "c73a5f715e75b6eb55fca1c8103c1ecca694ec5d6b5dfb1a2417426071105047",
+  "invoke-check-update.ps1": "cfae248f0ae3dd7974d575b64851ef05e12cb6c5e81297ad6c4b041d4036daf6",
   "listener-policy.ps1": "a8f8b356cc7ccb6898148a73e83084d7774c856c05a6a322c37b2891e1288d43",
+  "probe-compatibility.mjs": "1ef24ae4a2a122df0bc273a00c159bb6e4d762138e4d44597b047eb5bb1763c1",
   "probe-session-menus.mjs": "0fa1b92a23af3afe5c67915ac675a9191a1b40ad1c630901992201de345221ba",
-  "probe-welcome.mjs": "28dd7057e2a5743a47b7e10a6d4a70883a5057b9c439c14dc90a853d40d5bfcd",
+  "probe-welcome.mjs": "46004f004d7349a541497c7cada21eb8b37267a9942207955b26e74f89f3d792",
+  "retained-state.mjs": "57a808375086de55df7532e216589fd52292fe3ff716b853f9e4880160eca833",
   "seed-installed-sessions.mjs": "7cc33ca8f79367b74419d3e5cf2db82458cfa72330dd1c6434a32ea5111df183",
   "synthetic-sessions.mjs": "96039b876885b106e4a2d8324be80c19ce1fa23e88d563606560cd49d7612ccf",
   "synthetic-sessions.test.mjs": "3d838ef4d0d444cd4c82423528be1f527342576e4b864f86cb5c04c71b2581a2",
   "test-listener-policy.ps1": "e5d8641930c8f298beec80f3e2aea5d4d63b22dbee34b2edf0edabe59b0a7000",
   "test-owned-ui-job.ps1": "188247480730bc69a14816b03da4bd3d8ca6bfa079664108d2195260cf25f6c6",
-  "validate-ui-fixture.ps1": "a6b48e2e59a84072d3422ccf6620010b6a2ca3d97063328cb59fe2ec827c0912"
+  "validate-ui-fixture.ps1": "372313e646444e37b9b1d5d5d172262e3dc3e1fe857de83a9a116382e942d846"
 }

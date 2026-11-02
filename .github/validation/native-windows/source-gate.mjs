@@ -3,12 +3,13 @@ import assert from 'node:assert/strict'
 import {execFileSync} from 'node:child_process'
 import {readFileSync} from 'node:fs'
 import {createHash} from 'node:crypto'
-export const PREVIOUS='6bfd53a8503638f227c453c2cb19271a7eda4fae'
+export const PREVIOUS='c2cd1fcc322c04224a952cf736a71ea419e0c3ef'
+export const PHASE_C0='6bfd53a8503638f227c453c2cb19271a7eda4fae'
 export const LIFECYCLE='807bc292a77707e4fc0f15030cf61808ff9577a8'
-export const PREVIOUS_TREE='9d5492a3eaacef45ea1067eba208868670dea4f2'
+export const PREVIOUS_TREE='72a85f77f5852987bae7b3b7708d9ac1e3e710e9'
 export const PHASE_A='525161dc8eeec6f02217d99d54bb6e48ac2d40f4'
 export const FIRST_CONTROL='96b46246bfc60aa0b47e01b7870fa9ebbe8b3e86'
-export const UI_MANIFEST_SHA='0192f1a93114e7858a94c459c83bc8151bc0ead86dfa7615c898336322b99a38'
+export const UI_MANIFEST_SHA='2fdda71599c1a03573981a0d1e4ef11f21c07f0682b10d269a4f804e92955009'
 export const PRODUCT='275192ff0c4857c137eeaf96f5320d3034c19d35'
 export const BRANCH='refs/heads/validation/released-windows-lifecycle'
 export const ROOT='.github/validation/native-windows/'
@@ -37,7 +38,8 @@ export function run(env,bootstrap){
   assert.equal(git('rev-parse','HEAD'),env.GITHUB_SHA)
   assert.equal(git('show','-s','--format=%P','HEAD'),PREVIOUS)
   assert.equal(git('rev-parse',PREVIOUS+'^{tree}'),PREVIOUS_TREE)
-  assert.equal(git('show','-s','--format=%P',PREVIOUS),LIFECYCLE)
+  assert.equal(git('show','-s','--format=%P',PREVIOUS),PHASE_C0)
+  assert.equal(git('show','-s','--format=%P',PHASE_C0),LIFECYCLE)
   assert.equal(git('show','-s','--format=%P',LIFECYCLE),PHASE_A)
   assert.equal(git('show','-s','--format=%P',PHASE_A),FIRST_CONTROL)
   assert.equal(git('show','-s','--format=%P',FIRST_CONTROL),bootstrap)
@@ -51,9 +53,9 @@ export function run(env,bootstrap){
     assert(/^[A-Za-z0-9.-]+$/.test(name)&&/^[0-9a-f]{64}$/.test(hash))
     assert.equal(createHash('sha256').update(readFileSync(ROOT+'native-ui/'+name)).digest('hex'),hash)
   }
-  assert.deepEqual(Object.keys(ui).sort(),["OwnedUiJob.cs", "attest-listener.ps1", "cdp-endpoint.mjs", "cdp-endpoint.test.mjs", "installed-ui-smoke.ps1", "listener-policy.ps1", "probe-session-menus.mjs", "probe-welcome.mjs", "seed-installed-sessions.mjs", "synthetic-sessions.mjs", "synthetic-sessions.test.mjs", "test-listener-policy.ps1", "test-owned-ui-job.ps1", "validate-ui-fixture.ps1"].sort())
-  const added=['synthetic-sessions.mjs','synthetic-sessions.test.mjs','seed-installed-sessions.mjs','probe-session-menus.mjs'].map(n=>ROOT+'native-ui/'+n)
-  const modified=['ui-manifest.json','probe-welcome.mjs','installed-ui-smoke.ps1'].map(n=>ROOT+'native-ui/'+n)
+  assert.deepEqual(Object.keys(ui).sort(),["OwnedUiJob.cs", "attest-listener.ps1", "cdp-endpoint.mjs", "cdp-endpoint.test.mjs", "compatibility-controls.test.mjs", "installed-ui-smoke.ps1", "invoke-check-update.ps1", "listener-policy.ps1", "probe-compatibility.mjs", "probe-session-menus.mjs", "probe-welcome.mjs", "retained-state.mjs", "seed-installed-sessions.mjs", "synthetic-sessions.mjs", "synthetic-sessions.test.mjs", "test-listener-policy.ps1", "test-owned-ui-job.ps1", "validate-ui-fixture.ps1"].sort())
+  const added=['probe-compatibility.mjs','invoke-check-update.ps1','compatibility-controls.test.mjs','retained-state.mjs'].map(n=>ROOT+'native-ui/'+n)
+  const modified=['ui-manifest.json','probe-welcome.mjs','installed-ui-smoke.ps1','validate-ui-fixture.ps1'].map(n=>ROOT+'native-ui/'+n)
   assert.deepEqual(git('diff','--name-only',PREVIOUS,'HEAD').split('\n').sort(),[WORKFLOW,ROOT+'source-gate.mjs',...added,...modified].sort())
   assert.deepEqual(git('diff','--diff-filter=A','--name-only',PREVIOUS,'HEAD').split('\n').sort(),added.sort())
   const manifest=JSON.parse(git('show',bootstrap+':'+ROOT+'manifest.json'))
@@ -67,5 +69,5 @@ export function run(env,bootstrap){
     assert.equal(git('rev-parse','HEAD:'+ROOT+name),git('rev-parse',bootstrap+':'+ROOT+name))
   }
   assert.equal(git('rev-parse',FIRST_CONTROL+':'+ROOT+'source-gate.mjs'),git('rev-parse',bootstrap+':'+ROOT+'source-gate.mjs'))
-  console.log(JSON.stringify({control:env.GITHUB_SHA,bootstrap,product:PRODUCT,scope:'Phase C1 fixed installed synthetic A/B session menus; no automatic update or configuration migration qualification'}))
+  console.log(JSON.stringify({control:env.GITHUB_SHA,bootstrap,product:PRODUCT,scope:'Phase D old-to-new configuration semantic qualification and independent public update check only; no updater install'}))
 }

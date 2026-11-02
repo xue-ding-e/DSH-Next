@@ -1,7 +1,7 @@
 $ErrorActionPreference='Stop'
 Set-StrictMode -Version Latest
 if ($env:GITHUB_ACTIONS -ne 'true' -or $env:RUNNER_ENVIRONMENT -ne 'github-hosted' -or $env:RUNNER_OS -ne 'Windows') {throw 'Hosted Windows fixture only'}
-foreach($name in @('listener-policy.ps1','test-listener-policy.ps1','attest-listener.ps1','installed-ui-smoke.ps1','test-owned-ui-job.ps1','validate-ui-fixture.ps1')){
+foreach($name in @('invoke-check-update.ps1','listener-policy.ps1','test-listener-policy.ps1','attest-listener.ps1','installed-ui-smoke.ps1','test-owned-ui-job.ps1','validate-ui-fixture.ps1')){
   $tokens=$null;$errors=$null
   [void][Management.Automation.Language.Parser]::ParseFile((Join-Path $PSScriptRoot $name),[ref]$tokens,[ref]$errors)
   if($errors.Count -ne 0){throw ('Native UI PowerShell parse failed '+$name+': '+($errors|Out-String))}

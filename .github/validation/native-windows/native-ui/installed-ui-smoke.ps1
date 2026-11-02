@@ -78,13 +78,18 @@ foreach ($p in $sentinels) { [IO.File]::WriteAllText($p,'synthetic acceptance on
 $expected = @{}
 foreach ($p in $sentinels) { $expected[$p] = (Get-FileHash -LiteralPath $p -Algorithm SHA256).Hash }
 $assets = @(
+  @{Version='0.2.1-rc.3.20261031.5'; Tag='next-v0.2.1-rc.3.20261031.5'; Sha='a3899282c58370f50b68cbd93b6960f67d0fdd57381a76697cb7ee1f09774e9d'; Source='5b6c9d32e815fce204ed69af1c89db5e82ffabe7'; Channel='nightly'}
   @{Version='0.2.1-rc.3.20261102.8'; Tag='v0.2.1-rc.3.20261102.8'; Sha='9b232ee56cba0b21ab16d7e1c1a007ae31418faf5fa6b44f571e1ee719786947'; Source='275192ff0c4857c137eeaf96f5320d3034c19d35'; Channel='rc'}
 )
 function Check-Retention {
   foreach ($p in $sentinels) { if (-not (Test-Path -LiteralPath $p) -or (Get-FileHash -LiteralPath $p -Algorithm SHA256).Hash -ne $expected[$p]) { throw "Synthetic data changed: $p" } }
 }
 $report = [Collections.Generic.List[object]]::new()
+$stageIndex=0
 foreach ($asset in $assets) {
+  $env:DSH_ACCEPTANCE_STAGE= $(if($stageIndex -eq 0){'old'}else{'new'})
+  $env:DSH_DESKTOP_UPDATE_JOURNAL_DIR=Join-Path $root ('journal-'+$env:DSH_ACCEPTANCE_STAGE)
+  New-Item -ItemType Directory -Path $env:DSH_DESKTOP_UPDATE_JOURNAL_DIR | Out-Null
   $name = 'dsh-next-' + $asset.Version + '-win-x64-unsigned.exe'
   $file = Join-Path $root $name
   Invoke-WebRequest -Uri ('https://github.com/xue-ding-e/DSH-Next/releases/download/'+$asset.Tag+'/'+$name) -OutFile $file -TimeoutSec 300
@@ -104,6 +109,7 @@ foreach ($asset in $assets) {
   foreach ($entry in $entries) {
     if ($entry.Hive -ne 'CurrentUser' -or -not $entry.InstallLocation -or [IO.Path]::GetFullPath($entry.InstallLocation).TrimEnd('\') -ne $install.TrimEnd('\')) { throw 'Unexpected installation scope or registered location' }
   }
+  if($stageIndex -eq 0){
   # Seed only via the fixed installed Electron runtime, before any GUI owns sessions.
   $seedReport=Join-Path $root 'seed-report.json'
   $seedScript=Join-Path $PSScriptRoot 'seed-installed-sessions.mjs'
@@ -119,13 +125,14 @@ foreach ($asset in $assets) {
   if(-not $seed.contextsDisposed -or @($seed.sessions).Count -ne 2){throw 'Incomplete synthetic seed evidence'}
   foreach($session in $seed.sessions){if(-not($session.writerExcluded -and $session.writerReleased -and $session.readbackExact -and $session.closedTurn)){throw 'Synthetic persistence validation incomplete'}}
   $env:DSH_ACCEPTANCE_SEED_REPORT=$seedReport
+  }
   # OS chooses a random loopback port. Release immediately before owned launch; any
   # race/foreign listener is rejected by attest-listener, never reused or killed.
   $reservation=[Net.Sockets.TcpListener]::new([Net.IPAddress]::Loopback,0)
   $reservation.Start()
   try { $port=([Net.IPEndPoint]$reservation.LocalEndpoint).Port } finally {$reservation.Stop()}
   if($port -le 1024){throw 'Unexpected privileged random port'}
-  $probeReport=Join-Path $root 'renderer-report.json'
+  $probeReport=Join-Path $root ('renderer-'+$env:DSH_ACCEPTANCE_STAGE+'-report.json')
   $pwsh=(Get-Process -Id $PID).Path
   $probeScript=Join-Path $PSScriptRoot 'attest-listener.ps1'
   $probeArgs='-NoProfile -File "'+$probeScript+'" -OwnerPid {OWNED_APP_PID} -Port '+$port+' -InstalledRoot "'+$install+'" -ReportPath "'+$probeReport+'"'
@@ -142,9 +149,9 @@ foreach ($asset in $assets) {
   }
   if(-not(Test-Path -LiteralPath $probeReport)){throw 'Renderer did not emit structured evidence'}
   $renderer=Get-Content -LiteralPath $probeReport -Raw | ConvertFrom-Json
-  if($renderer.phase -cne 'C1 installed synthetic session menus' -or -not $renderer.renderer.root -or -not $renderer.renderer.newSession){throw 'Incomplete renderer probe'}
+  if($renderer.phase -cne 'D configuration compatibility and check-only update' -or -not $renderer.renderer.root -or -not $renderer.renderer.newSession){throw 'Incomplete renderer probe'}
 
-  if(@($renderer.sessionMenus.checks).Count -ne 7 -or -not $renderer.sessionMenus.forkId){throw 'Incomplete A/B menu action evidence'}
+  if(-not $renderer.compatibility.compatibility.semanticChecksPassed){throw 'Semantic compatibility checks did not pass'}
   $protocolViews = @(Get-NextProtocolViews)
   if ($protocolViews.Count -eq 0) { throw 'No own protocol registration observed after packaged startup; removal is not yet testable' }
   $expectedCommand = '"' + $exe + '" "%1"'
@@ -154,6 +161,10 @@ foreach ($asset in $assets) {
   # Run guarantees the complete Job tree is empty before returning or throws after bounded cleanup.
   $report.Add(@{installedIdentity=$identity;registry=$entries;protocolViews=$protocolViews;installerSha256=$asset.Sha;installedExeSha256=(Get-FileHash $exe -Algorithm SHA256).Hash;processStart=$start;ui=$renderer;debugPortClosed=$true;autoUpdate='not asserted'})
   Check-Retention
+  $retainedReport=Join-Path $root ('retained-'+$env:DSH_ACCEPTANCE_STAGE+'.json')
+  & node (Join-Path $PSScriptRoot 'retained-state.mjs') $profile $retainedReport
+  if($LASTEXITCODE -ne 0){throw 'Real synthetic configuration/session capture failed'}
+  $stageIndex++
 }
 # Copying and _?= follows the upstream smoke test, avoiding temporary-uninstaller parent ambiguity.
 $uninstaller = Join-Path $install 'Uninstall DSH Next.exe'
@@ -164,8 +175,10 @@ Copy-Item -LiteralPath $uninstaller -Destination $copy
 $deadline = [DateTime]::UtcNow.AddSeconds(60)
 while (Test-Path -LiteralPath $install) { if ([DateTime]::UtcNow -gt $deadline) { throw 'Application directory remained after uninstall' }; Start-Sleep -Milliseconds 200 }
 Check-Retention
+& node (Join-Path $PSScriptRoot 'retained-state.mjs') $profile (Join-Path $root 'retained-after-uninstall.json') (Join-Path $root 'retained-new.json')
+if($LASTEXITCODE -ne 0){throw 'Actual synthetic configuration/session retention failed'}
 if (@(Get-ProductRegistrations).Count -ne 0) { throw 'Own install/uninstall registration remained' }
 if (@(Get-NextProtocolViews).Count -ne 0) { throw 'Owned Next protocol remained' }
-@{cases=$report;uninstall='application removed; five synthetic roots retained';nativeUI='C1 real installed synthetic A/B menu actions; see renderer report';automaticUpgrade='not run';root=$root} | ConvertTo-Json -Depth 16 | Set-Content (Join-Path $root 'lifecycle-report.json') -Encoding utf8
+@{cases=$report;uninstall='application removed; five synthetic roots retained';nativeUI='D1 old-created preferences and sessions after manual upgrade; D2 check-only results separate';automaticUpgrade='not run';root=$root} | ConvertTo-Json -Depth 16 | Set-Content (Join-Path $root 'lifecycle-report.json') -Encoding utf8
 # No broad registry, profile, workspace, or recursively followed-link cleanup: dispose the hosted VM.
 Write-Output ('Evidence: '+$root)
