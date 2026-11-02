@@ -6,6 +6,7 @@ import { app } from 'electron'
 import electronUpdater, { type AppUpdater, type ProgressInfo, type UpdateInfo } from 'electron-updater'
 import { gt, valid } from 'semver'
 import type { DesktopUpdateState } from './ipc.ts'
+import type { DesktopUpdateChannel } from './update-channel.ts'
 import { DesktopUpdateHttpExecutor } from './update-http-executor.ts'
 import { DesktopUpdatePreparationError } from './update-error.ts'
 
@@ -55,7 +56,7 @@ export class DesktopUpdateCoordinator {
     private readonly enabled: () => boolean = () => app.isPackaged && existsSync(join(process.resourcesPath, 'app-update.yml')),
     private readonly currentVersion: () => string = () => app.getVersion(),
     private readonly downloadResult?: (success: boolean, reason?: string) => void,
-    private readonly channel: 'nightly' | 'latest' = 'nightly',
+    private readonly channel: DesktopUpdateChannel = 'nightly',
   ) {
     if (updater === autoUpdater) {
       // electron-updater omits this internal transport property from its public declarations.
@@ -69,7 +70,9 @@ export class DesktopUpdateCoordinator {
     this.updater.autoDownload = false
     this.updater.autoInstallOnAppQuit = false
     this.updater.channel = channel
-    this.updater.allowPrerelease = channel === 'nightly'
+    // electron-updater only offers a release whose first prerelease field equals the channel,
+    // so every channel other than the stable one has to accept prerelease releases.
+    this.updater.allowPrerelease = channel !== 'latest'
     // Selecting a channel can enable downgrade in electron-updater.
     this.updater.allowDowngrade = false
     this.updater.on('download-progress', this.onProgress)

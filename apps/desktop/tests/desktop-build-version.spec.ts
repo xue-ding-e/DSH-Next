@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   DESKTOP_BUILD_VERSION_ENV,
+  desktopBuildVersionChannel,
   desktopBuildVersionPrefix,
   resolveDesktopBuildVersion,
   validateDesktopBuildVersion,
@@ -62,4 +63,22 @@ describe('desktop build version', () => {
     'opens %s build versions with %s', (productVersion, prefix) => {
       expect(desktopBuildVersionPrefix(productVersion)).toBe(prefix)
     })
+})
+
+describe('desktop build channel', () => {
+  it.each([
+    ['0.1.6-alpha.2.20260921.1', 'alpha'],
+    ['0.1.6-test.20260921.1', 'test'],
+    ['0.2.1-rc.3.20261031.5', 'rc'],
+  ])('names %s after its first prerelease field, which the updater matches by equality', (version, channel) => {
+    expect(desktopBuildVersionChannel(version)).toBe(channel)
+  })
+
+  it('publishes a stable version to the stable feed', () => {
+    expect(desktopBuildVersionChannel(STABLE)).toBe('latest')
+  })
+
+  it('rejects a version with no feed to name', () => {
+    expect(() => desktopBuildVersionChannel('not a version')).toThrow(/is not a version/u)
+  })
 })

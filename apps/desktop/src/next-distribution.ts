@@ -1,5 +1,7 @@
 /** Identity and data ownership for the separately installed Next desktop distribution. */
 
+import { desktopUpdateChannel, type DesktopUpdateChannel } from './update-channel.ts'
+
 /** Public identifiers owned by this recreated repository, separate from upstream installations. */
 export const NEXT_DESKTOP_IDENTITY = {
   appId: 'io.github.xue-ding-e.dsh-next',
@@ -15,7 +17,7 @@ export const NEXT_DESKTOP_IDENTITY = {
 /** Packaged Next updates use the public GitHub Release feed and install through electron-updater. */
 export interface NextDesktopDistribution {
   readonly updateMode: 'auto'
-  readonly channel: 'latest' | 'nightly'
+  readonly channel: DesktopUpdateChannel
 }
 
 /**
@@ -39,9 +41,9 @@ export function nextDesktopDistribution(manifest: unknown): NextDesktopDistribut
     || !('name' in manifest) || manifest.name !== NEXT_DESKTOP_IDENTITY.packageName
     || !('dshDesktopAppId' in manifest) || manifest.dshDesktopAppId !== NEXT_DESKTOP_IDENTITY.appId
     || ('dshMandatoryUpdatePolicy' in manifest && manifest.dshMandatoryUpdatePolicy !== undefined)
-    || !('dshDesktopUpdateChannel' in manifest)
-    || (manifest.dshDesktopUpdateChannel !== 'nightly' && manifest.dshDesktopUpdateChannel !== 'latest')) {
+    || !('dshDesktopUpdateChannel' in manifest)) {
     throw new Error('Next desktop: packaged distribution identity is invalid')
   }
-  return { updateMode: 'auto', channel: manifest.dshDesktopUpdateChannel }
+  // desktopUpdateChannel owns the channel rules, including the version-derived case.
+  return { updateMode: 'auto', channel: desktopUpdateChannel(manifest) }
 }

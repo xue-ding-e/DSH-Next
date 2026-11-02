@@ -43,7 +43,7 @@ description: "在本地或 Windows／macOS Actions 中生成 Desktop 安装包�
 
 在已安装锁定依赖及本文所述安装工具链的原生 Windows x64 构建主机上，使用 `pnpm --dir apps/desktop run package:next:win:x64 -- --build-version <approved-version>`。`--next` 必须配合 `--unsigned`，不继承签名凭据及上游更新服务。`--build-version auto` 只扫描本地 Next 产物，不能在干净 runner 上预留全局唯一发布版本；发布前须确认所选版本尚未使用。打包保留 `--publish never`，不创建 release、tag 或更新清单。
 
-安装包匿名检查公开 release，并在筛选更高版本的兼容未签名安装器前验证仓库 ID。稳定包使用非预发布的 `next-v<version>` release；预发布包使用相同版本 tag 规则的预发布 release。产物必须命名为 `dsh-next-<version>-win-x64-unsigned.exe` 或 `dsh-next-<version>-mac-<arch>-unsigned.dmg`。渠道为空、安装器缺失或列表不完整会明确报告，不要求 token。确认提示后仅打开已验证的 release 页面，不下载、执行或自动安装未签名程序。运行安装器前，用户须检查源码提交、产物校验和及平台未签名警告。签名自动更新还需单独配置签名者并验证清单；手动更新路径不会伪造 `latest.yml`、`latest-mac.yml`、`nightly.yml` 或 `nightly-mac.yml`。
+安装包匿名检查公开 release，并在筛选更高版本的兼容未签名安装器前验证仓库 ID。release tag 以单个 `v` 前缀携带版本号（`v<version>`），这是 `electron-updater` 唯一接受的前缀：它用 `/\/tag\/(v?[^/]+)$/` 解析 tag，凡是 `semver.valid` 拒绝的 tag 都会被跳过。预发布包按相同 tag 规则发布预发布 release。产物必须命名为 `dsh-next-<version>-win-x64-unsigned.exe` 或 `dsh-next-<version>-mac-<arch>-unsigned.dmg`。渠道为空、安装器缺失或列表不完整会明确报告，不要求 token。确认提示后仅打开已验证的 release 页面，不下载、执行或自动安装未签名程序。运行安装器前，用户须检查源码提交、产物校验和及平台未签名警告。签名自动更新还需单独配置签名者并验证清单；手动更新路径不会伪造 `latest.yml`、`latest-mac.yml`、`nightly.yml` 或 `nightly-mac.yml`。
 
 Next 默认使用 `~/.dsh-next`，也可通过绝对路径 `DSH_NEXT_HOME` 指定目录。它拒绝与官方默认 home、继承的自定义 `DSH_HOME` 或应用安装目录发生规范路径重叠，包括已有软链接或 junction 祖先。同身份重装保留数据；Next 卸载只移除应用文件，明确保留 profile、偏好设置和缓存。
 
@@ -78,7 +78,7 @@ pnpm --dir apps/desktop run package:win:x64 --build-version 0.1.6-alpha.1.202609
 
 production 发布使用产品版本本身，不传 `--build-version`。其上传成功后会把打包所用 commit 打成 `desktop-v<版本>` 标签；来自有改动工作区的构建不打标签，打标签失败也只打印手工命令，不会让已完成的上传变成失败。test 与本地构建有意不留标签，而所有产物的清单都记录 `dshBuildCommit` 与 `dshBuildDirty`，直接分发的构建同样可溯源。
 
-安装包独立于版本和发布环境内置 `DSH_DESKTOP_UPDATE_CHANNEL`（默认 `nightly`，也可选择 `latest`）。自动更新始终保留该通道，即使安装的是稳定版本；手动安装另一通道的包才会切换。latest 包拒绝预发布版本。稳定产品可生成 nightly 的 `-test.<date>.<sequence>` 构建，但该版本低于稳定基准，不能升级已安装的更高版本。保持自动降级关闭；稳定修复版需要提升产品版本。CI 版本选择与发布见 [CI 发布](../publishing/ci/README.zh.md#package-and-publish)。
+安装包内置 `DSH_DESKTOP_UPDATE_CHANNEL`，由打包时发布的版本推导：预发布构建取其首个预发布字段（`0.2.1-rc.3.<date>.<run>` 取 `rc`），稳定版本取 `latest`。`electron-updater` 只提供首个预发布字段与通道名相等的 release，因此通道与版本不能各自独立选择。每个 release 发布的通道清单以该通道命名（`rc.yml`），并同时发布 `latest.yml` 作为任一预发布通道的回退。通道随安装包封装，后续 release 无法更改它；切换通道需要安装另一通道构建的包。latest 包拒绝预发布版本。保持自动降级关闭；稳定修复版需要提升产品版本。CI 版本选择与发布见 [CI 发布](../publishing/ci/README.zh.md#package-and-publish)。
 
 <a id="configuration-and-local-builds"></a>
 

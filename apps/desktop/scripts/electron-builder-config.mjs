@@ -24,7 +24,7 @@ import { resolveDesktopAutoUpdateConfig } from './desktop-auto-update-environmen
 import { isNextDesktopPackage } from './next-package-environment.mjs'
 import { NEXT_DESKTOP_IDENTITY } from '../src/next-distribution.ts'
 import { resolveDesktopBuildCommit } from './desktop-build-commit.mjs'
-import { resolveDesktopBuildVersion } from './desktop-build-version.mjs'
+import { desktopBuildVersionChannel, resolveDesktopBuildVersion } from './desktop-build-version.mjs'
 import { resolveDesktopPolicyEnvironment } from './desktop-policy-environment.mjs'
 import { desktopArtifactOutput, desktopTargetBuildPaths, resolveDesktopBuildTarget } from './desktop-build-paths.mjs'
 import { installWindowsDirectoryInstaller } from './windows-directory-installer.mjs'
@@ -105,8 +105,10 @@ export function createElectronBuilderConfig(
   // The repository manifest is the only product-version source; workspace manifests are synchronized copies.
   const productVersion = JSON.parse(readFileSync(fileURLToPath(new URL('../../../package.json', import.meta.url)), 'utf8')).version
   const buildVersion = resolveDesktopBuildVersion(env, productVersion)
+  // The channel is the version's own prerelease field, so the published feed and the version
+  // it carries always agree — electron-updater matches them by exact string equality.
   const update = next
-    ? { channel: buildVersion.includes('-') ? 'nightly' : 'latest' }
+    ? { channel: desktopBuildVersionChannel(buildVersion) }
     : unsigned ? undefined : resolveDesktopAutoUpdateConfig(env, resolvedPlatform, resolvedArch)
   if (update?.channel === 'latest' && buildVersion.includes('-')) throw new Error('desktop package: latest requires a stable version')
   const packaged = resolveDesktopBuildCommit(env)
@@ -115,7 +117,7 @@ export function createElectronBuilderConfig(
     protocols: [{ name: next ? NEXT_DESKTOP_IDENTITY.productName : 'DeepSeek Harness', schemes: [next ? NEXT_DESKTOP_IDENTITY.protocol : 'dsh'] }],
     extraMetadata: {
       dshDesktopAppId: appId,
-      dshDesktopUpdateChannel: next ? (buildVersion.includes('-') ? 'nightly' : 'latest') : update?.channel ?? 'nightly',
+      dshDesktopUpdateChannel: next ? desktopBuildVersionChannel(buildVersion) : update?.channel ?? 'nightly',
       ...(next ? {
         name: NEXT_DESKTOP_IDENTITY.packageName,
         productName: NEXT_DESKTOP_IDENTITY.productName,

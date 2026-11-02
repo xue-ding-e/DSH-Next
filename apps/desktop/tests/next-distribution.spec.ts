@@ -5,14 +5,14 @@ import { nextDesktopPackageEnvironment } from '../scripts/next-package-environme
 import { createElectronBuilderConfig } from '../scripts/electron-builder-config.mjs'
 
 const manifest = () => ({ name: NEXT_DESKTOP_IDENTITY.packageName, productName: NEXT_DESKTOP_IDENTITY.productName,
-  dshDesktopAppId: NEXT_DESKTOP_IDENTITY.appId, dshDesktopUpdateChannel: 'nightly',
+  dshDesktopAppId: NEXT_DESKTOP_IDENTITY.appId, version: '0.2.1-rc.3', dshDesktopUpdateChannel: 'rc',
   dshNext: { schemaVersion: 1, repository: NEXT_DESKTOP_IDENTITY.repository,
     repositoryId: NEXT_DESKTOP_IDENTITY.repositoryId, updateMode: 'auto' } })
 
 describe('Next package identity', () => {
   it('leaves wholly unmarked official packages unchanged, but refuses partially marked Next packages', () => {
     expect(nextDesktopDistribution({ name: '@deepseek-ai/dsh-desktop', productName: 'DeepSeek Harness' })).toBeUndefined()
-    expect(nextDesktopDistribution(manifest())).toEqual({ channel: 'nightly', updateMode: 'auto' })
+    expect(nextDesktopDistribution(manifest())).toEqual({ channel: 'rc', updateMode: 'auto' })
     for (const value of [
       { name: NEXT_DESKTOP_IDENTITY.packageName }, { dshDesktopAppId: NEXT_DESKTOP_IDENTITY.appId },
       { ...manifest(), dshNext: undefined }, { ...manifest(), productName: 'DeepSeek Harness' },
@@ -29,10 +29,10 @@ describe('Next package identity', () => {
       expect(config.nsis.guid).toBe(NEXT_DESKTOP_IDENTITY.installerGuid)
       expect(config.protocols[0].schemes).toEqual(['dsh-next'])
       expect(config.artifactName).toBe('dsh-next-${version}-${os}-${arch}-unsigned.${ext}')
-      expect(config.publish).toEqual([{ provider: 'github', owner: 'xue-ding-e', repo: 'DSH-Next', releaseType: 'prerelease', channel: 'nightly' }])
+      expect(config.publish).toEqual([{ provider: 'github', owner: 'xue-ding-e', repo: 'DSH-Next', releaseType: 'prerelease', channel: 'rc' }])
       expect(config.files).toContain('lib/next-cli-entry.js')
       expect(config.extraMetadata).toMatchObject(manifest())
-      expect(nextDesktopDistribution(config.extraMetadata)).toEqual({ channel: 'nightly', updateMode: 'auto' })
+      expect(nextDesktopDistribution(config.extraMetadata)).toEqual({ channel: 'rc', updateMode: 'auto' })
       expect(environment.GH_TOKEN).toBeUndefined()
     },
   )

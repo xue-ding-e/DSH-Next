@@ -41,6 +41,7 @@ async function fixture(distribution: 'official' | 'next' = 'next') {
   }
   await emit('../src/next-cli-entry.ts', join(bootstrap, 'next-cli-entry.js'))
   await emit('../src/next-distribution.ts', join(bootstrap, 'next-distribution.js'))
+  await emit('../src/update-channel.ts', join(bootstrap, 'update-channel.js'))
   await emit('../src/next-profile.ts', join(bootstrap, 'next-profile.js'), { '@deepseek-ai/dsh-home-paths': './home-paths.js' })
   await emit('../../../packages/util/home-paths/src/index.ts', join(bootstrap, 'home-paths.js'))
   await emit('../../desktop-host/src/cli.ts', join(host, 'cli.js'), { '@deepseek-ai/dsh/lib/bin.js': './payload.js' })

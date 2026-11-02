@@ -22,15 +22,15 @@ workspaceSource.deregister()
 const repository = { id: NEXT_DESKTOP_IDENTITY.repositoryId, full_name: NEXT_DESKTOP_IDENTITY.repository, private: false }
 const base = `https://github.com/${repository.full_name}`
 const manifest = () => ({ productName: NEXT_DESKTOP_IDENTITY.productName, name: NEXT_DESKTOP_IDENTITY.packageName, dshDesktopAppId: NEXT_DESKTOP_IDENTITY.appId,
-  dshDesktopUpdateChannel: 'nightly', dshNext: { schemaVersion: 1, repositoryId: repository.id,
+  version: '0.2.1-rc.3', dshDesktopUpdateChannel: 'rc', dshNext: { schemaVersion: 1, repositoryId: repository.id,
     repository: repository.full_name, updateMode: 'manual' } })
 const release = (version = '0.2.1-rc.3.20261029.1', platform = 'win', arch = 'x64') => {
-  const tag = `next-v${version}`
+  const tag = `v${version}`
   const filename = `dsh-next-${version}-${platform}-${arch}-unsigned.${platform === 'win' ? 'exe' : 'dmg'}`
   return { draft: false, prerelease: version.includes('-'), tag_name: tag, html_url: `${base}/releases/tag/${tag}`,
     assets: [{ name: filename, state: 'uploaded', size: 1234, browser_download_url: `${base}/releases/download/${tag}/${filename}` }] }
 }
-const select = (values) => selectNextManualRelease(values, 'nightly', '0.2.1-rc.3', 'win32', 'x64')
+const select = (values) => selectNextManualRelease(values, 'rc', '0.2.1-rc.3', 'win32', 'x64')
 const reply = (body, status = 200) => new Response(JSON.stringify(body), { status })
 
 test('Next identifiers separate installation, protocol, package user data, and Harness home', () => {
@@ -47,7 +47,7 @@ test('Next identifiers separate installation, protocol, package user data, and H
 
 test('unmarked packages retain their existing behavior while malformed Next identity fails closed', () => {
   assert.equal(nextDesktopDistribution({ name: '@deepseek-ai/dsh-desktop' }), undefined)
-  assert.deepEqual(nextDesktopDistribution(manifest()), { channel: 'nightly', updateMode: 'manual' })
+  assert.deepEqual(nextDesktopDistribution(manifest()), { channel: 'rc', updateMode: 'manual' })
   for (const change of [
     value => { delete value.dshNext },
     value => { value.productName = 'DeepSeek Harness' },
@@ -108,8 +108,8 @@ for (const [name, change] of [
 
 test('macOS selects only the requested architecture', () => {
   const value = release('0.2.2-rc.1', 'mac', 'arm64')
-  assert.equal(selectNextManualRelease([value], 'nightly', '0.2.1-rc.3', 'darwin', 'arm64').kind, 'available')
-  assert.deepEqual(selectNextManualRelease([value], 'nightly', '0.2.1-rc.3', 'darwin', 'x64'), { kind: 'unavailable' })
+  assert.equal(selectNextManualRelease([value], 'rc', '0.2.1-rc.3', 'darwin', 'arm64').kind, 'available')
+  assert.deepEqual(selectNextManualRelease([value], 'rc', '0.2.1-rc.3', 'darwin', 'x64'), { kind: 'unavailable' })
 })
 
 test('release requests use public API endpoints with no credentials or redirects', async () => {
@@ -117,7 +117,7 @@ test('release requests use public API endpoints with no credentials or redirects
   const request = async (url, options) => {
     calls.push([url, options]); return reply(calls.length === 1 ? repository : [release()])
   }
-  assert.equal((await checkNextManualRelease('nightly', '0.2.1-rc.3', 'win32', 'x64', request)).kind, 'available')
+  assert.equal((await checkNextManualRelease('rc', '0.2.1-rc.3', 'win32', 'x64', request)).kind, 'available')
   assert.deepEqual(calls.map(([url]) => url), [`https://api.github.com/repos/${repository.full_name}`, `https://api.github.com/repos/${repository.full_name}/releases?per_page=100`])
   for (const [, options] of calls) {
     assert.equal(options.credentials, 'omit'); assert.equal(options.redirect, 'error')
@@ -127,7 +127,7 @@ test('release requests use public API endpoints with no credentials or redirects
 
 test('a recreated repository with another ID stops before reading releases', async () => {
   let calls = 0
-  const result = await checkNextManualRelease('nightly', '0.2.1-rc.3', 'win32', 'x64', async () => {
+  const result = await checkNextManualRelease('rc', '0.2.1-rc.3', 'win32', 'x64', async () => {
     calls++; return reply({ ...repository, id: repository.id - 1 })
   })
   assert.deepEqual(result, { kind: 'error', reason: 'identity' }); assert.equal(calls, 1)
@@ -136,7 +136,7 @@ test('a recreated repository with another ID stops before reading releases', asy
 for (const [status, result] of [[404, { kind: 'unavailable' }], [403, { kind: 'error', reason: 'access' }], [500, { kind: 'error', reason: 'response' }]]) {
   test(`release HTTP ${status} has a bounded actionable category`, async () => {
     let calls = 0
-    assert.deepEqual(await checkNextManualRelease('nightly', '0.2.1-rc.3', 'win32', 'x64', async () =>
+    assert.deepEqual(await checkNextManualRelease('rc', '0.2.1-rc.3', 'win32', 'x64', async () =>
       ++calls === 1 ? reply(repository) : reply({}, status)), result)
   })
 }
@@ -149,7 +149,7 @@ test('check coalescing and disposal never start an installer or publish stale re
   const first = coordinator.check(), second = coordinator.check()
   assert.equal(calls, 1)
   coordinator.dispose()
-  resolveLookup({ kind: 'available', version: '0.2.2', page: `${base}/releases/tag/next-v0.2.2` })
+  resolveLookup({ kind: 'available', version: '0.2.2', page: `${base}/releases/tag/v0.2.2` })
   await Promise.all([first, second]); assert.deepEqual(states, [])
   await assert.rejects(() => coordinator.check(), /disposed/u)
 })

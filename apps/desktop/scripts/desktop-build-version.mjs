@@ -102,3 +102,23 @@ export function desktopBuildVersionPrefix(productVersion) {
   const [release] = product.version.split('-')
   return `${release}-${requiredFields(product).join('.')}.`
 }
+
+/**
+ * The update channel a build version publishes to.
+ *
+ * `electron-updater` only accepts a release whose first prerelease field equals the channel,
+ * so a version-derived channel keeps the feed and the version in agreement; a stable version
+ * uses the stable `latest` feed.
+ * @param {string} version - Version this build publishes.
+ * @returns {string} The channel name, which is also its feed filename without the extension.
+ */
+export function desktopBuildVersionChannel(version) {
+  const parsed = parseVersion(version, 'build version')
+  if (parsed.prerelease.length === 0) return 'latest'
+  const [field] = parsed.prerelease
+  if (typeof field !== 'string' || field === '') {
+    // A purely numeric field cannot name a feed; the version scheme above never produces one.
+    throw new Error(`desktop build version: ${version} cannot name an update channel`)
+  }
+  return field
+}

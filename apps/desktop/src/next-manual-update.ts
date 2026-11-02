@@ -2,6 +2,7 @@
 import { gt, prerelease, valid } from 'semver'
 import type { DesktopUpdateState } from './ipc.ts'
 import { NEXT_DESKTOP_IDENTITY } from './next-distribution.ts'
+import type { DesktopUpdateChannel } from './update-channel.ts'
 
 /** Missing releases and missing target installers differ from network or access failures. */
 export type NextManualUpdateResult =
@@ -13,6 +14,11 @@ export type NextManualUpdateResult =
 
 const API = `https://api.github.com/repos/${NEXT_DESKTOP_IDENTITY.repository}`
 const WEB = `https://github.com/${NEXT_DESKTOP_IDENTITY.repository}`
+/**
+ * Release tags carry the version behind a single `v`, matching the prefix electron-updater parses;
+ * any longer prefix makes `semver.valid` reject the tag and hides the whole feed.
+ */
+const TAG_PREFIX = 'v'
 
 function record(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -27,7 +33,7 @@ function record(value: unknown): value is Record<string, unknown> {
  * @param arch Native package architecture.
  * @returns A validated public release page, current, or unavailable; no installer is executed.
  */
-export function selectNextManualRelease(releases: unknown, channel: 'latest' | 'nightly', currentVersion: string,
+export function selectNextManualRelease(releases: unknown, channel: DesktopUpdateChannel, currentVersion: string,
   platform: string, arch: string): NextManualUpdateResult {
   if (!Array.isArray(releases) || valid(currentVersion) !== currentVersion) return { kind: 'error', reason: 'response' }
   if (!(platform === 'win32' && arch === 'x64') && !(platform === 'darwin' && ['x64', 'arm64'].includes(arch))) {
@@ -36,10 +42,12 @@ export function selectNextManualRelease(releases: unknown, channel: 'latest' | '
   let selected: { version: string; page: string } | undefined
   let compatible = false
   for (const release of releases) {
-    if (!record(release) || release.draft !== false || release.prerelease !== (channel === 'nightly')
-      || typeof release.tag_name !== 'string' || !release.tag_name.startsWith('next-v') || !Array.isArray(release.assets)) continue
-    const version = release.tag_name.slice('next-v'.length)
+    if (!record(release) || release.draft !== false || release.prerelease !== (channel !== 'latest')
+      || typeof release.tag_name !== 'string' || !release.tag_name.startsWith(TAG_PREFIX) || !Array.isArray(release.assets)) continue
+    const version = release.tag_name.slice(TAG_PREFIX.length)
     if (valid(version) !== version || version.includes('+') || (prerelease(version) !== null) !== release.prerelease) continue
+    // The first prerelease field names the channel, which is how the automatic updater matches it.
+    if ((prerelease(version)?.[0] ?? 'latest') !== channel) continue
     const page = `${WEB}/releases/tag/${encodeURIComponent(release.tag_name)}`
     if (release.html_url !== page) continue
     const os = platform === 'win32' ? 'win' : 'mac'
@@ -65,7 +73,7 @@ export function selectNextManualRelease(releases: unknown, channel: 'latest' | '
  * @param request HTTP transport; defaults to anonymous fetch and is replaceable in tests.
  * @returns A structured result without raw response diagnostics or private request data.
  */
-export async function checkNextManualRelease(channel: 'latest' | 'nightly', currentVersion: string,
+export async function checkNextManualRelease(channel: DesktopUpdateChannel, currentVersion: string,
   platform: string, arch: string, request: typeof fetch = fetch): Promise<NextManualUpdateResult> {
   const json = async (response: Response): Promise<{ value: unknown } | undefined> => {
     const text = await response.text()
@@ -142,7 +150,7 @@ export class NextManualUpdateCoordinator {
    */
   async check(): Promise<DesktopUpdateState> {
     if (this.disposed) throw new Error('Next update check is disposed')
-    this.operation ??= this.lookup().then(result => {
+    this.operation ??= this.lookup().then((result) => {
       if (this.disposed) return this.current
       this.checked = result
       this.current = this.publish(result.kind === 'available' ? { phase: 'available', version: result.version }

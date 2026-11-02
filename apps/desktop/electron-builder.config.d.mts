@@ -17,7 +17,7 @@ export interface DesktopElectronBuilderConfig {
   ]
   readonly extraMetadata: {
     readonly dshDesktopAppId: string
-    readonly dshDesktopUpdateChannel: 'latest' | 'nightly'
+    readonly dshDesktopUpdateChannel: string
     readonly name?: string
     readonly productName?: string
     readonly dshNext?: { readonly schemaVersion: 1; readonly repository: string; readonly repositoryId: number; readonly updateMode: 'manual' }

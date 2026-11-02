@@ -2,13 +2,14 @@
 
 import { valid } from 'semver'
 import { platformClientHeaders, type AccountClientMetadata } from '@deepseek-ai/dsh-deepseek-account'
+import type { DesktopUpdateChannel } from './update-channel.ts'
 
 /** Installed release identity; no field is supplied by a renderer. */
 export interface DesktopPolicyIdentity {
   readonly platform: 'win32' | 'darwin'
   readonly bundledDshVersion: string
   readonly arch: 'x64' | 'arm64'
-  readonly channel: 'nightly' | 'latest'
+  readonly channel: DesktopUpdateChannel
 }
 
 /** Validated deployment choices; test authentication is explicitly enabled, never inferred from a redirect. */
