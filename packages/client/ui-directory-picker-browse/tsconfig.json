@@ -28,6 +28,9 @@
     },
     {
       "path": "../ui-workspace"
+    },
+    {
+      "path": "../ui-permission-presets"
     }
   ]
 }

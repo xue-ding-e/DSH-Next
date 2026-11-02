@@ -15,13 +15,20 @@
  * The General-settings row separately writes the default preset for sessions
  * created later through the host Settings API.
  */
+import type {} from '@deepseek-ai/dsh-client-resources/client'
+import type {} from '@deepseek-ai/dsh-api-workspace-controller/client'
+import type {} from '@deepseek-ai/dsh-api-session-controller/remote-events'
+import { DirectoryCommands, directoryAddress } from './directories.ts'
+import { SessionDirectories, type SessionDirectoriesInjected } from './SessionDirectories.tsx'
+import { directoryDictionaries } from './directories-locales.ts'
+
 import type { Context as ClientContext } from '@deepseek-ai/cordis'
 import type { SessionFace } from '@deepseek-ai/dsh-api-session-controller/client'
 import type { SessionId } from '@deepseek-ai/dsh-api-remotes/client'
 import type { PermissionCatalog, PermissionSelection } from '@deepseek-ai/dsh-permission-presets/client'
 // Direct dependency: catalog settlements are fenced by the actual connection
 // generation rather than by a parallel domain counter.
-import type {} from '@deepseek-ai/dsh-client-connection/client'
+import type { ConnectionHandle } from '@deepseek-ai/dsh-client-connection/client'
 // Type-only: pulls the locale plugin's Context merge (ctx.locale).
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 // Type-only: the settings slot types (this package registers a General row).
@@ -48,6 +55,7 @@ import {
 } from './presentation.ts'
 import { PermissionPresetSettingsController } from './settings-store.ts'
 
+export type { SessionDirectoriesInjected, SessionDirectoriesProps } from './SessionDirectories.tsx'
 export type { PermissionRowInjected, PermissionRowProps } from './PermissionRow.tsx'
 export type { PermissionCatalogState } from './catalog.ts'
 export type { PermissionSelectInjected, PermissionSelectProps } from './PermissionSelect.tsx'
@@ -57,8 +65,8 @@ export type {
 
 /** Required services (cordis fiber inject). */
 export const inject = [
-  'commandUi', 'connection', 'sessions', 'slots', 'locale', 'remote',
-  'remote.permissionPresets', 'remote.settings',
+  'resources', 'workspaces', 'commandUi', 'connection', 'sessions', 'slots', 'locale', 'remote',
+  'remote.session', 'remote.permissionPresets', 'remote.settings',
   'configForms', 'settingsSchema',
 ]
 
@@ -111,6 +119,37 @@ function optionsOf(
  * @param ctx - client root context.
  */
 export function apply(ctx: ClientContext): void {
+  const connection = ctx.get('connection') as ConnectionHandle
+  const directories = new DirectoryCommands(ctx.remote.session)
+  ctx.effect(() => ctx.resources.register(directories.provider), 'ui-permission: directory resources')
+  ctx.effect(() => () => { directories.dispose() }, 'ui-permission: directory request lifetime')
+  ctx.effect(() => ctx.locale.register('permission.directories', directoryDictionaries), 'ui-permission: directory copy')
+  ctx.remote.$on('api-session/directories-changed', (sessionId) => { directories.invalidate(sessionId) })
+  ctx.remote.$on('api-session/removed', (sessionId) => { directories.replaceLifetime(sessionId) })
+  ctx.remote.$on('api-session/added', (summary) => { directories.replaceLifetime(summary.sessionId) })
+  ctx.effect(() => connection.generation.subscribe(() => { directories.reset() }), 'ui-permission: directory connection')
+  ctx.slots.inject('conversation.session.header.utilities', () => ctx.slots.register({
+    name: 'conversation.session.header.utilities', id: 'session-directories', order: 150,
+    locale: 'permission.directories',
+    children: { 'session.directories.directoryFlow': { kind: 'single', scope: 'root' } },
+    inject: (sessionId: SessionId): SessionDirectoriesInjected => ({
+      sessionId, address: directoryAddress(sessionId),
+      hooks: {
+        workspaceList: ctx.workspaces.list, directoryLifetime: directories.lifetimeOf(sessionId),
+        directoryConnection: directories.connection, directoryChange: directories.changes,
+        directoryFlow: {
+          getSnapshot: () => ctx.slots.entries('session.directories.directoryFlow').length > 0,
+          subscribe: listener => ctx.slots.subscribe('session.directories.directoryFlow', listener),
+        },
+      },
+      replace: (roots, revision) => directories.replace(sessionId, roots, revision),
+      saveDefaults: async (workspaceId, roots) => { await ctx.workspaces.setRoots(workspaceId, roots) },
+      prepare: () => directories.prepare(sessionId), confirm: nonce => directories.confirm(sessionId, nonce),
+      cancel: nonce => directories.cancel(sessionId, nonce), abort: () => { directories.abort(sessionId) },
+      refresh: () => { directories.invalidate(sessionId) },
+    }),
+  }, SessionDirectories))
+
   const command = ctx.get('commandUi') as CommandUiContract
   const sessions = ctx.sessions
   const accessDictionaries = {

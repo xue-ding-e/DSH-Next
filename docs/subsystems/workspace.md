@@ -190,6 +190,33 @@ interface SessionActivity {
 
 [`dsh-workspace-controller`](../../packages/api/workspace-controller) serves workspace CRUD to GUI clients over `ctx.workspaceRegistry`, and [`dsh-session-controller`](../../packages/api/session-controller) performs the create-session-then-attach flow above. [dsh-agent-instructions](../../packages/context/agent-instructions) is **not** a consumer despite the name: it discovers AGENTS.md-style instruction files under an agent's own cwd and never touches `ctx.workspaceRegistry` — the shared word refers to the user's working directory, not to this registry's entities.
 
+```ts type-equiv
+/** One durable Workspace projected for browser consumers. */
+interface WorkspaceView {
+  readonly workspaceId: WorkspaceId
+  /** Canonical host directory path. */
+  readonly path: string
+  /** Defaults for new Sessions only; write entries remain pending requests. */
+  readonly additionalRoots: readonly WorkspaceAdditionalRoot[]
+  /** User-visible title. */
+  readonly title: string
+  /** Sessions accounted to this Workspace in manual order. */
+  readonly sessionIds: readonly SessionId[]
+  /** ISO-8601 creation instant. */
+  readonly createdAt: string
+  /** ISO-8601 last-mutation instant. */
+  readonly updatedAt: string
+}
+```
+
+```ts type-equiv
+/** Save directory defaults for newly created Sessions, not active execution grants. */
+interface WorkspaceRootsRequest {
+  readonly workspaceId: WorkspaceId
+  readonly roots: readonly WorkspaceAdditionalRoot[]
+}
+```
+
 <!-- BEGIN GENERATED cordis-surface (gen-cordis-catalog.ts) — do not edit between markers -->
 
 <a id="cordis-surface"></a>

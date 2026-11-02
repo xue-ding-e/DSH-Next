@@ -112,7 +112,7 @@ The generated [configuration catalog](../../../docs/config-catalog.md#deepseek-a
 
 Blockquotes travel as ordinary prompt text without quote metadata. Local submission echoes and durable messages use the same text rendering rules; queue edits replace content while retaining prompt correlation.
 
-New Workspace Sessions capture non-empty additional-directory defaults during Agent setup, before publication and turn admission. Setup failure leaves no executable Agent registered. Blank-session reuse and resume do not refresh defaults; forks retain the selected event prefix rather than the latest Workspace defaults. The required snapshot event records pending requests only: neither imported history nor a write request grants execution access. Owner-only `prepareRoots` / `confirmRoots` / `cancelRoots` activate a one-use preview through the live Peer and idle/resource fences; see [sandbox-policy](../../sandbox/sandbox-policy/README.md) for lifetime and backend limits. Directory-selection UI remains deferred.
+New Workspace Sessions capture non-empty additional-directory defaults during Agent setup, before publication and turn admission. Setup failure leaves no executable Agent registered. Blank-session reuse and resume do not refresh defaults; forks retain the selected event prefix rather than the latest Workspace defaults. The required snapshot event records pending requests only: neither imported history nor a write request grants execution access. Owner-only `prepareRoots` / `confirmRoots` / `cancelRoots` activate a one-use preview through the live Peer and idle/resource fences; see [sandbox-policy](../../sandbox/sandbox-policy/README.md) for lifetime and backend limits. The [directory controls](../../client/ui-permission-presets/README.md) expose selection and explicit confirmation.
 
 <a id="model-experience"></a>
 ## Model Experience
@@ -145,3 +145,4 @@ No direct effect; model requests remain owned by the Agent and LLM packages.
 None.
 
 </details>
+`session/roots` reads current directory facts; `session/replaceRoots` saves a replacement pending selection under the expected roots revision and the idle resource checks, revoking any previous confirmation. The prepare/confirm/cancel calls carry request cancellation. `api-session/directories-changed` is a Session-authorized invalidation, not a global activity broadcast or an authorization receipt. Clients reread current state after invalidation or reconnect.

@@ -29,10 +29,11 @@ import { buildModelCatalog, hasProviderApiKey } from './catalog.ts'
 import { SessionSkillCatalog } from './skill-catalog.ts'
 import { SessionMediaReferences } from './media-references.ts'
 import { ArchivedSessionGate } from './archived-session-gate.ts'
-import { prepareSessionRoots, confirmSessionRoots, cancelSessionRoots } from './root-permissions.ts'
+import { prepareSessionRoots, readSessionRoots, replaceSessionRoots, confirmSessionRoots, cancelSessionRoots } from './root-permissions.ts'
 import type {
   ModelCatalog,
-  SessionRootsPrepareRequest, SessionRootsConfirmRequest, SessionRootsPreview, SessionRootsReceipt,
+  SessionRootsPrepareRequest, SessionRootsReplaceRequest, SessionRootsState,
+  SessionRootsConfirmRequest, SessionRootsPreview, SessionRootsReceipt,
   SessionWorkspacePathApplication,
   SessionAddress,
   SessionAttachmentRequest,
@@ -233,7 +234,11 @@ export class SessionController extends TypertRemoteService {
     ctx.on('agent/error', ({ agent, error }) => {
       ctx.emit('api-session/error', agent.id, errorChain(error))
     })
+    ctx.on('sandbox/directories-changed', (sessionId) => { ctx.emit('api-session/directories-changed', sessionId) })
     ctx.on('session/event', (session, event) => {
+      if (event.type === 'sandbox/mode' || event.type === 'sandbox/roots-requested') {
+        ctx.emit('api-session/directories-changed', session.id)
+      }
       if (event.type !== 'user/message' || event.data.source.kind !== 'user') return
       ctx.emit('api-session/activity', session.id, event.time)
     })
@@ -511,12 +516,38 @@ export class SessionController extends TypertRemoteService {
   }
 
   /**
+   * Read saved selections and current process activation for the owner.
+   * @param request - exact live Session to inspect.
+   * @returns execution-scope facts, including backend write support.
+   * @param signal - caller lifetime supplied by the Gateway.
+   */
+  @Remote('roots')
+  roots(request: SessionRootsPrepareRequest, signal: AbortSignal): Promise<SessionRootsState> {
+    void signal // Gateway also carries this lifetime on the original invocation.
+    return readSessionRoots(this.ctx, request.sessionId)
+  }
+
+  /**
+   * Replace a Session's pending directory selection without granting writes.
+   * @param request - complete selection and the revision observed by the editor.
+   * @returns current facts; any previous grant requires fresh confirmation.
+   * @param signal - caller lifetime supplied by the Gateway.
+   */
+  @Remote('replaceRoots')
+  replaceRoots(request: SessionRootsReplaceRequest, signal: AbortSignal): Promise<SessionRootsState> {
+    void signal // Gateway also carries this lifetime on the original invocation.
+    return replaceSessionRoots(this.ctx, request.sessionId, request.roots, request.expectedRevision)
+  }
+
+  /**
    * Preview saved directory requests for this authenticated owner Peer.
    * @param request - exact live Session to preview; no principal is accepted.
    * @returns an expiring one-use preview; this operation grants no permissions.
+   * @param signal - caller lifetime supplied by the Gateway.
    */
   @Remote('prepareRoots')
-  prepareRoots(request: SessionRootsPrepareRequest): Promise<SessionRootsPreview> {
+  prepareRoots(request: SessionRootsPrepareRequest, signal: AbortSignal): Promise<SessionRootsPreview> {
+    void signal // Gateway also carries this lifetime on the original invocation.
     return prepareSessionRoots(this.ctx, request.sessionId)
   }
 
@@ -524,18 +555,22 @@ export class SessionController extends TypertRemoteService {
    * Confirm a preview under true-idle and resource admission fences.
    * @param request - exact Session and Peer-bound preview nonce.
    * @returns a process-local permission receipt, never a portable grant.
+   * @param signal - caller lifetime supplied by the Gateway.
    */
   @Remote('confirmRoots')
-  confirmRoots(request: SessionRootsConfirmRequest): Promise<SessionRootsReceipt> {
+  confirmRoots(request: SessionRootsConfirmRequest, signal: AbortSignal): Promise<SessionRootsReceipt> {
+    void signal // Gateway also carries this lifetime on the original invocation.
     return confirmSessionRoots(this.ctx, request.sessionId, request.nonce)
   }
 
   /**
    * Cancel the owner's matching preview without changing active permissions.
    * @param request - exact Session and preview nonce to withdraw.
+   * @param signal - caller lifetime supplied by the Gateway.
    */
   @Remote('cancelRoots')
-  cancelRoots(request: SessionRootsConfirmRequest): Promise<void> {
+  cancelRoots(request: SessionRootsConfirmRequest, signal: AbortSignal): Promise<void> {
+    void signal // Gateway also carries this lifetime on the original invocation.
     return cancelSessionRoots(this.ctx, request.sessionId, request.nonce)
   }
 

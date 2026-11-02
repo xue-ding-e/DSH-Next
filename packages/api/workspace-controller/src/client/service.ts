@@ -3,7 +3,7 @@
 import { Service, type Context } from '@deepseek-ai/cordis'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type { RemoteFailure } from '@deepseek-ai/dsh-typert-protocol'
-import type { WorkspaceId } from '@deepseek-ai/dsh-workspace/types'
+import type { WorkspaceId, WorkspaceAdditionalRoot } from '@deepseek-ai/dsh-workspace/types'
 import type { WorkspaceView } from '../types.ts'
 import type { ClientWorkspaceModel, WorkspaceSnapshot } from './model.ts'
 
@@ -66,6 +66,8 @@ export interface IWorkspaces {
    * @returns the renamed Workspace.
    */
   rename(workspaceId: WorkspaceId, title: string): Promise<WorkspaceView>
+  /** Save defaults for new Sessions only; does not authorize execution. */
+  setRoots(workspaceId: WorkspaceId, roots: readonly WorkspaceAdditionalRoot[]): Promise<WorkspaceView>
   /**
    * Delete a Workspace registration without deleting Sessions or files.
    * @param workspaceId - target Workspace.
@@ -137,6 +139,12 @@ export class WorkspaceController extends Service implements IWorkspaces {
     const result = await this.model.initializeDefault(signal)
     if (!result.ok) throw new WorkspaceCreateError(result.error)
     return result.value?.workspace
+  }
+
+  async setRoots(workspaceId: WorkspaceId, roots: readonly WorkspaceAdditionalRoot[]): Promise<WorkspaceView> {
+    const result = await this.model.setRoots(workspaceId, roots)
+    if (!result.ok) throw new Error(`workspace directory defaults failed: ${result.error.message}`)
+    return result.value.workspace
   }
 
   async rename(workspaceId: WorkspaceId, title: string): Promise<WorkspaceView> {

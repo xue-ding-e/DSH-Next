@@ -4,11 +4,11 @@ import type { Context as ClientContext } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-api-remote-access/client'
 // Type-only: pulls the SlotMap merge declaring the directory-flow holes.
 import type {} from '@deepseek-ai/dsh-client-ui-workspace/client'
+import type {} from '@deepseek-ai/dsh-client-ui-permission-presets/client'
 // Type-only: pulls the SlotRegistry service merge (ctx.slots).
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import type { NativeFlowInjected } from './flow.ts'
 import { NativeDirectoryFlow } from './flow.ts'
-
 
 /** Required services (cordis fiber inject): the slot registry, workspace UI service, and access. */
 export const inject = ['slots', 'uiWorkspace', 'remoteAccess']
@@ -39,4 +39,8 @@ export function apply(ctx: ClientContext): void {
           name: 'sidebar.workspaces.directoryFlow', inject: injected,
         }, NativeDirectoryFlow)
       })))
+  ctx.remoteAccess.whenAccess('directoryPicker/pick', () =>
+    ctx.slots.inject('session.directories.directoryFlow', () => ctx.slots.register({
+      name: 'session.directories.directoryFlow', inject: injected,
+    }, NativeDirectoryFlow)))
 }

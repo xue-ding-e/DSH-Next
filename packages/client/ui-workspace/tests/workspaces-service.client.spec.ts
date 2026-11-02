@@ -54,7 +54,7 @@ function workspace(
   createdAt = '2026-01-01T00:00:00.000Z',
 ): WorkspaceView {
   return {
-    workspaceId: wid(id),
+    additionalRoots: [], workspaceId: wid(id),
     path: `/w/${id}`,
     title: id,
     sessionIds,
@@ -196,6 +196,7 @@ class FakeWorkspaces implements IWorkspaces {
 
   declare readonly create: IWorkspaces['create']
   declare readonly rename: IWorkspaces['rename']
+  declare readonly setRoots: IWorkspaces['setRoots']
   declare readonly delete: IWorkspaces['delete']
   declare readonly insertBefore: IWorkspaces['insertBefore']
   declare readonly insertSessionBefore: IWorkspaces['insertSessionBefore']

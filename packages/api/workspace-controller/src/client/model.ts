@@ -1,3 +1,4 @@
+import type { WorkspaceAdditionalRoot } from '@deepseek-ai/dsh-workspace/types'
 /** Client-side Workspace state model shared by Remote transport and UI projection. */
 
 import { notifySubscribers } from '@deepseek-ai/dsh-client-store'
@@ -120,6 +121,13 @@ export class ClientWorkspaceModel implements WorkspaceFollowSink {
    */
   async rename(workspaceId: WorkspaceId, title: string): Promise<RemoteResult<WorkspaceValue>> {
     const result = await this.remote.rename({ workspaceId, title })
+    if (result.ok) this.upsert(result.value.workspace)
+    return result
+  }
+
+  /** Save future-Session defaults and publish the authoritative returned row. */
+  async setRoots(workspaceId: WorkspaceId, roots: readonly WorkspaceAdditionalRoot[]): Promise<RemoteResult<WorkspaceValue>> {
+    const result = await this.remote.setRoots({ workspaceId, roots })
     if (result.ok) this.upsert(result.value.workspace)
     return result
   }

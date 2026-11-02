@@ -596,6 +596,13 @@ export type SessionControlFrame =
 declare module '@deepseek-ai/cordis' {
   interface Events {
     /**
+     * Directory permission facts for one Session require a fresh owner read.
+     * @mode emit
+     * @param sessionId - Session resource governing delivery authorization.
+     */
+    'api-session/directories-changed'(sessionId: SessionId): void
+
+    /**
      * A Session became visible or its Agent was created or disposed.
      * Consumers upsert the summary and replace its current running and availability state.
      * @mode emit
@@ -653,3 +660,12 @@ export type SessionRootsPreview = import('@deepseek-ai/dsh-sandbox-policy/types'
 
 /** Process-local directory grant; importing this value conveys no authorization. */
 export type SessionRootsReceipt = import('@deepseek-ai/dsh-sandbox-policy/types').RootApprovalReceipt
+
+/** Replace pending Session selections; expectedRevision prevents overwriting another editor. */
+export interface SessionRootsReplaceRequest extends SessionRootsPrepareRequest {
+  readonly roots: readonly import('@deepseek-ai/dsh-sandbox-policy/types').SessionRootRequest[]
+  readonly expectedRevision: number | null
+}
+
+/** Current execution-scope directory facts; not portable authorization. */
+export type SessionRootsState = import('@deepseek-ai/dsh-sandbox-policy/types').SessionDirectoryState

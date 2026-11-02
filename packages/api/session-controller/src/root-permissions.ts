@@ -7,7 +7,7 @@ import type {} from '@deepseek-ai/dsh-subagent'
 import { RemoteError } from '@deepseek-ai/dsh-typert-protocol'
 import type { SessionId } from '@deepseek-ai/dsh-session'
 import { RootApprovalError } from '@deepseek-ai/dsh-sandbox-policy'
-import type { RootApprovalPreview, RootApprovalReceipt } from '@deepseek-ai/dsh-sandbox-policy/types'
+import type { RootApprovalPreview, RootApprovalReceipt, SessionDirectoryState, SessionRootRequest } from '@deepseek-ai/dsh-sandbox-policy/types'
 
 function requireAgent(ctx: Context, sessionId: SessionId): Agent {
   const invocation = ctx.invocation
@@ -83,4 +83,25 @@ export function cancelSessionRoots(ctx: Context, sessionId: SessionId, nonce: st
 /** Compare provider generations rather than Cordis contextual views. */
 function identity<T extends object>(service: T | undefined): T | undefined {
   return service === undefined ? undefined : (service as T & { [symbols.original]?: T })[symbols.original] ?? service
+}
+
+/** Read authoritative selection and activation facts, never a persisted grant bit. */
+export function readSessionRoots(ctx: Context, sessionId: SessionId): Promise<SessionDirectoryState> {
+  return explain(() => {
+    const agent = requireAgent(ctx, sessionId)
+    const policy = agent.ctx.extend({ invocation: ctx.invocation }).get('sandboxPolicy')
+    if (policy === undefined) throw new RootApprovalError('Directory permission policy is unavailable')
+    return policy.directoryState(agent)
+  })
+}
+
+/** Save a new pending snapshot without automatically confirming its write requests. */
+export function replaceSessionRoots(ctx: Context, sessionId: SessionId, roots: readonly SessionRootRequest[],
+  expectedRevision: number | null): Promise<SessionDirectoryState> {
+  return explain(() => {
+    const agent = requireAgent(ctx, sessionId)
+    const policy = agent.ctx.extend({ invocation: ctx.invocation }).get('sandboxPolicy')
+    if (policy === undefined) throw new RootApprovalError('Directory permission policy is unavailable')
+    return policy.replaceRequestedRoots(agent, roots, expectedRevision, activityFence(agent))
+  })
 }

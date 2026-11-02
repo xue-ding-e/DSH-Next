@@ -844,6 +844,19 @@ type SessionRootsPreview = import('@deepseek-ai/dsh-sandbox-policy/types').RootA
 type SessionRootsReceipt = import('@deepseek-ai/dsh-sandbox-policy/types').RootApprovalReceipt
 ```
 
+```ts type-equiv
+/** Replace pending Session selections; expectedRevision prevents overwriting another editor. */
+interface SessionRootsReplaceRequest extends SessionRootsPrepareRequest {
+  readonly roots: readonly import('@deepseek-ai/dsh-sandbox-policy/types').SessionRootRequest[]
+  readonly expectedRevision: number | null
+}
+```
+
+```ts type-equiv
+/** Current execution-scope directory facts; not portable authorization. */
+type SessionRootsState = import('@deepseek-ai/dsh-sandbox-policy/types').SessionDirectoryState
+```
+
 <!-- BEGIN GENERATED cordis-surface (gen-cordis-catalog.ts) — do not edit between markers -->
 
 <a id="cordis-surface"></a>

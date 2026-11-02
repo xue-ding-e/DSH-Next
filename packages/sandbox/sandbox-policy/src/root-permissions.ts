@@ -6,8 +6,8 @@ import type { FileSystem, FsTarget } from '@deepseek-ai/dsh-fs'
 import type { SandboxExecutionPolicy, SandboxProvider } from '@deepseek-ai/dsh-sandbox'
 import type { Session } from '@deepseek-ai/dsh-session'
 import type { PeerScope, RemoteInvocation } from '@deepseek-ai/dsh-typert-protocol'
-import type { RequestedRootsState } from './session-roots.ts'
-import type { RootApprovalPreview, RootApprovalReceipt, SessionRootRequest } from './types.ts'
+import { requestedRootsSchema, type RequestedRootsState } from './session-roots.ts'
+import type { RootApprovalPreview, RootApprovalReceipt, SessionDirectoryState, SessionRootRequest } from './types.ts'
 
 const PREVIEW_LIFETIME_MS = 60_000
 
@@ -33,6 +33,7 @@ interface Grant extends Providers {
   readonly modeRevision: number
   readonly policyKey: string
   readonly roots: readonly string[]
+  readonly selection: readonly SessionRootRequest[]
 }
 interface Ticket extends Providers {
   readonly agent: Agent
@@ -49,6 +50,52 @@ export class RootApprovalOwner {
   private readonly grants = new WeakMap<Session, Grant>()
 
   constructor(private readonly policyOwner: object, private readonly selection: (session: Session) => Selection) {}
+
+  /** Read current permissions in the exact Agent execution scope. */
+  state(ctx: Context, agent: Agent): SessionDirectoryState {
+    this.ownerInvocation(ctx, agent)
+    const current = this.selection(agent.session)
+    const providers = this.providers(agent)
+    return {
+      sessionId: agent.id, primaryPath: current.policy.workspaceRoot,
+      roots: current.state.roots, rootsRevision: current.state.roots === null ? null : current.state.rootsRevision,
+      mode: current.policy.mode,
+      deploymentWritableRoots: current.policy.additionalWritableRoots ?? [],
+      confirmedRoots: this.confirmedFor(ctx, agent.session),
+      activeWritableRoots: this.rootsFor(ctx, agent.session),
+      writeSupported: providers.sandbox.supportsAdditionalWritableRoots(current.policy.mode),
+      lifetime: 'live-agent',
+    }
+  }
+
+  /** Save a pending selection from true idle; never carry forward an old grant. */
+  async replace(
+    ctx: Context, agent: Agent, roots: readonly SessionRootRequest[], expectedRevision: number | null,
+    assertQuiescent: () => void,
+  ): Promise<SessionDirectoryState> {
+    const invocation = this.ownerInvocation(ctx, agent)
+    const detached = requestedRootsSchema.parse(roots)
+    const initial = this.selection(agent.session)
+    const currentRevision = initial.state.roots === null ? null : initial.state.rootsRevision
+    if (expectedRevision !== currentRevision) throw new RootApprovalError('Directory selection changed; reload before saving')
+    const providers = this.providers(agent)
+    const priorGrant = this.grants.get(agent.session)
+    this.tickets.delete(invocation.peer)
+    return agent.runMaintenance(async (maintenanceSignal) => {
+      const signal = AbortSignal.any([invocation.signal, invocation.peer.signal, maintenanceSignal])
+      const normalized = await this.normalize({ ...initial, state: { ...initial.state, roots: detached } }, providers, signal, false)
+      signal.throwIfAborted()
+      this.assertLive(ctx, agent, invocation)
+      this.assertSelection(agent, initial.state, keyOf(initial.policy), providers, priorGrant, false)
+      assertQuiescent()
+      signal.throwIfAborted()
+      this.assertLive(ctx, agent, invocation)
+      this.assertSelection(agent, initial.state, keyOf(initial.policy), providers, priorGrant, false)
+      agent.session.append('sandbox/roots-requested', { roots: normalized })
+      this.grants.delete(agent.session)
+      return this.state(ctx, agent)
+    })
+  }
 
   /** Prepare a Peer-bound snapshot; the Host supplies its synchronous resource fence. */
   async prepare(ctx: Context, agent: Agent, assertQuiescent: () => void): Promise<RootApprovalPreview> {
@@ -100,7 +147,7 @@ export class RootApprovalOwner {
       const writable = Object.freeze(roots.filter(root => root.access === 'write').map(root => root.path))
       this.grants.set(agent.session, { agent, fs: ticket.fs, sandbox: ticket.sandbox,
         rootsRevision: ticket.preview.rootsRevision, modeRevision: ticket.preview.modeRevision,
-        policyKey: ticket.policyKey, roots: writable })
+        policyKey: ticket.policyKey, roots: writable, selection: roots })
       return { sessionId: agent.id, additionalWritableRoots: writable, lifetime: 'live-agent' }
     })
   }
@@ -116,15 +163,20 @@ export class RootApprovalOwner {
 
   /** Return only an exact live Agent's still-current grant; never inherit by id or Context. */
   rootsFor(ctx: Context, session: Session): readonly string[] {
+    return this.confirmedFor(ctx, session).filter(root => root.access === 'write').map(root => root.path)
+  }
+
+  /** Confirmed discovery/context roots, still not a read-sandbox allowlist. */
+  confirmedFor(ctx: Context, session: Session): readonly SessionRootRequest[] {
     const grant = this.grants.get(session)
     if (grant === undefined || ctx.get('agents')?.get(session.id) !== grant.agent || grant.agent.session !== session
       || identity(grant.agent.ctx.get('sandboxPolicy')) !== identity(this.policyOwner)) return []
     const current = this.selection(session)
-    if (current.policy.mode !== 'workspace-write' || current.state.rootsRevision !== grant.rootsRevision
+    if (current.state.rootsRevision !== grant.rootsRevision
       || current.state.modeRevision !== grant.modeRevision || keyOf(current.policy) !== grant.policyKey
       || identity(grant.agent.ctx.get('fs')) !== identity(grant.fs) || identity(grant.agent.ctx.get('sandbox')) !== identity(grant.sandbox)) return []
     if (grant.roots.length > 0 && !grant.sandbox.supportsAdditionalWritableRoots(current.policy.mode)) return []
-    return grant.roots
+    return grant.selection
   }
 
   private ownerInvocation(ctx: Context, agent: Agent): RemoteInvocation {
@@ -155,10 +207,10 @@ export class RootApprovalOwner {
 
   private assertSelection(
     agent: Agent, state: Pick<RequestedRootsState, 'rootsRevision' | 'modeRevision'>,
-    policyKey: string, providers: Providers, priorGrant: Grant | undefined,
+    policyKey: string, providers: Providers, priorGrant: Grant | undefined, requireSupport = true,
   ): void {
     const current = this.selection(agent.session)
-    this.assertSupported(current, providers)
+    if (requireSupport) this.assertSupported(current, providers)
     if (current.state.rootsRevision !== state.rootsRevision || current.state.modeRevision !== state.modeRevision
       || keyOf(current.policy) !== policyKey || identity(agent.ctx.get('fs')) !== identity(providers.fs)
       || identity(agent.ctx.get('sandbox')) !== identity(providers.sandbox) || this.grants.get(agent.session) !== priorGrant) {
@@ -182,11 +234,13 @@ export class RootApprovalOwner {
     }
   }
 
-  private async normalize(selection: Selection, providers: Providers, signal: AbortSignal): Promise<readonly SessionRootRequest[]> {
+  private async normalize(
+    selection: Selection, providers: Providers, signal: AbortSignal, requireSupport = true,
+  ): Promise<readonly SessionRootRequest[]> {
     const { fs } = providers
     const requests = selection.state.roots
     if (requests === null) throw new RootApprovalError('This Session has no directory selection to confirm')
-    this.assertSupported(selection, providers)
+    if (requireSupport) this.assertSupported(selection, providers)
     const resolveDirectory = async (path: string): Promise<FsTarget> => {
       const target = await fs.resolve(path, { cwd: selection.policy.workspaceRoot, signal })
       const info = await fs.stat(target, signal)

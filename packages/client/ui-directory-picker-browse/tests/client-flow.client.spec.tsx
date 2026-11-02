@@ -228,3 +228,19 @@ describe('directory-picker-browse node half', () => {
     expect(() => { nodeApply() }).not.toThrow()
   })
 })
+
+
+it('independently fills the session directory chooser without either Workspace hole', async () => {
+  const b = await bench()
+  const declaration = b.slots.register({ name: 'root', children: {
+    'session.directories.directoryFlow': { kind: 'single', scope: 'root' },
+  } }, () => null)
+  const fiber = b.ctx.plugin({ inject: [...inject], apply })
+  try {
+    await fiber.await()
+    expect(b.slots.entries('session.directories.directoryFlow')).toHaveLength(1)
+    for (const hole of HOLES) expect(b.slots.entries(hole)).toHaveLength(0)
+    await fiber.dispose()
+    expect(b.slots.entries('session.directories.directoryFlow')).toHaveLength(0)
+  } finally { declaration(); await b.ctx.fiber.dispose() }
+})

@@ -93,6 +93,8 @@ kind: "package-reference"
 
 -----
 
+`confirmedRootsOf(session)` 仅在确切 Agent、Session、策略代次、provider 与选择版本仍有效时返回规范化的已确认参考/写目录。消费者仍须分别验证自身源端与目标端访问权限。没有附加写能力的后端也可确认纯参考目录；所选写权限绝不会悄悄降级。模型上下文将路径序列化为不可信 JSON 数据，区分待申请写权限和实际附加写权限。
+
 <a id="further-exploration"></a>
 ## 进一步探索
 

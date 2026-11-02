@@ -203,6 +203,23 @@ The [local provider](../../packages/sandbox/sandbox-local/README.md) owns operat
 
 Provider selection, probing, caching, and backend-specific enforcement reports belong to the [local provider](../../packages/sandbox/sandbox-local/README.md).
 
+```ts type-equiv
+/** Current process facts; persisted selections never prove activation. */
+interface SessionDirectoryState {
+  readonly sessionId: SessionId
+  readonly primaryPath: string
+  readonly roots: readonly SessionRootRequest[] | null
+  readonly rootsRevision: number | null
+  readonly mode: SandboxMode
+  readonly deploymentWritableRoots: readonly string[]
+  /** Canonical selections explicitly confirmed for this exact live Agent. */
+  readonly confirmedRoots: readonly SessionRootRequest[]
+  readonly activeWritableRoots: readonly string[]
+  readonly writeSupported: boolean
+  readonly lifetime: 'live-agent'
+}
+```
+
 <!-- BEGIN GENERATED cordis-surface (gen-cordis-catalog.ts) — do not edit between markers -->
 
 <a id="cordis-surface"></a>

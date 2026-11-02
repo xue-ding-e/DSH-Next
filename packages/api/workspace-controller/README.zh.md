@@ -72,3 +72,4 @@ Documents 查询占用注册表变更队列，因此其他 Workspace 变更（�
 无。
 
 </details>
+`workspace/setRoots` 仅通过存活且已认证的 owner Peer 保存新会话的 `additionalRoots` 默认值。工作区视图与 follow 更新包含这些默认值。它不改变主路径、已有会话快照或执行授权；非 owner 调用者不能借更宽的工作区角色取得此操作权限。

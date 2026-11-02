@@ -10,7 +10,7 @@ import {
   WorkspaceOrderInvalidError,
   WorkspaceUnknownSessionError,
 } from '@deepseek-ai/dsh-workspace'
-import { RemoteError, remoteErrorOf } from '@deepseek-ai/dsh-typert-protocol'
+import { RemoteError, remoteErrorOf, type RemoteInvocation } from '@deepseek-ai/dsh-typert-protocol'
 import { workspaceView } from './feed.ts'
 import type {
   WorkspaceArchiveSessionRequest,
@@ -25,6 +25,7 @@ import type {
   WorkspacePinSessionRequest,
   WorkspacePinValue,
   WorkspaceRenameRequest,
+  WorkspaceRootsRequest,
   WorkspaceUnarchiveSessionRequest,
   WorkspaceUnpinSessionRequest,
   WorkspaceValue,
@@ -86,6 +87,22 @@ export class WorkspaceCommands {
         }
         await workspace.setTitle(title)
       }
+      return { workspace: workspaceView(workspace) }
+    })
+  }
+
+  /**
+   * Save future-Session defaults under the live owner request.
+   * @param request - complete explicit directory defaults.
+   * @param invocation - original Gateway invocation, never wire identity.
+   * @returns the updated durable Workspace projection.
+   */
+  setRoots(request: WorkspaceRootsRequest, invocation: RemoteInvocation): Promise<WorkspaceValue> {
+    return this.enqueue(async () => {
+      invocation.signal.throwIfAborted()
+      invocation.peer.signal.throwIfAborted()
+      const workspace = this.requireWorkspace(request.workspaceId)
+      await workspace.setAdditionalRoots(request.roots)
       return { workspace: workspaceView(workspace) }
     })
   }
