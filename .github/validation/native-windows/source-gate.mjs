@@ -1,14 +1,14 @@
-// Bootstrap B is independently reviewed and read back before a single B -> W push.
-// B adds only validation controls to fixed product P; W changes only workflow trigger.
-// No installation capability is enabled by this Phase A gate.
+// C1: exact reviewed C0 descendant; fixed product P and all earlier controls preserved.
 import assert from 'node:assert/strict'
 import {execFileSync} from 'node:child_process'
 import {readFileSync} from 'node:fs'
 import {createHash} from 'node:crypto'
-export const PREVIOUS='807bc292a77707e4fc0f15030cf61808ff9577a8'
+export const PREVIOUS='6bfd53a8503638f227c453c2cb19271a7eda4fae'
+export const LIFECYCLE='807bc292a77707e4fc0f15030cf61808ff9577a8'
+export const PREVIOUS_TREE='9d5492a3eaacef45ea1067eba208868670dea4f2'
 export const PHASE_A='525161dc8eeec6f02217d99d54bb6e48ac2d40f4'
 export const FIRST_CONTROL='96b46246bfc60aa0b47e01b7870fa9ebbe8b3e86'
-export const UI_MANIFEST_SHA='027da4b76ee691423271ef5365ca78191e2cd802c37f0dd142d31d2e31738ee0'
+export const UI_MANIFEST_SHA='0192f1a93114e7858a94c459c83bc8151bc0ead86dfa7615c898336322b99a38'
 export const PRODUCT='275192ff0c4857c137eeaf96f5320d3034c19d35'
 export const BRANCH='refs/heads/validation/released-windows-lifecycle'
 export const ROOT='.github/validation/native-windows/'
@@ -36,12 +36,14 @@ export function run(env,bootstrap){
   const git=(...args)=>execFileSync('git',args,{encoding:'utf8'}).trim()
   assert.equal(git('rev-parse','HEAD'),env.GITHUB_SHA)
   assert.equal(git('show','-s','--format=%P','HEAD'),PREVIOUS)
-  assert.equal(git('show','-s','--format=%P',PREVIOUS),PHASE_A)
+  assert.equal(git('rev-parse',PREVIOUS+'^{tree}'),PREVIOUS_TREE)
+  assert.equal(git('show','-s','--format=%P',PREVIOUS),LIFECYCLE)
+  assert.equal(git('show','-s','--format=%P',LIFECYCLE),PHASE_A)
   assert.equal(git('show','-s','--format=%P',PHASE_A),FIRST_CONTROL)
   assert.equal(git('show','-s','--format=%P',FIRST_CONTROL),bootstrap)
   assert.equal(git('show','-s','--format=%P',bootstrap),PRODUCT)
   assert.equal(git('diff','--name-only',bootstrap,FIRST_CONTROL),WORKFLOW)
-  for(const [a,b] of [[FIRST_CONTROL,PHASE_A],[PHASE_A,PREVIOUS]]) assert.deepEqual(git('diff','--name-only',a,b).split('\n').sort(),[WORKFLOW,ROOT+'source-gate.mjs'].sort())
+  for(const [a,b] of [[FIRST_CONTROL,PHASE_A],[PHASE_A,LIFECYCLE]]) assert.deepEqual(git('diff','--name-only',a,b).split('\n').sort(),[WORKFLOW,ROOT+'source-gate.mjs'].sort())
   const uiBytes=readFileSync(ROOT+'native-ui/ui-manifest.json')
   assert.equal(createHash('sha256').update(uiBytes).digest('hex'),UI_MANIFEST_SHA)
   const ui=JSON.parse(uiBytes)
@@ -49,8 +51,10 @@ export function run(env,bootstrap){
     assert(/^[A-Za-z0-9.-]+$/.test(name)&&/^[0-9a-f]{64}$/.test(hash))
     assert.equal(createHash('sha256').update(readFileSync(ROOT+'native-ui/'+name)).digest('hex'),hash)
   }
-  const added=[ROOT+'native-ui/ui-manifest.json',...Object.keys(ui).map(n=>ROOT+'native-ui/'+n)]
-  assert.deepEqual(git('diff','--name-only',PREVIOUS,'HEAD').split('\n').sort(),[WORKFLOW,ROOT+'source-gate.mjs',...added].sort())
+  assert.deepEqual(Object.keys(ui).sort(),["OwnedUiJob.cs", "attest-listener.ps1", "cdp-endpoint.mjs", "cdp-endpoint.test.mjs", "installed-ui-smoke.ps1", "listener-policy.ps1", "probe-session-menus.mjs", "probe-welcome.mjs", "seed-installed-sessions.mjs", "synthetic-sessions.mjs", "synthetic-sessions.test.mjs", "test-listener-policy.ps1", "test-owned-ui-job.ps1", "validate-ui-fixture.ps1"].sort())
+  const added=['synthetic-sessions.mjs','synthetic-sessions.test.mjs','seed-installed-sessions.mjs','probe-session-menus.mjs'].map(n=>ROOT+'native-ui/'+n)
+  const modified=['ui-manifest.json','probe-welcome.mjs','installed-ui-smoke.ps1'].map(n=>ROOT+'native-ui/'+n)
+  assert.deepEqual(git('diff','--name-only',PREVIOUS,'HEAD').split('\n').sort(),[WORKFLOW,ROOT+'source-gate.mjs',...added,...modified].sort())
   assert.deepEqual(git('diff','--diff-filter=A','--name-only',PREVIOUS,'HEAD').split('\n').sort(),added.sort())
   const manifest=JSON.parse(git('show',bootstrap+':'+ROOT+'manifest.json'))
   validateManifest(manifest)
@@ -63,5 +67,5 @@ export function run(env,bootstrap){
     assert.equal(git('rev-parse','HEAD:'+ROOT+name),git('rev-parse',bootstrap+':'+ROOT+name))
   }
   assert.equal(git('rev-parse',FIRST_CONTROL+':'+ROOT+'source-gate.mjs'),git('rev-parse',bootstrap+':'+ROOT+'source-gate.mjs'))
-  console.log(JSON.stringify({control:env.GITHUB_SHA,bootstrap,product:PRODUCT,scope:'Phase C0 fixed installed renderer/welcome only; no session menu or automatic update qualification'}))
+  console.log(JSON.stringify({control:env.GITHUB_SHA,bootstrap,product:PRODUCT,scope:'Phase C1 fixed installed synthetic A/B session menus; no automatic update or configuration migration qualification'}))
 }

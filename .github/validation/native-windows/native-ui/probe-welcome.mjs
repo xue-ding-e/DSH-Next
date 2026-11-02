@@ -2,7 +2,8 @@
 import assert from 'node:assert/strict'
 import {execFileSync} from 'node:child_process'
 import {fileURLToPath} from 'node:url'
-import {writeFileSync} from 'node:fs'
+import {writeFileSync,readFileSync} from 'node:fs'
+import {verifySessionMenus} from './probe-session-menus.mjs'
 import {join} from 'node:path'
 import {pathToFileURL} from 'node:url'
 import {loopbackEndpoint,installedTarget} from './cdp-endpoint.mjs'
@@ -17,7 +18,7 @@ function attest(){
 }
 const endpoint=loopbackEndpoint('http://127.0.0.1:'+port+'/json/list',port)
 const welcome=pathToFileURL(join(installedRoot,'resources','app.asar','renderer','welcome.html')).href
-const until=Date.now()+60000
+const until=Date.now()+45000
 async function targets(){
  const r=await fetch(endpoint,{redirect:'error',signal:AbortSignal.timeout(3000)})
  assert(r.ok);const data=await r.json();assert(Array.isArray(data));return data
@@ -48,7 +49,7 @@ async function click(c,selector){
  await c.send('Input.dispatchMouseEvent',{type:'mousePressed',button:'left',clickCount:1,...value})
  await c.send('Input.dispatchMouseEvent',{type:'mouseReleased',button:'left',clickCount:1,...value})
 }
-const evidence={phase:'C0 renderer/welcome only',sessionMenus:'not run',automaticUpdate:'not run'}
+const evidence={phase:'C1 installed synthetic session menus',sessionMenus:'pending',automaticUpdate:'not run'}
 let c
 try{
  const target=await waitTarget(t=>t.type==='page'&&t.url===welcome)
@@ -62,6 +63,8 @@ try{
   const v=r.result?.value;if(v?.root&&v.newSession){evidence.renderer=v;ready=true;break}await new Promise(r=>setTimeout(r,200))
  }
  assert(ready,'real installed client did not become ready');assert.deepEqual(c.errors,[])
+ const seed=JSON.parse(readFileSync(process.env.DSH_ACCEPTANCE_SEED_REPORT,'utf8'))
+ evidence.sessionMenus=await verifySessionMenus(c,seed)
  attest();evidence.listenerSnapshots=listenerSnapshots;evidence.listenerGuarantee='repeated non-atomic PID/loopback observations';
  evidence.rendererExceptions=c.errors;writeFileSync(reportPath,JSON.stringify(evidence,null,2))
 }finally{c?.close()}

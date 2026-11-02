@@ -1,6 +1,6 @@
-name: Next Windows installed welcome renderer validation
-# Phase C0: installed renderer welcome skip only.
-# No session-menu, automatic update, or valid configuration migration claim.
+name: Next Windows installed session menu validation
+# Phase C1: actual installed renderer plus synthetic A/B session menus.
+# No automatic update or valid configuration migration claim.
 on:
   push:
     branches: [validation/released-windows-lifecycle]
@@ -11,14 +11,14 @@ concurrency:
   cancel-in-progress: false
 jobs:
   fixture:
-    if: github.repository == 'xue-ding-e/DSH-Next' && github.ref == 'refs/heads/validation/released-windows-lifecycle' && github.event.before == '807bc292a77707e4fc0f15030cf61808ff9577a8' && github.event.after == github.sha && github.event.created == false && github.event.deleted == false && github.event.forced == false
+    if: github.repository == 'xue-ding-e/DSH-Next' && github.ref == 'refs/heads/validation/released-windows-lifecycle' && github.event.before == '6bfd53a8503638f227c453c2cb19271a7eda4fae' && github.event.after == github.sha && github.event.created == false && github.event.deleted == false && github.event.forced == false
     runs-on: windows-2025
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           ref: ${{ github.sha }}
-          fetch-depth: 6
+          fetch-depth: 7
           persist-credentials: false
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
         with:
@@ -42,18 +42,24 @@ jobs:
         run: |
           node --test .github/validation/native-windows/native-ui/cdp-endpoint.test.mjs
           if ($LASTEXITCODE -ne 0) {throw 'Endpoint policy tests failed'}
+      - name: Synthetic fixture identity and writer cleanup negative controls
+        shell: pwsh
+        run: |
+          node --test .github/validation/native-windows/native-ui/synthetic-sessions.test.mjs
+          if ($LASTEXITCODE -ne 0) {throw 'Synthetic fixture regression failed'}
       - name: Parse and prove owned app plus probe cleanup with synthetic processes
         shell: pwsh
         run: .github/validation/native-windows/native-ui/validate-ui-fixture.ps1
-      - name: Fixed installed renderer and formal welcome skip only
+      - name: Fixed installed renderer synthetic A B and all existing row actions
         shell: pwsh
         run: .github/validation/native-windows/native-ui/installed-ui-smoke.ps1 -Execute
       - name: Preserve synthetic lifecycle summary only
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
-          name: dsh-installed-welcome-${{ github.run_id }}
+          name: dsh-installed-session-menus-${{ github.run_id }}
           path: |
+            ${{ runner.temp }}/dsh-release-acceptance-*/seed-report.json
             ${{ runner.temp }}/dsh-release-acceptance-*/lifecycle-report.json
             ${{ runner.temp }}/dsh-release-acceptance-*/renderer-report.json
             ${{ runner.temp }}/dsh-release-acceptance-*/renderer-report.json.listener.json

@@ -1,7 +1,7 @@
 <# REVIEW DRAFT. Only disposable GitHub-hosted Windows runners, never a user PC.
    Original NSIS flag evidence: apps/desktop/tests/windows-uninstall-smoke.ps1.
    This phase checks fixed-new installation, real renderer welcome skip and uninstall;
-   it DOES NOT certify right-click UI or automatic updater compatibility. #>
+   it checks synthetic right-click UI, NOT automatic updater or old configuration compatibility. #>
 [CmdletBinding()]
 param([switch]$Execute)
 $ErrorActionPreference = 'Stop'
@@ -104,6 +104,21 @@ foreach ($asset in $assets) {
   foreach ($entry in $entries) {
     if ($entry.Hive -ne 'CurrentUser' -or -not $entry.InstallLocation -or [IO.Path]::GetFullPath($entry.InstallLocation).TrimEnd('\') -ne $install.TrimEnd('\')) { throw 'Unexpected installation scope or registered location' }
   }
+  # Seed only via the fixed installed Electron runtime, before any GUI owns sessions.
+  $seedReport=Join-Path $root 'seed-report.json'
+  $seedScript=Join-Path $PSScriptRoot 'seed-installed-sessions.mjs'
+  $oldRunAsNode=$env:ELECTRON_RUN_AS_NODE
+  try {
+    $env:ELECTRON_RUN_AS_NODE='1'
+    [void][OwnedProcessJob]::Run($exe,('"'+$seedScript+'" "'+$install+'" "'+$profile+'" "'+$outside+'" "'+$seedReport+'"'),$root,60,$false)
+  } finally {
+    if($null -eq $oldRunAsNode){Remove-Item Env:ELECTRON_RUN_AS_NODE -ErrorAction SilentlyContinue}else{$env:ELECTRON_RUN_AS_NODE=$oldRunAsNode}
+  }
+  if(-not(Test-Path -LiteralPath $seedReport)){throw 'Published run-as-node/persistence seed capability did not produce evidence'}
+  $seed=Get-Content -LiteralPath $seedReport -Raw | ConvertFrom-Json
+  if(-not $seed.contextsDisposed -or @($seed.sessions).Count -ne 2){throw 'Incomplete synthetic seed evidence'}
+  foreach($session in $seed.sessions){if(-not($session.writerExcluded -and $session.writerReleased -and $session.readbackExact -and $session.closedTurn)){throw 'Synthetic persistence validation incomplete'}}
+  $env:DSH_ACCEPTANCE_SEED_REPORT=$seedReport
   # OS chooses a random loopback port. Release immediately before owned launch; any
   # race/foreign listener is rejected by attest-listener, never reused or killed.
   $reservation=[Net.Sockets.TcpListener]::new([Net.IPAddress]::Loopback,0)
@@ -115,7 +130,7 @@ foreach ($asset in $assets) {
   $probeScript=Join-Path $PSScriptRoot 'attest-listener.ps1'
   $probeArgs='-NoProfile -File "'+$probeScript+'" -OwnerPid {OWNED_APP_PID} -Port '+$port+' -InstalledRoot "'+$install+'" -ReportPath "'+$probeReport+'"'
   try {
-    $start=[OwnedUiJob]::Run($exe,('--remote-debugging-address=127.0.0.1 --remote-debugging-port='+$port),$pwsh,$probeArgs,$install,150)
+    $start=[OwnedUiJob]::Run($exe,('--remote-debugging-address=127.0.0.1 --remote-debugging-port='+$port),$pwsh,$probeArgs,$install,180)
   } finally {
     $closedBy=[DateTime]::UtcNow.AddSeconds(15)
     do {
@@ -127,8 +142,9 @@ foreach ($asset in $assets) {
   }
   if(-not(Test-Path -LiteralPath $probeReport)){throw 'Renderer did not emit structured evidence'}
   $renderer=Get-Content -LiteralPath $probeReport -Raw | ConvertFrom-Json
-  if($renderer.phase -cne 'C0 renderer/welcome only' -or -not $renderer.renderer.root -or -not $renderer.renderer.newSession){throw 'Incomplete renderer probe'}
+  if($renderer.phase -cne 'C1 installed synthetic session menus' -or -not $renderer.renderer.root -or -not $renderer.renderer.newSession){throw 'Incomplete renderer probe'}
 
+  if(@($renderer.sessionMenus.checks).Count -ne 7 -or -not $renderer.sessionMenus.forkId){throw 'Incomplete A/B menu action evidence'}
   $protocolViews = @(Get-NextProtocolViews)
   if ($protocolViews.Count -eq 0) { throw 'No own protocol registration observed after packaged startup; removal is not yet testable' }
   $expectedCommand = '"' + $exe + '" "%1"'
@@ -150,6 +166,6 @@ while (Test-Path -LiteralPath $install) { if ([DateTime]::UtcNow -gt $deadline) 
 Check-Retention
 if (@(Get-ProductRegistrations).Count -ne 0) { throw 'Own install/uninstall registration remained' }
 if (@(Get-NextProtocolViews).Count -ne 0) { throw 'Owned Next protocol remained' }
-@{cases=$report;uninstall='application removed; five synthetic roots retained';nativeUI='C0 welcome skip and mounted client only; session menus not run';automaticUpgrade='not run';root=$root} | ConvertTo-Json -Depth 8 | Set-Content (Join-Path $root 'lifecycle-report.json') -Encoding utf8
+@{cases=$report;uninstall='application removed; five synthetic roots retained';nativeUI='C1 real installed synthetic A/B menu actions; see renderer report';automaticUpgrade='not run';root=$root} | ConvertTo-Json -Depth 16 | Set-Content (Join-Path $root 'lifecycle-report.json') -Encoding utf8
 # No broad registry, profile, workspace, or recursively followed-link cleanup: dispose the hosted VM.
 Write-Output ('Evidence: '+$root)
