@@ -1,0 +1,11 @@
+{
+  "product": "275192ff0c4857c137eeaf96f5320d3034c19d35",
+  "files": {
+    "OwnedProcessJob.cs": "53923cb5caee4f49e34e8e6f435143c3682c3f3df915b98ee822384bdff87a74",
+    "test-owned-process-job.ps1": "02e16f05b95552b70584ebf94b1d78e0d35db044692fe134ccf3e14e9a372bc2",
+    "validate-native-fixture.ps1": "47d1c86293ca3486ee331176df5eaefcc30c24ad599243fa311519fa2bd0530a",
+    "released-installer-lifecycle.ps1": "07ae632c4e319f63b02e5e11f84039444067d22fc6681cb3d5aeac437bb06345",
+    "read-installed-identity.mjs": "f47c41009bb8a25e438b3db31ff7cc447edaf9d755e0d5f5e0cad3362eb0fa5e",
+    "read-installed-identity.test.mjs": "ad73f9ae74ef1fe32573c0b122604df8a610ef81a24dfdb8c0baf723e1f2d20d"
+  }
+}

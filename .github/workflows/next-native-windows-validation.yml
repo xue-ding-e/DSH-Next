@@ -1,0 +1,39 @@
+name: Next Windows native fixture validation
+# DRAFT DISABLED: placeholders must be replaced by reviewed bootstrap object and blob manifest.
+# The installed lifecycle script is deliberately NOT called in this Phase A workflow.
+on:
+  push:
+    branches: [validation/released-windows-lifecycle]
+permissions:
+  contents: read
+concurrency:
+  group: next-reviewed-heavy-validation
+  cancel-in-progress: false
+jobs:
+  fixture:
+    if: github.repository == 'xue-ding-e/DSH-Next' && github.ref == 'refs/heads/validation/released-windows-lifecycle' && github.event.before == 'REVIEWED_BOOTSTRAP_SHA_NOT_SET' && github.event.after == github.sha && github.event.created == false && github.event.deleted == false && github.event.forced == false
+    runs-on: windows-2025
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 3
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22.14.0'
+      - name: Fail closed until exact object and complete blob manifest review
+        shell: pwsh
+        run: |
+          throw 'DRAFT: exact bootstrap SHA not yet materialized or independently reviewed'
+          node --input-type=module -e "import {run} from './.github/validation/native-windows/source-gate.mjs'; run(process.env,'REVIEWED_BOOTSTRAP_SHA_NOT_SET')"
+          if ($LASTEXITCODE -ne 0) {throw 'Source/event identity gate failed'}
+      - name: ASAR reader and actual CLI negative controls
+        shell: pwsh
+        run: |
+          node --test .github/validation/native-windows/read-installed-identity.test.mjs
+          if ($LASTEXITCODE -ne 0) {throw 'Identity regression failed'}
+      - name: Parse compile and synthetic owned-process fixture only
+        shell: pwsh
+        run: .github/validation/native-windows/validate-native-fixture.ps1
