@@ -11,18 +11,19 @@ concurrency:
   cancel-in-progress: false
 jobs:
   fixture:
-    if: github.repository == 'xue-ding-e/DSH-Next' && github.ref == 'refs/heads/validation/released-windows-lifecycle' && github.event.before == '9d59a8f21d2a983de33f7a061f7cd09477f1b952' && github.event.after == github.sha && github.event.created == false && github.event.deleted == false && github.event.forced == false
+    if: github.repository == 'xue-ding-e/DSH-Next' && github.ref == 'refs/heads/validation/released-windows-lifecycle' && github.event.before == '96b46246bfc60aa0b47e01b7870fa9ebbe8b3e86' && github.event.after == github.sha && github.event.created == false && github.event.deleted == false && github.event.forced == false
     runs-on: windows-2025
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           ref: ${{ github.sha }}
-          fetch-depth: 3
+          fetch-depth: 4
           persist-credentials: false
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
         with:
           node-version: '22.14.0'
+          package-manager-cache: false
       - name: Verify exact source graph event and complete blob manifest
         shell: pwsh
         run: |
