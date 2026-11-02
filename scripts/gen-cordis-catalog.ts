@@ -611,6 +611,7 @@ export const LINK_MAP: Readonly<Record<string, string>> = {
   TerminalSpawnRequest: 'terminal.md',
   TerminalSpawnResult: 'terminal.md',
   SandboxPolicyRequest: 'sandbox.md',
+  SessionDirectoryState: 'sandbox.md',
   SessionRootRequest: 'sandbox.md',
   RootApprovalPreview: 'sandbox.md',
   RootApprovalReceipt: 'sandbox.md',
