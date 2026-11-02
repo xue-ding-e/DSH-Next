@@ -16,6 +16,7 @@ import { MemoryMediaPool, MemoryStorageBackend } from '../../../storage/storage-
 import WorkspaceRegistry, {
   WorkspaceId,
   type workspaceDomainState,
+  workspaceRecord,
   WorkspaceMoveInvalidError,
   WorkspaceOrderInvalidError,
 } from '../src/index.ts'
@@ -141,6 +142,7 @@ function selectiveFailureBackend(
 function record(path: string, sessionIds: string[], createdAt = '2026-07-24T00:00:00.000Z'): WorkspaceRecord {
   return {
     path,
+    additionalRoots: [],
     title: basename(path),
     sessionIds: sessionIds.map(SessionId),
     createdAt,
@@ -156,7 +158,7 @@ function record(path: string, sessionIds: string[], createdAt = '2026-07-24T00:0
 type StoredDomainState = z.input<typeof workspaceDomainState>
 
 function storedPool(
-  entries: Array<[string, WorkspaceRecord]>,
+  entries: Array<[string, z.input<typeof workspaceRecord>]>,
   state: StoredDomainState,
 ): MemoryMediaPool {
   const pool = new MemoryMediaPool()
@@ -1545,3 +1547,100 @@ declare module '@deepseek-ai/dsh-workspace/types' {
     'probe-items': true
   }
 }
+
+describe('Workspace additional directory defaults', () => {
+  it('persists normalized selections across restart without changing project identity or sessions', async () => {
+    const primary = await makeDir('primary')
+    const source = await makeDir('source')
+    const initial = await harness({ sessions: [header('owned', primary)] })
+    const workspace = initial.registry.list()[0]!
+    const id = workspace.id
+    expect(workspace.additionalRoots).toEqual([])
+    await workspace.setAdditionalRoots([{ path: source + '/', access: 'reference' }])
+    expect(workspace.additionalRoots).toEqual([{ path: source, access: 'reference' }])
+    expect(workspace.path).toBe(primary)
+    expect(workspace.sessionIds).toEqual(['owned'])
+    expect(Object.isFrozen(workspace.additionalRoots[0])).toBe(true)
+    const writes = initial.changes.length
+    await workspace.setAdditionalRoots([{ path: source, access: 'reference' }])
+    expect(initial.changes).toHaveLength(writes)
+    await initial.ctx.fiber.dispose()
+    const restarted = await harness({ pool: initial.pool, sessions: [header('owned', primary)] })
+    onTestFinished(() => restarted.ctx.fiber.dispose())
+    const restored = restarted.registry.get(id)!
+    expect(restored.additionalRoots).toEqual([{ path: source, access: 'reference' }])
+    await rm(source, { recursive: true })
+    // Restoring metadata never recreates a disappeared source directory.
+    await restarted.ctx.fiber.dispose()
+    const missing = await harness({ pool: initial.pool, sessions: [header('owned', primary)] })
+    onTestFinished(() => missing.ctx.fiber.dispose())
+    expect(missing.registry.get(id)!.additionalRoots).toEqual([{ path: source, access: 'reference' }])
+  })
+
+  it('keeps stored defaults unchanged after validation failure and permits clearing them', async () => {
+    const primary = await makeDir('primary')
+    const source = await makeDir('source')
+    const initial = await harness()
+    onTestFinished(() => initial.ctx.fiber.dispose())
+    const workspace = await initial.registry.create(primary)
+    await workspace.setAdditionalRoots([{ path: source, access: 'write' }])
+    const stored = storedRecord(initial.pool, workspace.id)
+    const writes = initial.changes.length
+    await expect(workspace.setAdditionalRoots([{ path: primary, access: 'reference' }])).rejects.toThrow(/conflict/)
+    expect(storedRecord(initial.pool, workspace.id)).toEqual(stored)
+    expect(initial.changes).toHaveLength(writes)
+    await workspace.setAdditionalRoots([])
+    expect(workspace.additionalRoots).toEqual([])
+  })
+})
+
+
+describe('Workspace additional root durability', () => {
+  it('keeps published and durable defaults unchanged on backend failure, then retries', async () => {
+    const primary = await makeDir('primary')
+    const source = await makeDir('source')
+    const pool = new MemoryMediaPool()
+    const initial = await harness({ pool, backend: selectiveFailureBackend(pool, { putAt: 2 }) })
+    onTestFinished(() => initial.ctx.fiber.dispose())
+    const workspace = await initial.registry.create(primary)
+    const before = storedRecord(pool, workspace.id)
+    const writes = initial.changes.length
+    await expect(workspace.setAdditionalRoots([{ path: source, access: 'write' }])).rejects.toThrow(/selected bootstrap put failure/)
+    expect(workspace.additionalRoots).toEqual([])
+    expect(storedRecord(pool, workspace.id)).toEqual(before)
+    expect(initial.changes).toHaveLength(writes)
+    await workspace.setAdditionalRoots([{ path: source, access: 'write' }])
+    expect(workspace.additionalRoots).toEqual([{ path: source, access: 'write' }])
+    expect(storedRecord(pool, workspace.id).additionalRoots).toEqual(workspace.additionalRoots)
+  })
+})
+
+
+describe('Workspace additional root record boundaries', () => {
+  it('loads an actual old durable record with no additionalRoots through the domain', async () => {
+    const primary = await makeDir('old-primary')
+    const pool = storedPool([['old', {
+      path: primary, title: 'Old project', sessionIds: [SessionId('old-session')],
+      createdAt: 'then', updatedAt: 'then',
+    }]], { initialized: true, workspaceIds: [WorkspaceId('old')] })
+    const result = await harness({ pool, sessions: [header('old-session', primary)] })
+    onTestFinished(() => result.ctx.fiber.dispose())
+    const workspace = result.registry.get(WorkspaceId('old'))!
+    expect(workspace.additionalRoots).toEqual([])
+    expect(workspace.path).toBe(primary)
+    expect(workspace.sessionIds).toEqual(['old-session'])
+  })
+  it('rejects malformed access before writing a durable record', async () => {
+    const primary = await makeDir('primary')
+    const source = await makeDir('source')
+    const result = await harness()
+    onTestFinished(() => result.ctx.fiber.dispose())
+    const workspace = await result.registry.create(primary)
+    const writes = result.changes.length
+    // @ts-expect-error Exercise an untyped Host caller at the durable write boundary.
+    await expect(workspace.setAdditionalRoots([{ path: source, access: 'read' }])).rejects.toThrow()
+    expect(result.changes).toHaveLength(writes)
+    expect(workspace.additionalRoots).toEqual([])
+    expect(storedRecord(result.pool, workspace.id).additionalRoots).toEqual([])
+  })
+})
