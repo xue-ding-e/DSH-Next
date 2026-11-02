@@ -21,6 +21,9 @@ import type {} from '@deepseek-ai/dsh-client-ui-sidebar-right/client'
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import type {} from '@deepseek-ai/dsh-client-ui-workspace/client'
 import { SessionReferenceTransfers, stageSessionReference } from './session-drag.ts'
+import type {} from '@deepseek-ai/dsh-client-ui-sidebar-files/client'
+import { ReferenceTransfers } from './reference-transfers.ts'
+import { FILE_REFERENCE_DRAG, stageFileReference, type FileReferenceSource } from './file-drag.ts'
 import { SessionReferenceDrop, type SessionReferenceDropInjected } from './SessionReferenceDrop.tsx'
 import type { Context as ClientContext } from '@deepseek-ai/cordis'
 import type { ISessions } from '@deepseek-ai/dsh-api-session-controller/client'
@@ -89,6 +92,39 @@ export function apply(ctx: ClientContext): void {
     }),
   }, SessionReferenceDrop))
 
+  const fileTransfers = new ReferenceTransfers<FileReferenceSource>(FILE_REFERENCE_DRAG)
+  ctx.provide('fileReferenceDrag', {
+    start: (sessionId, path, kind, transfer) => { fileTransfers.start({ sessionId, path, kind }, transfer) },
+    end: () => { fileTransfers.end() },
+  })
+  ctx.effect(() => () => { fileTransfers.end() })
+  ctx.slots.inject('conversation.input.overlay', () => ctx.slots.register({
+    name: 'conversation.input.overlay', id: 'file-reference-drop',
+    inject: (sessionId): SessionReferenceDropInjected => ({
+      mime: FILE_REFERENCE_DRAG,
+      drop: async (transfer, signal) => {
+        const source = fileTransfers.take(transfer)
+        if (source === undefined) return
+        const scope = sessions.scope(sessionId)
+        const input = scope?.get('conversation')?.input.for(scope)
+        if (input === undefined) return
+        try {
+          const result = await stageFileReference(input, source, async (item, lookupSignal) =>
+            sessions.using(sessionId, { source: 'referenceCandidates', signal: lookupSignal }, async (reference) => {
+              const state = reference.binding.session.getSnapshot()
+              if (state.openState !== 'open') throw state.openError ?? new Error('Reference target is not open')
+              const result = await ctx.remote.fileReferences.resolveDrop(sessionId, item.sessionId, item.path, item.kind, lookupSignal)
+              if (!result.ok) throw new Error('Reference lookup unavailable')
+              return result.value
+            }), signal)
+          if (result === 'unavailable' || result === 'changed') input.notify('error', t('drag.fileUnavailable'))
+          else input.focus()
+        } catch {
+          if (!signal.aborted) input.notify('error', t('drag.fileUnavailable'))
+        }
+      },
+    }),
+  }, SessionReferenceDrop))
   ctx.uiConversation.userText.register(fileReferenceRule)
   ctx.uiConversation.userText.register(folderReferenceRule)
   ctx.slots.inject('conversation.user.text.node', function* () {

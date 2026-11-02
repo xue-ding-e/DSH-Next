@@ -1,5 +1,5 @@
 /** Application-local drag identity. Wire text never supplies authority or reference labels. */
-import { randomUUID } from '@deepseek-ai/dsh-util-crypto'
+import { ReferenceTransfers } from './reference-transfers.ts'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type { SessionInput } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type { SessionReferenceMentionCandidate } from '@deepseek-ai/dsh-session-reference/types'
@@ -7,28 +7,8 @@ import type { SessionReferenceMentionCandidate } from '@deepseek-ai/dsh-session-
 export const SESSION_REFERENCE_DRAG = 'application/x-dsh-session-reference'
 
 /** A drag is scoped to one mounted client plugin and consumed at most once. */
-export class SessionReferenceTransfers {
-  private consumed = false
-  private current: { token: string; sessionId: SessionId } | undefined
-  start(sessionId: SessionId, transfer: DataTransfer): void {
-    this.consumed = false
-    const token = randomUUID()
-    this.current = { token, sessionId }
-    transfer.setData(SESSION_REFERENCE_DRAG, token)
-  }
-  end(): boolean {
-    const consumed = this.consumed
-    this.current = undefined
-    this.consumed = false
-    return consumed
-  }
-  take(transfer: DataTransfer): SessionId | undefined {
-    const current = this.current
-    if (current === undefined || transfer.getData(SESSION_REFERENCE_DRAG) !== current.token) return undefined
-    this.current = undefined
-    this.consumed = true
-    return current.sessionId
-  }
+export class SessionReferenceTransfers extends ReferenceTransfers<SessionId> {
+  constructor() { super(SESSION_REFERENCE_DRAG) }
 }
 
 /** Resolve an authorized host candidate, then stage a chip without submitting or executing. */

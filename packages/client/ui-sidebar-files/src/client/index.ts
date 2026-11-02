@@ -82,7 +82,15 @@ export function apply(ctx: ClientContext): void {
   ctx.effect(() => ctx.locale.register(NS, { zh, en, ja, es, fr, de, ru, pt }), 'ui-sidebar-files: dictionaries')
 
   const store = createFilesStore()
-  const inject = filesFace(createList(ctx.remote), createWatch(ctx.remote))
+  const face = filesFace(createList(ctx.remote), createWatch(ctx.remote))
+  const inject: typeof face = (...args) => ({
+    ...face(...args),
+    fileReferenceDrag: {
+      available: () => ctx.get('fileReferenceDrag') !== undefined,
+      start: (source, path, kind, transfer) => { ctx.get('fileReferenceDrag')?.start(source, path, kind, transfer) },
+      end: () => { ctx.get('fileReferenceDrag')?.end() },
+    },
+  })
   ctx.effect(() => ctx.slots.inject('sidebar.right.pane.tab', () => ctx.slots.register(
     {
       name: 'sidebar.right.pane.tab', key: FILES_ID, locale: NS, store, inject,

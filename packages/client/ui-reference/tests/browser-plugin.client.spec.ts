@@ -20,6 +20,7 @@ import type { FileReferenceCandidate } from '@deepseek-ai/dsh-file-reference/typ
 import type { SessionReferenceMentionCandidate } from '@deepseek-ai/dsh-session-reference/types'
 import { SessionInputShell } from '../../ui-conversation/src/client/input/facade.ts'
 import type { SessionReferenceDropInjected } from '../src/client/SessionReferenceDrop.tsx'
+import { FILE_REFERENCE_DRAG } from '../src/client/file-drag.ts'
 import { SESSION_REFERENCE_DRAG } from '../src/client/session-drag.ts'
 import { apply, inject } from '../src/client/index.ts'
 import { apply as nodeApply } from '../src/index.ts'
@@ -120,7 +121,8 @@ async function bench(
     }
   }
   new RemoteService(ctx)
-  ctx.provide('remote.fileReferences', { list: files })
+  const resolveFile = vi.fn(async (_target: SessionId, _source: SessionId, path: string, kind: 'file' | 'directory', _signal: AbortSignal) => ({ ok: true as const, value: { path, kind } }))
+  ctx.provide('remote.fileReferences', { list: files, resolveDrop: resolveFile })
   ctx.provide('remote.sessionReferenceResolver', { candidates: sessions })
   ctx.provide('locale', new LocaleRuntime(ctx))
   const sessionStore = new TestSessions(async (action) => { await action() }, ctx)
@@ -139,7 +141,7 @@ async function bench(
   const fiber = ctx.plugin({ inject: [...inject], apply })
   await fiber.await()
   if (source === undefined) throw new Error('reference source was not registered')
-  return { ctx, fiber, source, sessions: sessionStore, owner }
+  return { ctx, fiber, source, sessions: sessionStore, owner, resolveFile }
 }
 
 describe('apply', () => {
@@ -163,6 +165,25 @@ describe('apply', () => {
     await injectDrop(session.sessionId).drop(transfer, new AbortController().signal)
     expect(lookup).toHaveBeenCalledWith(session.sessionId, sid('source'), expect.any(AbortSignal))
     expect(input.state.getSnapshot().occurrences).toMatchObject([{ source: 'reference', appearance: 'session' }])
+    expect(sink).not.toHaveBeenCalled()
+  })
+
+  it('connects the file-tree owner to the registered target overlay without uploading or sending', async () => {
+    const h = await bench()
+    const scope = h.sessions.scope(session.sessionId)!
+    const sink = vi.fn()
+    const input = new SessionInputShell({ actx: scope, defaultSink: sink, commandAttachments: { serialize: async () => [], release: () => {}, unsupportedNotice: () => '' } })
+    onTestFinished(() => { input.dispose() })
+    scope.provide('conversation', { input: { for: () => input } })
+    const entry = h.ctx.slots.entries('conversation.input.overlay')[1]!
+    const injectDrop = entry.inject as NonNullable<typeof entry.inject> & ((id: SessionId) => SessionReferenceDropInjected)
+    const data = new Map<string, string>()
+    const transfer = { setData: (type: string, value: string) => { data.set(type, value) }, getData: (type: string) => data.get(type) ?? '' } as unknown as DataTransfer
+    h.ctx.fileReferenceDrag.start(sid('source'), '/synthetic/notes.txt', 'file', transfer)
+    expect(data.get(FILE_REFERENCE_DRAG)).toBeTruthy()
+    await injectDrop(session.sessionId).drop(transfer, new AbortController().signal)
+    expect(h.resolveFile).toHaveBeenCalledWith(session.sessionId, sid('source'), '/synthetic/notes.txt', 'file', expect.any(AbortSignal))
+    expect(input.state.getSnapshot().occurrences).toMatchObject([{ source: 'reference', appearance: 'file', ref: '@/synthetic/notes.txt' }])
     expect(sink).not.toHaveBeenCalled()
   })
 

@@ -3,16 +3,17 @@ import { useEffect, useRef } from 'react'
 import { SESSION_REFERENCE_DRAG } from './session-drag.ts'
 
 export interface SessionReferenceDropInjected {
+  readonly mime?: string
   readonly drop: (transfer: DataTransfer, signal: AbortSignal) => Promise<void>
 }
 
-export function SessionReferenceDrop({ drop }: SessionReferenceDropInjected) {
+export function SessionReferenceDrop({ drop, mime = SESSION_REFERENCE_DRAG }: SessionReferenceDropInjected) {
   const marker = useRef<HTMLSpanElement>(null)
   useEffect(() => {
     const card = marker.current?.closest('[data-composer-card]')
     if (card === null || card === undefined) return
     const controller = new AbortController()
-    const accepts = (event: DragEvent): boolean => event.dataTransfer?.types.includes(SESSION_REFERENCE_DRAG) === true
+    const accepts = (event: DragEvent): boolean => event.dataTransfer?.types.includes(mime) === true
     const over = (event: Event): void => {
       const drag = event as DragEvent
       if (!accepts(drag)) return
@@ -33,6 +34,6 @@ export function SessionReferenceDrop({ drop }: SessionReferenceDropInjected) {
       card.removeEventListener('dragover', over, true)
       card.removeEventListener('drop', receive, true)
     }
-  }, [drop])
+  }, [drop, mime])
   return <span ref={marker} hidden />
 }

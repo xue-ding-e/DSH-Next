@@ -1584,6 +1584,9 @@ importers:
         specifier: 4.4.3
         version: 4.4.3
     devDependencies:
+      '@deepseek-ai/dsh-file-reference-local':
+        specifier: workspace:*
+        version: link:../../context/file-reference-local
       '@deepseek-ai/cordis':
         specifier: workspace:~
         version: link:../../../vendor/cordis
@@ -5181,6 +5184,9 @@ importers:
         specifier: workspace:*
         version: link:../../util/crypto
     devDependencies:
+      '@deepseek-ai/dsh-client-ui-sidebar-files':
+        specifier: workspace:*
+        version: link:../ui-sidebar-files
       '@deepseek-ai/cordis':
         specifier: workspace:~
         version: link:../../../vendor/cordis

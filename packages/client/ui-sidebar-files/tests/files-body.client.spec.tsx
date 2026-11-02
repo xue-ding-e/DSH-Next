@@ -327,3 +327,28 @@ describe('failureLine', () => {
     expect(failureLine(t, failure)).toBe('读取失败：socket closed')
   })
 })
+
+
+it('drags exact file/directory identities only when the reference owner is available', async () => {
+  const owner = { available: () => true, start: vi.fn(), end: vi.fn() }
+  const { view, script } = mountBody(ROOT, undefined, owner)
+  await act(() => script.watches.ready(ROOT))
+  await act(() => script.settle({ ok: true, value: ROOT_LEVEL }))
+  const transfer = { effectAllowed: 'none' } as DataTransfer
+  for (const [name, kind] of [['README.md', 'file'], ['src', 'directory']] as const) {
+    const button = view.container.querySelector(`[data-files-path="${ROOT}/${name}"] button`)!
+    expect(button.getAttribute('draggable')).toBe('true')
+    fireEvent.dragStart(button, { dataTransfer: transfer })
+    expect(owner.start).toHaveBeenLastCalledWith(SESSION, `${ROOT}/${name}`, kind, transfer)
+    fireEvent.dragEnd(button)
+  }
+  expect(owner.end).toHaveBeenCalledTimes(2)
+  expect(view.container.querySelector(`[data-files-path="${ROOT}/pipe"] [draggable="true"]`)).toBeNull()
+})
+
+it('does not advertise a file drag when its optional owner is absent', async () => {
+  const { view, script } = mountBody(ROOT, undefined, { available: () => false, start: vi.fn(), end: vi.fn() })
+  await act(() => script.watches.ready(ROOT))
+  await act(() => script.settle({ ok: true, value: ROOT_LEVEL }))
+  expect(view.container.querySelector('[draggable="true"]')).toBeNull()
+})

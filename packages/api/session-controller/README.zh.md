@@ -12,6 +12,8 @@ kind: "package-reference"
 
 `@deepseek-ai/dsh-api-session-controller` 拥有 Host 的 `ctx.sessionController` 服务，以及生成的 Client `session`、`skills` 和 `fileReferences` Remote namespace。它提供 Session 生命周期与历史、Host generation 模型目录、人工后台任务终止、工作区路径打开、用户可调用 skill（技能）发现和 Agent（智能体）范围的文件引用。当 Client 需要按 Session 寻址的操作时，请通过 API Gateway 使用它。
 
+文件树拖入通过 `fileReferences/resolveDrop` 提交目标会话、源会话身份、绝对路径和预期条目类型。此新增接口对非 owner 角色默认拒绝，需明确授权。除 Gateway 鉴权外，它不伪造调用参数，保守检查源 `fileReferences/list` 和目标 `fileReferences/list`、`session/prompt` 及新增的 `fileReferences/resolveDrop` 权限，并在异步查询后复核。因此，限定参数的角色可能仍能手动进行受限列表查询，但不能自动拖入。非 owner 缺少授权服务时关闭此能力。解析仅返回路径元数据，不读取文件字节、上传、发送提示词或扩大文件系统权限。
+
 ## 目录
 
 - [使用本包](#use-this-package)

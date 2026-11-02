@@ -113,7 +113,20 @@ export function childPath(parent: string, name: string): string {
 }
 
 /** The tree's injected business face, as the body receives it. */
+/** Optional path-reference feature, separate from browser File uploads. */
+export interface FileReferenceDrag {
+  available?(): boolean
+  start(sourceSessionId: SessionId, path: string, kind: 'file' | 'directory', transfer: DataTransfer): void
+  end(): void
+}
+
+declare module '@deepseek-ai/cordis' {
+  interface Context { fileReferenceDrag: FileReferenceDrag }
+}
+
 export interface FilesInjected {
+  readonly fileReferenceDrag?: FileReferenceDrag
+
   /** Refresh the open directory tree. @param tabId - owning tab. */
   readonly refresh: (tabId: TabId) => void
   /** Control automatic rereads without closing watches. @param tabId - owning tab. @param enabled - automatic-refresh setting. */

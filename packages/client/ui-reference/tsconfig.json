@@ -58,6 +58,9 @@
     },
     {
       "path": "../../util/crypto"
+    },
+    {
+      "path": "../ui-sidebar-files"
     }
   ]
 }

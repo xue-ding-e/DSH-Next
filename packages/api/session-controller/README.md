@@ -12,6 +12,8 @@ Desktop analytics follows the [product collection policy](../../client/product-a
 
 `@deepseek-ai/dsh-api-session-controller` owns the Host `ctx.sessionController` service and the generated Client `session`, `skills`, and `fileReferences` Remote namespaces. It serves Session lifecycle and history, the Host-generation model catalog, human background-job kill, workspace-path opening, user-invocable skill discovery, and Agent-scoped file references. Use it through API Gateway when a Client needs operations addressed by a Session.
 
+File-tree drops use `fileReferences/resolveDrop` with a destination Session, source Session identity, absolute path, and expected entry kind. This new endpoint remains default-deny for non-owner roles until explicitly granted. In addition to Gateway authorization, it conservatively checks source `fileReferences/list` and destination `fileReferences/list` plus `session/prompt` and the new `fileReferences/resolveDrop` grant without fabricated call arguments, including after asynchronous lookups. Argument-limited roles may therefore refuse automatic drops while retaining their existing bounded manual listing. Missing authorization services fail closed for non-owners. Resolution returns path metadata only: it does not read bytes, upload, send a prompt, or grant filesystem access.
+
 ## Table of Contents
 
 - [Use this package](#use-this-package)

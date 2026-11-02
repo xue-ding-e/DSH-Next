@@ -13,6 +13,7 @@ export const NS = 'reference'
  * bucketing they name is the one shared {@link relativeTime} in ui-primitives.
  */
 export const zh = {
+  'drag.fileUnavailable': '无法添加文件引用。请确认目标会话已添加并允许该目录，或刷新文件树后重试；已更改的草稿不会被覆盖。',
   'drag.unavailable': '无法添加引用：会话不可用或草稿已改变。请使用 @ 重新选择。',
   'section.files': '文件与文件夹',
   'section.subagents': '子智能体',
@@ -43,6 +44,7 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
 
 /** English dictionary, checked complete against the zh key set. */
 export const en = {
+  'drag.fileUnavailable': 'Could not add the file reference. Check that the destination session includes and allows this folder, or refresh the file tree and retry. Changed drafts are preserved.',
   'drag.unavailable': 'Could not add the reference: the session is unavailable or the draft changed. Select it again with @.',
   'section.files': 'Files & folders',
   'section.subagents': 'Subagents',
@@ -63,6 +65,7 @@ export const en = {
 
 /** Japanese copy, checked against the English keys. */
 export const ja = {
+  'drag.fileUnavailable': 'ファイル参照を追加できません。対象の会話でフォルダーが許可されているか確認するか、ファイル一覧を更新してください。変更した下書きは保持されます。',
   'drag.unavailable': '参照を追加できません。会話が利用できないか、下書きが変更されました。@ で選び直してください。',
   'section.files': 'ファイルとフォルダ',
   'section.subagents': 'サブエージェント',
@@ -83,6 +86,7 @@ export const ja = {
 
 /** Spanish dictionary, checked against the English keys. */
 export const es = {
+  'drag.fileUnavailable': 'No se pudo añadir la referencia. Comprueba la carpeta y los permisos de la sesión de destino o actualiza el árbol. Se conserva el borrador modificado.',
   'drag.unavailable': 'No se pudo añadir la referencia: la sesión no está disponible o cambió el borrador. Selecciónala de nuevo con @.',
   'section.files': 'Archivos y carpetas',
   'section.subagents': 'Subagentes',
@@ -103,6 +107,7 @@ export const es = {
 
 /** French dictionary, checked against the English keys. */
 export const fr = {
+  'drag.fileUnavailable': 'Référence impossible. Vérifiez le dossier autorisé de la conversation cible ou actualisez les fichiers. Le brouillon modifié est conservé.',
   'drag.unavailable': 'Référence indisponible ou brouillon modifié. Sélectionnez-la à nouveau avec @.',
   'section.files': 'Fichiers et dossiers',
   'section.subagents': 'Sous-agents',
@@ -123,6 +128,7 @@ export const fr = {
 
 /** German dictionary, checked against the English keys. */
 export const de = {
+  'drag.fileUnavailable': 'Dateiverweis nicht verfügbar. Prüfen Sie den freigegebenen Ordner der Zielsitzung oder aktualisieren Sie den Dateibaum. Geänderte Entwürfe bleiben erhalten.',
   'drag.unavailable': 'Verweis nicht verfügbar oder Entwurf geändert. Bitte erneut mit @ auswählen.',
   'section.files': 'Dateien und Ordner',
   'section.subagents': 'Subagenten',
@@ -143,6 +149,7 @@ export const de = {
 
 /** Russian dictionary, checked against the English keys. */
 export const ru = {
+  'drag.fileUnavailable': 'Не удалось добавить ссылку. Проверьте папку и разрешения целевой сессии или обновите дерево файлов. Изменённый черновик сохранён.',
   'drag.unavailable': 'Ссылка недоступна или черновик изменён. Выберите снова через @.',
   'section.files': 'Файлы и папки',
   'section.subagents': 'Субагенты',
@@ -163,6 +170,7 @@ export const ru = {
 
 /** Portuguese dictionary, checked against the English keys. */
 export const pt = {
+  'drag.fileUnavailable': 'Não foi possível adicionar a referência. Verifique a pasta permitida da sessão de destino ou atualize os arquivos. O rascunho alterado é preservado.',
   'drag.unavailable': 'Referência indisponível ou rascunho alterado. Selecione novamente com @.',
   'section.files': 'Arquivos e pastas',
   'section.subagents': 'Subagentes',
