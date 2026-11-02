@@ -23,3 +23,10 @@ export function resolveDesktopBuildVersion(env: NodeJS.ProcessEnv, productVersio
  * @returns The prefix shared by every build version of that product version.
  */
 export function desktopBuildVersionPrefix(productVersion: string): string
+
+/**
+ * The update channel a build version publishes to.
+ * @param version - Version this build publishes.
+ * @returns The channel name, or latest for a stable version.
+ */
+export function desktopBuildVersionChannel(version: string): string
