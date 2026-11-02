@@ -44,31 +44,28 @@ for(const point of ['root','profiles','desktop'])test('retention refuses '+point
 
 import {runInNewContext} from 'node:vm'
 import {openSessionMenu} from './probe-compatibility.mjs'
-function hoverFixture(){
- let hovered=false;const events=[],queries=[]
+function contextFixture({missing=false,ignoreHover=false}={}){
+ const events=[],queries=[];let menu=false
  const row={scrollIntoView(){},getBoundingClientRect(){return {x:10,y:20,width:200,height:30}}}
- const button={scrollIntoView(){},getBoundingClientRect(){return hovered?{x:180,y:25,width:16,height:16}:{x:0,y:0,width:0,height:0}}}
- const document={querySelector(s){queries.push(s);assert(s.includes('session:native-menu-a-20261102'));return s.includes('button')?button:row}}
- const c={async send(method,p){assert.equal(method,'Input.dispatchMouseEvent');events.push(p);if(p.type==='mouseMoved'&&p.x===110&&p.y===35)hovered=true}}
- const wait=async(expr,p)=>{const v=runInNewContext(expr,{document});assert(p(v),'hidden action measured before row hover');return v}
+ const document={querySelector(s){queries.push(s);assert.equal(s,'[data-row-key="session:native-menu-a-20261102"]');return missing?null:row},querySelectorAll(){return menu?[{}]:[]}}
+ const c={async send(method,p){assert.equal(method,'Input.dispatchMouseEvent');events.push(p);if(p.type==='mouseReleased'&&p.button==='right')menu=true}}
+ const wait=async(expr,p=x=>x===true)=>{const v=runInNewContext(expr,{document});assert(p(v),'expected real visible row and menu');return v}
  return {c,wait,events,queries}
 }
-test('real pointer hover precedes hidden ellipsis measurement and exact A click',async()=>{
- const f=hoverFixture();await openSessionMenu(f.c,f.wait,'native-menu-a-20261102')
- assert.deepEqual(f.events.map(e=>e.type),['mouseMoved','mouseMoved','mousePressed','mouseReleased'])
- assert.equal(f.events[2].x,188);assert.equal(f.events[2].y,33);assert.equal(f.events[2].button,'left')
- assert.equal(f.queries.length,2)
+test('exact A context gesture opens existing menu without hidden button or hover dependency',async()=>{
+ const f=contextFixture({ignoreHover:true});await openSessionMenu(f.c,f.wait,'native-menu-a-20261102')
+ assert.deepEqual(f.events.map(e=>e.type),['mouseMoved','mousePressed','mouseReleased'])
+ for(const e of f.events.slice(1)){assert.equal(e.button,'right');assert.equal(e.x,110);assert.equal(e.y,35)}
+ assert.equal(f.queries.length,1)
 })
-test('negative control reproduces absent-hover hidden action failure',async()=>{
- const f=hoverFixture();const c={send:(m,p)=>p.type==='mouseMoved'?Promise.resolve():f.c.send(m,p)}
- await assert.rejects(openSessionMenu(c,f.wait,'native-menu-a-20261102'),/hidden action measured before row hover/)
- assert.equal(f.events.length,0)
+test('missing synthetic row fails before pointer action',async()=>{
+ const f=contextFixture({missing:true});await assert.rejects(openSessionMenu(f.c,f.wait,'native-menu-a-20261102'),/real visible row/);assert.equal(f.events.length,0)
 })
 test('foreign session ID rejected before DOM lookup or pointer operation',async()=>{
- const f=hoverFixture();await assert.rejects(openSessionMenu(f.c,f.wait,'real-session'),/Only synthetic/)
+ const f=contextFixture();await assert.rejects(openSessionMenu(f.c,f.wait,'real-session'),/Only synthetic/)
  assert.equal(f.queries.length,0);assert.equal(f.events.length,0)
 })
-test('compatibility uses reviewed hover helper, not a direct hidden-button click',()=>assert(probe.includes('const menu=id=>openSessionMenu(c,wait,id)')))
+test('compatibility uses reviewed context helper, not a direct hidden-button click',()=>assert(probe.includes('const menu=id=>openSessionMenu(c,wait,id)')))
 
 import {independentCheck,diagnosticExpression,captureDiagnostic} from './probe-compatibility.mjs'
 test('D2 executes after D1 failure and original error cannot become green',async()=>{
@@ -131,4 +128,12 @@ test('late CDP completion after diagnostic abort cannot write evidence',async()=
 test('production D1 catch isolates complete diagnostic call before independent D2',()=>{
  assert(probe.includes('diagnosticStatus=await isolateDiagnostic(signal=>captureDiagnostic(c,reportPath,stage,error,signal))'))
  assert(probe.includes('priorD1Diagnostic:diagnosticStatus'))
+})
+
+test('context gesture cannot pass when renderer never opens a menu',async()=>{
+ const f=contextFixture();const c={send:async()=>{}};await assert.rejects(openSessionMenu(c,f.wait,'native-menu-a-20261102'),/real visible row and menu/)
+})
+test('native diagnostics stay exact owned PID, read-only focus and bounded report destination',()=>{
+ for(const marker of ['GetForegroundWindow','GetWindowThreadProcessId','ProcessId -ne $OwnerPid','TreeScope]::Children','-ge 128','-ge 4','RUNNER_TEMP','GetFullPath'])assert(native.includes(marker))
+ assert(!/SetForegroundWindow|SetFocus\(|ShowWindow|SendKeys|mouse_event/.test(native));assert(probe.includes("'-ReportPath',reportPath+'.native-menu.json'"))
 })

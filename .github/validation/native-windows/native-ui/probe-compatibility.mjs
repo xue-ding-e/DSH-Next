@@ -4,17 +4,15 @@ import {fileURLToPath} from 'node:url'
 import {readdirSync,readFileSync,writeFileSync} from 'node:fs'
 import {join} from 'node:path'
 import {CASES} from './synthetic-sessions.mjs'
-// Hover the actual row before measuring its CSS-hidden trailing action.
-// No style mutation or private application API: only renderer reads and CDP input.
+// Use the real row context-menu gesture qualified in C1, independent of hover.
+// This chooses an existing interaction, not a product CSS or menu implementation fix.
 export async function openSessionMenu(c,wait,id){
  assert(CASES.some(s=>s.id===id),'Only synthetic session IDs are permitted')
  const selector='[data-row-key="session:'+id+'"]',q=JSON.stringify
- const point=expr=>`(()=>{const e=${expr};if(!e||e.disabled)return null;e.scrollIntoView({block:'nearest'});const r=e.getBoundingClientRect();return r.width&&r.height?{x:r.x+r.width/2,y:r.y+r.height/2}:null})()`
- const rowPoint=await wait(point(`document.querySelector(${q(selector)})`),v=>!!v)
- await c.send('Input.dispatchMouseEvent',{type:'mouseMoved',...rowPoint})
- const buttonPoint=await wait(point(`document.querySelector(${q(selector+' button[aria-haspopup="menu"]')})`),v=>!!v)
- await c.send('Input.dispatchMouseEvent',{type:'mouseMoved',...buttonPoint})
- for(const type of ['mousePressed','mouseReleased'])await c.send('Input.dispatchMouseEvent',{type,button:'left',clickCount:1,...buttonPoint})
+ const point=await wait(`(()=>{const e=document.querySelector(${q(selector)});if(!e)return null;e.scrollIntoView({block:'nearest'});const r=e.getBoundingClientRect();return r.width&&r.height?{x:r.x+r.width/2,y:r.y+r.height/2}:null})()`,v=>!!v)
+ await c.send('Input.dispatchMouseEvent',{type:'mouseMoved',...point})
+ for(const type of ['mousePressed','mouseReleased'])await c.send('Input.dispatchMouseEvent',{type,button:'right',clickCount:1,...point})
+ await wait(`document.querySelectorAll('[role="menu"]').length===1`)
 }
 // Preserve the original D1 failure even if the independent check is inconclusive.
 export async function independentCheck(original,check){
@@ -94,7 +92,7 @@ export async function verifyCompatibility(c,{stage,reportPath,ownerText,pwsh}){
   const journal=()=>readdirSync(dir).filter(n=>n.endsWith('.jsonl')).flatMap(n=>readFileSync(join(dir,n),'utf8').trim().split('\n').filter(Boolean).map(JSON.parse))
   const before=journal().length
   await hit("document.querySelector('[data-windows-menu]')?.shadowRoot?.querySelector('button')",Date.now()+5000)
-  const invocation=JSON.parse(execFileSync(pwsh,['-NoProfile','-File',fileURLToPath(new URL('./invoke-check-update.ps1',import.meta.url)),'-OwnerPid',ownerText],{encoding:'utf8',timeout:12000}))
+  const invocation=JSON.parse(execFileSync(pwsh,['-NoProfile','-File',fileURLToPath(new URL('./invoke-check-update.ps1',import.meta.url)),'-OwnerPid',ownerText,'-ReportPath',reportPath+'.native-menu.json'],{encoding:'utf8',timeout:12000}))
   assert.equal(invocation.ownerPid,Number(ownerText));d2.invocation=invocation
   const end=Date.now()+15000;let records
   do{records=journal();if(records.slice(before).some(x=>x.event==='check-requested')&&records.slice(before).some(x=>x.event==='state'&&!['checking'].includes(x.phase)))break;await new Promise(r=>setTimeout(r,200))}while(Date.now()<end)
