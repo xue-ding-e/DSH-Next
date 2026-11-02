@@ -125,6 +125,8 @@ Windows 档为每个工作区保留一个确定性写入 SID 和常驻 ACE，同
 
 ## 已知限制与延期工作
 
+附加目录能力依据实际选择的 runner 与模式，而非仅依据宿主操作系统：workspace-write 支持已配置的 bwrap 兼容 runner、bwrap、Landlock 和 Seatbelt。Windows ACL 返回不支持，确认必须拒绝附加写目录。能力检查绝不关闭隔离。
+
 <a id="known-limitations-and-deferred-work"></a>
 
 

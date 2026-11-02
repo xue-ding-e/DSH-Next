@@ -544,3 +544,23 @@ describe('the windows-acl probe (runner invocation contract)', () => {
     expect(confined.argv.slice(0, 2)).toEqual([process.execPath, builtEntry])
   })
 })
+
+
+describe('additional writable directory capability', () => {
+  it.each(['bwrap', 'landlock', 'seatbelt'] as const)('reports a selected %s consumer, not the host OS', async (runner) => {
+    const { ctx, sandbox } = await setup({}, { chain: [runner], probeBwrap: () => true, probeLandlock: () => 'fully-enforced', probeSeatbelt: () => true })
+    try {
+      expect(sandbox.supportsAdditionalWritableRoots('workspace-write')).toBe(true)
+      expect(sandbox.supportsAdditionalWritableRoots('read-only')).toBe(false)
+    } finally { await ctx.fiber.dispose() }
+  })
+
+  it('refuses the Windows ACL backend and unavailable chains', async () => {
+    const windows = await setup({}, { chain: ['windows-acl'] })
+    const unavailable = await setup({}, { platform: 'linux', probeBwrap: () => false, probeLandlock: () => 'unusable' })
+    try {
+      expect(windows.sandbox.supportsAdditionalWritableRoots('workspace-write')).toBe(false)
+      expect(() => unavailable.sandbox.supportsAdditionalWritableRoots('workspace-write')).toThrow(SandboxUnavailableError)
+    } finally { await windows.ctx.fiber.dispose(); await unavailable.ctx.fiber.dispose() }
+  })
+})

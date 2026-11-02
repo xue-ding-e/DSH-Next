@@ -125,6 +125,8 @@ No direct invalidation; the named consumers own any request-prefix changes.
 
 ## Known Limitations and Deferred Work
 
+The additional-root capability follows the selected runner and mode, not the host OS alone: workspace-write supports configured bwrap-compatible runners, bwrap, Landlock and Seatbelt. Windows ACL reports unsupported and confirmation must refuse extra write roots. No capability check disables confinement.
+
 <a id="known-limitations-and-deferred-work"></a>
 
 

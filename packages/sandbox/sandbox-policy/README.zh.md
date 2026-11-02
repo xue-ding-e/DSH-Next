@@ -106,6 +106,9 @@ kind: "package-reference"
 
 待确认目录选择独立于有效策略。`initializeRequestedRoots(session, roots)` 在任何回合开始前，以脱离调用方对象的必需事件 `sandbox/roots-requested` 记录一次选择；`requestedRootsOf(session)` 返回其快照，旧会话则返回 `null`。`reference` 与 `write` 都是请求而非授权。重放、导入和分叉保留待确认元数据，不激活权限，也不改变不可变 cwd。缺失目录保留记录但不会被创建；参考目录不构成读取沙箱。
 
+
+显式激活通过已认证所有者 Peer 调用 `session/prepareRoots`、`session/confirmRoots` 和 `session/cancelRoots`。预览仅可使用一次，60 秒后过期，并绑定准确的存活 Agent、Session、选择版本、provider 与部署策略。确认要求真正空闲，且没有终端、运行中或停止中的作业以及后代活动。授权仅存在于当前进程：重启、恢复、导入和普通分叉均需重新确认；子 Agent 不继承授权。模式变更或记录新选择会使授权失效，即使后来恢复原值也不会复活。目录缺失或参考目录与有效可写目录重叠会被拒绝。`reference` 不新增写权限，也不限制读取。Windows ACL 与未知 provider 不支持附加写目录激活；受支持的后端必须明确声明能力。此处不提供目录选择 UI 与可信子 Agent 授权委派。
+
 <a id="model-experience"></a>
 ## 模型体验
 
@@ -154,7 +157,7 @@ Current DSH file policy: danger-full-access. The DSH file sandbox does not restr
 
 这些限制界定了本包提供的策略范围。它们是当前的包级约束，并非通用沙箱对比，也不是待办事项清单。
 
-- **部署级额外授权**——额外目录来自配置，而非逐会话权限设置。后端支持情况见 [sandbox-local](../sandbox-local/README.zh.md)。
+- **部署级额外授权**——配置授权仍由整个部署共享；显式确认的存活 Agent 授权独立存在，绝不从日志恢复。后端支持情况见 [sandbox-local](../sandbox-local/README.zh.md)。
 - **仅限文件操作模式**——`SandboxMode` 管控文件操作；网络和进程策略不在其词汇中，因此这里没有限制它们的旋钮。
 - **有意概述临时区域**——强制执行后端会授予不同的平台临时区域，这些区域在策略解析后才会选定，因此无法在当前上下文中如实枚举。
 

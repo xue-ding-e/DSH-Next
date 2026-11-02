@@ -29,8 +29,10 @@ import { buildModelCatalog, hasProviderApiKey } from './catalog.ts'
 import { SessionSkillCatalog } from './skill-catalog.ts'
 import { SessionMediaReferences } from './media-references.ts'
 import { ArchivedSessionGate } from './archived-session-gate.ts'
+import { prepareSessionRoots, confirmSessionRoots, cancelSessionRoots } from './root-permissions.ts'
 import type {
   ModelCatalog,
+  SessionRootsPrepareRequest, SessionRootsConfirmRequest, SessionRootsPreview, SessionRootsReceipt,
   SessionWorkspacePathApplication,
   SessionAddress,
   SessionAttachmentRequest,
@@ -506,6 +508,35 @@ export class SessionController extends TypertRemoteService {
   @Remote('cancel')
   cancel(request: SessionCancelRequest): SessionCancelValue {
     return this.commands.cancel(request)
+  }
+
+  /**
+   * Preview saved directory requests for this authenticated owner Peer.
+   * @param request - exact live Session to preview; no principal is accepted.
+   * @returns an expiring one-use preview; this operation grants no permissions.
+   */
+  @Remote('prepareRoots')
+  prepareRoots(request: SessionRootsPrepareRequest): Promise<SessionRootsPreview> {
+    return prepareSessionRoots(this.ctx, request.sessionId)
+  }
+
+  /**
+   * Confirm a preview under true-idle and resource admission fences.
+   * @param request - exact Session and Peer-bound preview nonce.
+   * @returns a process-local permission receipt, never a portable grant.
+   */
+  @Remote('confirmRoots')
+  confirmRoots(request: SessionRootsConfirmRequest): Promise<SessionRootsReceipt> {
+    return confirmSessionRoots(this.ctx, request.sessionId, request.nonce)
+  }
+
+  /**
+   * Cancel the owner's matching preview without changing active permissions.
+   * @param request - exact Session and preview nonce to withdraw.
+   */
+  @Remote('cancelRoots')
+  cancelRoots(request: SessionRootsConfirmRequest): Promise<void> {
+    return cancelSessionRoots(this.ctx, request.sessionId, request.nonce)
   }
 
   /**

@@ -1359,7 +1359,7 @@
     {
       "doc": "docs/subsystems/sandbox.md",
       "symbol": "SandboxMode",
-      "source": "packages/sandbox/sandbox/src/index.ts"
+      "source": "packages/sandbox/sandbox/src/types.ts"
     },
     {
       "doc": "docs/subsystems/sandbox.md",
@@ -1384,7 +1384,17 @@
     {
       "doc": "docs/subsystems/sandbox.md",
       "symbol": "SessionRootRequest",
-      "source": "packages/sandbox/sandbox-policy/src/session-roots.ts"
+      "source": "packages/sandbox/sandbox-policy/src/types.ts"
+    },
+    {
+      "doc": "docs/subsystems/sandbox.md",
+      "symbol": "RootApprovalPreview",
+      "source": "packages/sandbox/sandbox-policy/src/types.ts"
+    },
+    {
+      "doc": "docs/subsystems/sandbox.md",
+      "symbol": "RootApprovalReceipt",
+      "source": "packages/sandbox/sandbox-policy/src/types.ts"
     },
     {
       "doc": "docs/subsystems/sandbox.md",
@@ -2611,6 +2621,26 @@
       "doc": "docs/subsystems/session-projection.md",
       "symbol": "ProjectionKeySelection",
       "source": "packages/session/session-projection/src/index.ts"
+    },
+    {
+      "doc": "docs/subsystems/session.md",
+      "symbol": "SessionRootsPrepareRequest",
+      "source": "packages/api/session-controller/src/types.ts"
+    },
+    {
+      "doc": "docs/subsystems/session.md",
+      "symbol": "SessionRootsConfirmRequest",
+      "source": "packages/api/session-controller/src/types.ts"
+    },
+    {
+      "doc": "docs/subsystems/session.md",
+      "symbol": "SessionRootsPreview",
+      "source": "packages/api/session-controller/src/types.ts"
+    },
+    {
+      "doc": "docs/subsystems/session.md",
+      "symbol": "SessionRootsReceipt",
+      "source": "packages/api/session-controller/src/types.ts"
     }
   ]
 }

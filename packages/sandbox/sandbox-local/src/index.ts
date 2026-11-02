@@ -35,7 +35,7 @@ import {
 import { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import { SandboxProvider, SandboxUnavailableError, SandboxUnsupportedPolicyError, canonicalPath } from '@deepseek-ai/dsh-sandbox'
-import type { ConfinedArgv, ConfinedSandboxMode, RunnerFailureRule, SandboxEnforcement, SandboxPolicy } from '@deepseek-ai/dsh-sandbox'
+import type { ConfinedArgv, ConfinedSandboxMode, RunnerFailureRule, SandboxEnforcement, SandboxMode, SandboxPolicy } from '@deepseek-ai/dsh-sandbox'
 import type { SessionId } from '@deepseek-ai/dsh-session'
 import { AclWriteGrant, assertTempRootOutsideWorkspace, registerAclDiagnosisSkill, tempWriteSid, workspaceWriteSid } from '@deepseek-ai/dsh-sandbox-windows-acl'
 import { assertNever } from '@deepseek-ai/dsh-util-values'
@@ -308,6 +308,14 @@ export class LocalSandboxProvider extends SandboxProvider {
     ctx.effect(() => () => {
       this.revokeAclGrants()
     })
+  }
+
+  /** Report support from the same selected runner used by confinement. */
+  override supportsAdditionalWritableRoots(mode: SandboxMode): boolean {
+    if (mode !== 'workspace-write') return false
+    // Configured runners consume the bwrap profile, including its explicit root binds.
+    if (this.runnerCommand !== undefined) return true
+    return this.selectRunner(mode).runner !== 'windows-acl'
   }
 
   /**

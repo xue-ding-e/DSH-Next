@@ -21,7 +21,8 @@
     "src/list.ts",
     "src/media-references.ts",
     "src/archived-session-gate.ts",
-    "src/skill-catalog.ts"
+    "src/skill-catalog.ts",
+    "src/root-permissions.ts"
   ],
   "references": [
     {
@@ -119,6 +120,12 @@
     },
     {
       "path": "../../sandbox/sandbox-policy"
+    },
+    {
+      "path": "../../jobs/jobs"
+    },
+    {
+      "path": "../../terminal/terminal"
     }
   ]
 }

@@ -86,6 +86,33 @@ interface SessionRootRequest {
 ```
 
 ```ts type-equiv
+/** One Peer-bound, short-lived preview; a nonce is not a durable grant. */
+interface RootApprovalPreview {
+  readonly sessionId: SessionId
+  readonly nonce: string
+  readonly expiresAt: number
+  readonly roots: readonly SessionRootRequest[]
+  readonly mode: SandboxMode
+  readonly workspaceRoot: string
+  readonly deploymentWritableRoots: readonly string[]
+  readonly rootsRevision: number
+  readonly modeRevision: number
+  /** Grants last only for this exact live Agent in this Host process. */
+  readonly lifetime: 'live-agent'
+}
+
+```
+
+```ts type-equiv
+/** Acknowledges an in-process grant, not a portable permission record. */
+interface RootApprovalReceipt {
+  readonly sessionId: SessionId
+  readonly additionalWritableRoots: readonly string[]
+  readonly lifetime: 'live-agent'
+}
+```
+
+```ts type-equiv
 /** Inputs that select the sandbox policy for one capability call. */
 interface SandboxPolicyRequest {
   /** Calling session; its immutable cwd becomes the workspace boundary. */
@@ -192,6 +219,14 @@ Abstract process-sandbox service. confine must return enforcing argv or fail clo
 
 ```ts cordis-catalog
 /**
+ * Whether the selected backend consumes explicit additional writable roots.
+ * Unknown providers fail closed; this is capability, not a successful execution probe.
+ * @param mode - the current file-effect mode to confirm.
+ * @returns true only when this provider supports explicit grants in that mode.
+ */
+supportsAdditionalWritableRoots(mode: SandboxMode): boolean
+
+/**
  * Wrap `argv` so it executes confined under `policy` on this host; the
  * caller spawns the returned argv in place of its own.
  * @param argv - the exact argv the caller is about to spawn (program plus
@@ -227,6 +262,29 @@ The sandbox-policy service (`ctx.sandboxPolicy`). Owns the deployment default mo
 resolve(request: SandboxPolicyRequest = {}): SandboxExecutionPolicy
 
 /**
+ * Preview pending roots for the authenticated owner of the current Remote call.
+ * @param agent - exact live Agent selected by the Host controller.
+ * @param assertQuiescent - Host-owned synchronous resource and provider-generation fence.
+ * @returns a one-use Peer-bound preview, valid for sixty seconds.
+ */
+prepareRootApproval(agent: Agent, assertQuiescent: () => void): Promise<RootApprovalPreview>
+
+/**
+ * Confirm exactly one preview from true idle; replay never activates this grant.
+ * @param agent - exact live Agent from the preview.
+ * @param nonce - one-use nonce issued to the same live owner Peer.
+ * @returns the process-local grant receipt; failures require another preview.
+ */
+confirmRootApproval(agent: Agent, nonce: string): Promise<RootApprovalReceipt>
+
+/**
+ * Cancel a matching preview without revoking active permissions.
+ * @param agent - exact live Agent selected by the Host controller.
+ * @param nonce - preview nonce issued to this owner Peer.
+ */
+cancelRootApproval(agent: Agent, nonce: string): void
+
+/**
  * Capture creation-time directory defaults before the first turn. The event
  * records requests only: it cannot grant writes, even after import or replay.
  * @param session - Fresh Session in unpublished Agent setup.
@@ -250,7 +308,7 @@ requestedRootsOf(session: Session): readonly SessionRootRequest[] | null
 overrideOf(session: Session): SandboxMode | undefined
 ```
 
-Types: [Session](session.md)
+Types: [Agent](core.md) · [Session](session.md)
 
 Source: [`packages/sandbox/sandbox-policy/src/index.ts`](../../packages/sandbox/sandbox-policy/src/index.ts)
 <!-- END GENERATED cordis-surface -->

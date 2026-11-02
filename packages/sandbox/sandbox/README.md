@@ -158,6 +158,8 @@ Append-only; escalation text follows the retained prefix and does not invalidate
 
 ## Known Limitations and Deferred Work
 
+`supportsAdditionalWritableRoots(mode)` is an opt-in backend capability: the base provider returns false. This does not grant permissions or promise that a future command will run; enforcing providers still validate each root at execution. Browser clients import `SandboxMode` from `@deepseek-ai/dsh-sandbox/types`; the original package entry continues to re-export it.
+
 <a id="known-limitations-and-deferred-work"></a>
 
 

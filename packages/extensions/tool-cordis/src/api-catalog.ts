@@ -2178,6 +2178,12 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     description: 'Abstract process-sandbox service. confine must return enforcing argv or fail closed at wrap or runner-execution time; silent unconfined passthrough is forbidden. Functional probes arbitrate multi-runner chains and may be skipped for a sole candidate, whose own refusal remains the fail-closed end.',
     methods: [
       {
+        signature: 'supportsAdditionalWritableRoots(mode: SandboxMode): boolean',
+        description: 'Whether the selected backend consumes explicit additional writable roots. Unknown providers fail closed; this is capability, not a successful execution probe.',
+        parameters: [{ name: 'mode', description: 'the current file-effect mode to confirm.' }],
+        returns: 'true only when this provider supports explicit grants in that mode.',
+      },
+      {
         signature: 'abstract confine(argv: readonly string[], policy: SandboxPolicy, signal?: AbortSignal): Promise<ConfinedArgv>',
         description: 'Wrap `argv` so it executes confined under `policy` on this host; the caller spawns the returned argv in place of its own.',
         parameters: [{ name: 'argv', description: 'the exact argv the caller is about to spawn (program plus arguments), NOT a shell string — a shell-shaped consumer passes `[\'bash\', \'-c\', command]`.' }, { name: 'policy', description: 'the file-effect policy this execution runs under, carried per call (see {@link SandboxPolicy}).' }, { name: 'signal', description: 'cancellation while the provider resolves the policy and runner.' }],
@@ -2210,6 +2216,23 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         description: 'Resolve the complete policy for one capability call. An approved explicit mode outranks the session\'s last `sandbox/mode` event, which outranks the deployment default. A session cwd is its workspace-write boundary; the configured root is the fallback for agentless calls and sessions without a cwd.',
         parameters: [{ name: 'request', description: 'optional session and approved mode override.' }],
         returns: 'the fully resolved per-call mode and absolute workspace root.',
+      },
+      {
+        signature: 'prepareRootApproval(agent: Agent, assertQuiescent: () => void): Promise<RootApprovalPreview>',
+        description: 'Preview pending roots for the authenticated owner of the current Remote call.',
+        parameters: [{ name: 'agent', description: 'exact live Agent selected by the Host controller.' }, { name: 'assertQuiescent', description: 'Host-owned synchronous resource and provider-generation fence.' }],
+        returns: 'a one-use Peer-bound preview, valid for sixty seconds.',
+      },
+      {
+        signature: 'confirmRootApproval(agent: Agent, nonce: string): Promise<RootApprovalReceipt>',
+        description: 'Confirm exactly one preview from true idle; replay never activates this grant.',
+        parameters: [{ name: 'agent', description: 'exact live Agent from the preview.' }, { name: 'nonce', description: 'one-use nonce issued to the same live owner Peer.' }],
+        returns: 'the process-local grant receipt; failures require another preview.',
+      },
+      {
+        signature: 'cancelRootApproval(agent: Agent, nonce: string): void',
+        description: 'Cancel a matching preview without revoking active permissions.',
+        parameters: [{ name: 'agent', description: 'exact live Agent selected by the Host controller.' }, { name: 'nonce', description: 'preview nonce issued to this owner Peer.' }],
       },
       {
         signature: 'initializeRequestedRoots(session: Session, roots: readonly SessionRootRequest[]): void',
@@ -2389,6 +2412,23 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         description: 'Cancel one active Agent turn without dropping its pending inbox.',
         parameters: [{ name: 'request', description: 'Session whose active Agent turn is cancelled.' }],
         returns: 'acknowledgement that cancellation was requested.',
+      },
+      {
+        signature: '@Remote(\'prepareRoots\') prepareRoots(request: SessionRootsPrepareRequest): Promise<SessionRootsPreview>',
+        description: 'Preview saved directory requests for this authenticated owner Peer.',
+        parameters: [{ name: 'request', description: 'exact live Session to preview; no principal is accepted.' }],
+        returns: 'an expiring one-use preview; this operation grants no permissions.',
+      },
+      {
+        signature: '@Remote(\'confirmRoots\') confirmRoots(request: SessionRootsConfirmRequest): Promise<SessionRootsReceipt>',
+        description: 'Confirm a preview under true-idle and resource admission fences.',
+        parameters: [{ name: 'request', description: 'exact Session and Peer-bound preview nonce.' }],
+        returns: 'a process-local permission receipt, never a portable grant.',
+      },
+      {
+        signature: '@Remote(\'cancelRoots\') cancelRoots(request: SessionRootsConfirmRequest): Promise<void>',
+        description: 'Cancel the owner\'s matching preview without changing active permissions.',
+        parameters: [{ name: 'request', description: 'exact Session and preview nonce to withdraw.' }],
       },
       {
         signature: '@Remote(\'page\') page(request: SessionPageRequest, signal: AbortSignal): Promise<SessionPage>',
@@ -7250,6 +7290,14 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface ResumeAgentOptions {\n    readonly resumeSessionId: SessionId;\n    readonly parentAgent?: Agent;\n    readonly agentOptions?: AgentOptions;\n    readonly signal?: AbortSignal;\n    readonly setup?: AgentSetup;\n}',
   },
   {
+    name: 'RootApprovalPreview',
+    declaration: 'export interface RootApprovalPreview {\n    readonly sessionId: SessionId;\n    readonly nonce: string;\n    readonly expiresAt: number;\n    readonly roots: readonly SessionRootRequest[];\n    readonly mode: SandboxMode;\n    readonly workspaceRoot: string;\n    readonly deploymentWritableRoots: readonly string[];\n    readonly rootsRevision: number;\n    readonly modeRevision: number;\n    readonly lifetime: \'live-agent\';\n}',
+  },
+  {
+    name: 'RootApprovalReceipt',
+    declaration: 'export interface RootApprovalReceipt {\n    readonly sessionId: SessionId;\n    readonly additionalWritableRoots: readonly string[];\n    readonly lifetime: \'live-agent\';\n}',
+  },
+  {
     name: 'RpcId',
     declaration: 'export type RpcId = Branded<\'rpc-id\'>;',
   },
@@ -7844,6 +7892,22 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'SessionRootRequest',
     declaration: 'export interface SessionRootRequest {\n    readonly path: string;\n    readonly access: \'reference\' | \'write\';\n}',
+  },
+  {
+    name: 'SessionRootsConfirmRequest',
+    declaration: 'export interface SessionRootsConfirmRequest extends SessionRootsPrepareRequest {\n    readonly nonce: string;\n}',
+  },
+  {
+    name: 'SessionRootsPrepareRequest',
+    declaration: 'export interface SessionRootsPrepareRequest {\n    readonly sessionId: SessionId;\n}',
+  },
+  {
+    name: 'SessionRootsPreview',
+    declaration: 'export type SessionRootsPreview = import(\'@deepseek-ai/dsh-sandbox-policy/types\').RootApprovalPreview;',
+  },
+  {
+    name: 'SessionRootsReceipt',
+    declaration: 'export type SessionRootsReceipt = import(\'@deepseek-ai/dsh-sandbox-policy/types\').RootApprovalReceipt;',
   },
   {
     name: 'SessionSearchCursor',

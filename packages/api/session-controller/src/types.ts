@@ -184,6 +184,9 @@ export const SESSION_SEARCH_SNIPPET_MAX_CODE_POINTS = 240
 declare module '@deepseek-ai/dsh-typert-protocol' {
   interface RemoteErrorDetailsMap {
     'file-reference/unavailable': Record<string, never>
+    'session/roots-owner-required': Record<string, never>
+    'session/roots-unavailable': Record<string, never>
+    'session/roots-refused': Record<string, never>
     'session/provider-credentials-unavailable': Record<string, never>
     'session/provider-models-unavailable': { readonly provider: string }
     'session/model-unavailable': { readonly provider: string; readonly model: string }
@@ -634,3 +637,19 @@ export type SessionProjectionValue = JsonValue
 
 /** Application metadata returned by the serving desktop for one file. */
 export type SessionWorkspacePathApplication = NativeFileApplication
+
+/** Select one live Session's saved directory requests; identity comes from the Peer, never this payload. */
+export interface SessionRootsPrepareRequest {
+  readonly sessionId: SessionId
+}
+
+/** Confirm or cancel the exact preview issued to this Peer. */
+export interface SessionRootsConfirmRequest extends SessionRootsPrepareRequest {
+  readonly nonce: string
+}
+
+/** Peer-bound directory preview with explicit current mode and deployment grants. */
+export type SessionRootsPreview = import('@deepseek-ai/dsh-sandbox-policy/types').RootApprovalPreview
+
+/** Process-local directory grant; importing this value conveys no authorization. */
+export type SessionRootsReceipt = import('@deepseek-ai/dsh-sandbox-policy/types').RootApprovalReceipt

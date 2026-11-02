@@ -3,13 +3,7 @@ import { isAbsolute } from 'node:path'
 import { z } from 'zod'
 import type { SessionEvent } from '@deepseek-ai/dsh-session'
 
-/** One explicit selection; reference does not impose a read sandbox. */
-export interface SessionRootRequest {
-  /** Absolute execution-world directory selected by the Host. */
-  readonly path: string
-  /** A write request is pending, not a permission grant. */
-  readonly access: 'reference' | 'write'
-}
+import type { SessionRootRequest } from './types.ts'
 
 declare module '@deepseek-ai/dsh-session/types' {
   interface SessionEventMap {
@@ -30,6 +24,8 @@ export const requestedRootsSchema = z.array(z.object({
 export const requestedRootsStateSchema = z.object({
   roots: requestedRootsSchema.nullable(),
   started: z.boolean(),
+  rootsRevision: z.number().int().nonnegative(),
+  modeRevision: z.number().int().nonnegative(),
 })
 
 /** Host-only projection state; no activation or approval field exists. */
@@ -43,7 +39,8 @@ export type RequestedRootsState = z.infer<typeof requestedRootsStateSchema>
  */
 export function foldRequestedRoots(state: RequestedRootsState, event: SessionEvent): RequestedRootsState {
   if (event.type === 'turn/start') return state.started ? state : { ...state, started: true }
+  if (event.type === 'sandbox/mode') return { ...state, modeRevision: event.seq }
   if (event.type !== 'sandbox/roots-requested') return state
   // Parse restored payloads here: a log can supply values without a typed Host caller.
-  return { ...state, roots: requestedRootsSchema.parse(event.data.roots) }
+  return { ...state, roots: requestedRootsSchema.parse(event.data.roots), rootsRevision: event.seq }
 }

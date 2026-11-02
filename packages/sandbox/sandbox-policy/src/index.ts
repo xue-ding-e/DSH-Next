@@ -25,16 +25,19 @@ import { isAbsolute } from 'node:path'
 import { Context, Service } from '@deepseek-ai/cordis'
 import { z as zod } from 'zod'
 import z from '@deepseek-ai/schemastery'
-import type {} from '@deepseek-ai/dsh-agent'
+import type { Agent } from '@deepseek-ai/dsh-agent'
 import type { SandboxExecutionPolicy, SandboxMode } from '@deepseek-ai/dsh-sandbox'
 import type { Session } from '@deepseek-ai/dsh-session'
 import type { ProjectionHandle } from '@deepseek-ai/dsh-session-projection'
 import type {} from '@deepseek-ai/dsh-system-prompt'
 
 export { SANDBOX_MODES, setSandboxMode } from './session-mode.ts'
-export type { SessionRootRequest } from './session-roots.ts'
+export type { SessionRootRequest, RootApprovalPreview, RootApprovalReceipt } from './types.ts'
+import type { RootApprovalPreview, RootApprovalReceipt, SessionRootRequest } from './types.ts'
+import { RootApprovalOwner } from './root-permissions.ts'
+export { RootApprovalError } from './root-permissions.ts'
 import { foldRequestedRoots, requestedRootsSchema, requestedRootsStateSchema } from './session-roots.ts'
-import type { RequestedRootsState, SessionRootRequest } from './session-roots.ts'
+import type { RequestedRootsState } from './session-roots.ts'
 
 /** Preserve execution-world spelling; enforcing providers resolve filesystem identity on their host. */
 function resolveWorkspaceRoot(path: string): string {
@@ -153,6 +156,9 @@ export class SandboxPolicyService extends Service {
   /** The frozen extra writable directories shared by every resolved policy, or `undefined` for none. */
   readonly additionalWritableRoots: readonly string[] | undefined
   private requestedRootsProjectionHandle!: ProjectionHandle<RequestedRootsState>
+  private readonly rootApprovals = new RootApprovalOwner(this, session => ({
+    state: this.requestedRootsProjectionHandle.stateOf(session), policy: this.basePolicy({ session }),
+  }))
   private sandboxModeProjectionHandle!: ProjectionHandle<SandboxMode | null>
 
   constructor(ctx: Context, config: Config) {
@@ -169,9 +175,9 @@ export class SandboxPolicyService extends Service {
     const ctx = this.ctx
     this.requestedRootsProjectionHandle = await ctx.sessionProjections.register({
       key: 'sandboxRequestedRoots',
-      stateVersion: 1,
+      stateVersion: 2,
       stateSchema: requestedRootsStateSchema,
-      init: () => ({ roots: null, started: false }),
+      init: () => ({ roots: null, started: false, rootsRevision: 0, modeRevision: 0 }),
       apply: foldRequestedRoots,
     })
     this.sandboxModeProjectionHandle = await ctx.sessionProjections.register({
@@ -206,6 +212,16 @@ export class SandboxPolicyService extends Service {
    * @returns the fully resolved per-call mode and absolute workspace root.
    */
   resolve(request: SandboxPolicyRequest = {}): SandboxExecutionPolicy {
+    const policy = this.basePolicy(request)
+    const roots = request.session === undefined || policy.mode !== 'workspace-write'
+      ? [] : this.rootApprovals.rootsFor(this.ctx, request.session)
+    return roots.length === 0 ? policy : {
+      ...policy, additionalWritableRoots: [...new Set([...(policy.additionalWritableRoots ?? []), ...roots])],
+    }
+  }
+
+  /** Resolve deployment and mode facts without consulting process-local grants. */
+  private basePolicy(request: SandboxPolicyRequest): SandboxExecutionPolicy {
     const { session } = request
     return {
       mode: request.mode ?? (session === undefined ? undefined : this.overrideOf(session)) ?? this.defaultMode,
@@ -213,6 +229,35 @@ export class SandboxPolicyService extends Service {
       ...this.additionalWritableRoots === undefined ? {} : { additionalWritableRoots: this.additionalWritableRoots },
       ...session === undefined ? {} : { sessionId: session.id },
     }
+  }
+
+  /**
+   * Preview pending roots for the authenticated owner of the current Remote call.
+   * @param agent - exact live Agent selected by the Host controller.
+   * @param assertQuiescent - Host-owned synchronous resource and provider-generation fence.
+   * @returns a one-use Peer-bound preview, valid for sixty seconds.
+   */
+  prepareRootApproval(agent: Agent, assertQuiescent: () => void): Promise<RootApprovalPreview> {
+    return this.rootApprovals.prepare(this.ctx, agent, assertQuiescent)
+  }
+
+  /**
+   * Confirm exactly one preview from true idle; replay never activates this grant.
+   * @param agent - exact live Agent from the preview.
+   * @param nonce - one-use nonce issued to the same live owner Peer.
+   * @returns the process-local grant receipt; failures require another preview.
+   */
+  confirmRootApproval(agent: Agent, nonce: string): Promise<RootApprovalReceipt> {
+    return this.rootApprovals.confirm(this.ctx, agent, nonce)
+  }
+
+  /**
+   * Cancel a matching preview without revoking active permissions.
+   * @param agent - exact live Agent selected by the Host controller.
+   * @param nonce - preview nonce issued to this owner Peer.
+   */
+  cancelRootApproval(agent: Agent, nonce: string): void {
+    this.rootApprovals.cancel(this.ctx, agent, nonce)
   }
 
   /**
