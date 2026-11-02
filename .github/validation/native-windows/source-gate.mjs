@@ -5,7 +5,8 @@ import assert from 'node:assert/strict'
 import {execFileSync} from 'node:child_process'
 import {readFileSync} from 'node:fs'
 import {createHash} from 'node:crypto'
-export const PREVIOUS='96b46246bfc60aa0b47e01b7870fa9ebbe8b3e86'
+export const PREVIOUS='525161dc8eeec6f02217d99d54bb6e48ac2d40f4'
+export const FIRST_CONTROL='96b46246bfc60aa0b47e01b7870fa9ebbe8b3e86'
 export const PRODUCT='275192ff0c4857c137eeaf96f5320d3034c19d35'
 export const BRANCH='refs/heads/validation/released-windows-lifecycle'
 export const ROOT='.github/validation/native-windows/'
@@ -33,9 +34,11 @@ export function run(env,bootstrap){
   const git=(...args)=>execFileSync('git',args,{encoding:'utf8'}).trim()
   assert.equal(git('rev-parse','HEAD'),env.GITHUB_SHA)
   assert.equal(git('show','-s','--format=%P','HEAD'),PREVIOUS)
-  assert.equal(git('show','-s','--format=%P',PREVIOUS),bootstrap)
+  assert.equal(git('show','-s','--format=%P',PREVIOUS),FIRST_CONTROL)
+  assert.equal(git('show','-s','--format=%P',FIRST_CONTROL),bootstrap)
   assert.equal(git('show','-s','--format=%P',bootstrap),PRODUCT)
-  assert.equal(git('diff','--name-only',bootstrap,PREVIOUS),WORKFLOW)
+  assert.equal(git('diff','--name-only',bootstrap,FIRST_CONTROL),WORKFLOW)
+  assert.deepEqual(git('diff','--name-only',FIRST_CONTROL,PREVIOUS).split('\n').sort(),[WORKFLOW,ROOT+'source-gate.mjs'].sort())
   assert.deepEqual(git('diff','--name-only',PREVIOUS,'HEAD').split('\n').sort(),[WORKFLOW,ROOT+'source-gate.mjs'].sort())
   const manifest=JSON.parse(git('show',bootstrap+':'+ROOT+'manifest.json'))
   validateManifest(manifest)
@@ -47,6 +50,6 @@ export function run(env,bootstrap){
     assert.equal(createHash('sha256').update(bytes).digest('hex'),hash,name)
     assert.equal(git('rev-parse','HEAD:'+ROOT+name),git('rev-parse',bootstrap+':'+ROOT+name))
   }
-  assert.equal(git('rev-parse',PREVIOUS+':'+ROOT+'source-gate.mjs'),git('rev-parse',bootstrap+':'+ROOT+'source-gate.mjs'))
-  console.log(JSON.stringify({control:env.GITHUB_SHA,bootstrap,product:PRODUCT,scope:'parser/compile/synthetic fixture only; no installation'}))
+  assert.equal(git('rev-parse',FIRST_CONTROL+':'+ROOT+'source-gate.mjs'),git('rev-parse',bootstrap+':'+ROOT+'source-gate.mjs'))
+  console.log(JSON.stringify({control:env.GITHUB_SHA,bootstrap,product:PRODUCT,scope:'Phase B pinned published installer lifecycle only; no UI or automatic update qualification'}))
 }

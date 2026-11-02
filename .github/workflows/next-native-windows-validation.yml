@@ -1,6 +1,6 @@
-name: Next Windows native fixture validation
-# Reviewed bootstrap identity and manifest gate. Phase A only; no installer execution.
-# The installed lifecycle script is deliberately NOT called in this Phase A workflow.
+name: Next Windows published installer lifecycle validation
+# Phase B: fixed public installer hashes and synthetic profiles on a disposable hosted VM.
+# Does not qualify renderer UI, automatic update, or valid configuration migration.
 on:
   push:
     branches: [validation/released-windows-lifecycle]
@@ -11,14 +11,14 @@ concurrency:
   cancel-in-progress: false
 jobs:
   fixture:
-    if: github.repository == 'xue-ding-e/DSH-Next' && github.ref == 'refs/heads/validation/released-windows-lifecycle' && github.event.before == '96b46246bfc60aa0b47e01b7870fa9ebbe8b3e86' && github.event.after == github.sha && github.event.created == false && github.event.deleted == false && github.event.forced == false
+    if: github.repository == 'xue-ding-e/DSH-Next' && github.ref == 'refs/heads/validation/released-windows-lifecycle' && github.event.before == '525161dc8eeec6f02217d99d54bb6e48ac2d40f4' && github.event.after == github.sha && github.event.created == false && github.event.deleted == false && github.event.forced == false
     runs-on: windows-2025
-    timeout-minutes: 10
+    timeout-minutes: 35
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           ref: ${{ github.sha }}
-          fetch-depth: 4
+          fetch-depth: 5
           persist-credentials: false
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
         with:
@@ -37,3 +37,14 @@ jobs:
       - name: Parse compile and synthetic owned-process fixture only
         shell: pwsh
         run: .github/validation/native-windows/validate-native-fixture.ps1
+      - name: Fixed old to new installer lifecycle on synthetic profiles
+        shell: pwsh
+        run: .github/validation/native-windows/released-installer-lifecycle.ps1 -Execute
+      - name: Preserve synthetic lifecycle summary only
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: dsh-installer-lifecycle-${{ github.run_id }}
+          path: ${{ runner.temp }}/dsh-release-acceptance-*/lifecycle-report.json
+          if-no-files-found: warn
+          retention-days: 14
