@@ -21,7 +21,7 @@ test('D stage budgets reserve overhead inside unchanged hard180 owner',()=>{
  const a=Number(welcome.match(/const until=Date.now\(\)\+(\d+)/)[1])/1000
  const d1=Number(probe.match(/const deadline=Date.now\(\)\+(\d+)/)[1])/1000
  const d2=Number(probe.match(/const end=Date.now\(\)\+(\d+)/)[1])/1000
- assert(30+a+d1+d2+12+30<=180);assert(ps.includes('$install,180)'));assert(source('OwnedUiJob.cs').includes('timeoutSeconds>180'))
+ assert(30+a+d1+d2+12+5+30<=180);assert(ps.includes('$install,180)'));assert(source('OwnedUiJob.cs').includes('timeoutSeconds>180'))
 })
 import {mkdtempSync,mkdirSync,writeFileSync,rmSync,symlinkSync} from 'node:fs'
 import {join} from 'node:path'
@@ -69,3 +69,66 @@ test('foreign session ID rejected before DOM lookup or pointer operation',async(
  assert.equal(f.queries.length,0);assert.equal(f.events.length,0)
 })
 test('compatibility uses reviewed hover helper, not a direct hidden-button click',()=>assert(probe.includes('const menu=id=>openSessionMenu(c,wait,id)')))
+
+import {independentCheck,diagnosticExpression,captureDiagnostic} from './probe-compatibility.mjs'
+test('D2 executes after D1 failure and original error cannot become green',async()=>{
+ const original=Error('original D1');let called=0
+ await assert.rejects(independentCheck(original,async()=>{called++;return {status:'observed'}}),e=>e===original)
+ assert.equal(called,1)
+ await assert.rejects(independentCheck(original,async()=>{throw Error('independent diagnostic')}),e=>e===original)
+ assert.deepEqual(await independentCheck(null,async()=>({status:'inconclusive'})),{status:'inconclusive'})
+})
+test('D2 input gets independent 5s budget after expired D1 and remains check-only',()=>{
+ assert(probe.includes("querySelector('button')\",Date.now()+5000)"));assert(probe.includes('until=deadline'))
+ assert(probe.indexOf('captureDiagnostic(c,reportPath,stage,error,signal)')<probe.indexOf('return independentCheck(d1Error'))
+})
+test('bounded snapshot has visibility, hit testing, structure and ancestor evidence, no text dump',()=>{
+ const expr=diagnosticExpression();for(const key of ['rowActions','ancestors','centerHit','rowHovered','buttonExists','children','safeOrigin'])assert(expr.includes(key))
+ assert(!/textContent|innerHTML|outerHTML|cookie|fetch/.test(expr))
+})
+test('unsafe renderer cannot produce screenshot, original error retained',async()=>{
+ const d=mkdtempSync(join(tmpdir(),'dsh-diagnostic-'));try{
+ let captured=false;const c={send:async method=>{if(method==='Page.captureScreenshot'){captured=true;throw Error('must not capture')}return {result:{value:{safeOrigin:false}}}}}
+ await captureDiagnostic(c,join(d,'report'),'old',Error('original'))
+ assert.equal(captured,false);const report=JSON.parse(readFileSync(join(d,'report.diagnostic.json')));assert.equal(report.originalError,'original');assert(report.diagnosticError)
+ }finally{rmSync(d,{recursive:true,force:true})}
+})
+test('diagnostic expression actually evaluates absent/hidden buttons and foreign hit safely',()=>{
+ let hidden=false
+ const row={tagName:'DIV',parentElement:null,getAttribute:()=>null,querySelector:()=>hidden?button:null,getBoundingClientRect:()=>({x:1,y:2,width:100,height:30}),matches:()=>true,contains:()=>false,children:[]}
+ const button={tagName:'BUTTON',parentElement:row,disabled:false,getAttribute:()=>null,getBoundingClientRect:()=>({x:0,y:0,width:0,height:0})}
+ const foreign={tagName:'DIV',getAttribute:()=>null,getBoundingClientRect:()=>({x:0,y:0,width:20,height:20}),closest:()=>({getAttribute:()=> 'session:other-synthetic'})}
+ const env={location:{protocol:'dsh-app:',hostname:'app'},innerWidth:1200,innerHeight:800,document:{querySelector:()=>row,querySelectorAll:()=>[],elementFromPoint:()=>foreign},getComputedStyle:()=>({display:'none',visibility:'visible',pointerEvents:'auto'})}
+ const expr=diagnosticExpression(),a=runInNewContext(expr,env);assert.equal(a.safeOrigin,true);assert.equal(a.rows[0].buttonExists,false);assert.equal(a.rows[0].centerHitSyntheticId,null)
+ hidden=true;const b=runInNewContext(expr,env);assert.equal(b.rows[0].buttonExists,true);assert.equal(b.rows[0].button.rect.width,0);assert.equal(b.rows[0].rowActions.display,'none');assert.equal(b.rows[0].centerHitsRow,false)
+})
+
+import {isolateDiagnostic} from './probe-compatibility.mjs'
+for(const mode of ['absent-directory','parent-is-file'])test('diagnostic '+mode+' cannot replace D1 or skip D2',async()=>{
+ const dir=mkdtempSync(join(tmpdir(),'dsh-diagnostic-write-'));try{
+  const parent=join(dir,'not-directory');if(mode==='parent-is-file')writeFileSync(parent,'synthetic')
+  const c={send:async()=>({result:{value:{safeOrigin:false}}})},original=Error('original D1');let checked=false
+  const diagnostic=await isolateDiagnostic(signal=>captureDiagnostic(c,join(parent,'report'),'old',original,signal))
+  assert.equal(diagnostic.status,'failed');assert(diagnostic.error.length<=500)
+  await assert.rejects(independentCheck(original,async()=>{checked=true;return {diagnostic,status:'inconclusive'}}),e=>e===original)
+  assert.equal(checked,true)
+ }finally{rmSync(dir,{recursive:true,force:true})}
+})
+test('hanging diagnostic is bounded, aborted and cannot suppress D2',async()=>{
+ let signal,checked=false;const original=Error('original'),start=Date.now()
+ const diagnostic=await isolateDiagnostic(s=>{signal=s;return new Promise(()=>{})},10)
+ assert.equal(diagnostic.status,'failed');assert.match(diagnostic.error,/deadline/);assert.equal(signal.aborted,true);assert(Date.now()-start<1000)
+ await assert.rejects(independentCheck(original,async()=>{checked=true}),e=>e===original);assert.equal(checked,true)
+})
+test('late CDP completion after diagnostic abort cannot write evidence',async()=>{
+ const dir=mkdtempSync(join(tmpdir(),'dsh-diagnostic-late-'));try{
+  let resolve;const response=new Promise(r=>{resolve=r}),c={send:()=>response},path=join(dir,'report')
+  const result=await isolateDiagnostic(signal=>captureDiagnostic(c,path,'old',Error('original'),signal),10)
+  assert.equal(result.status,'failed');resolve({result:{value:{safeOrigin:false}}});await new Promise(r=>setTimeout(r,10))
+  assert.throws(()=>readFileSync(path+'.diagnostic.json'),/ENOENT/)
+ }finally{rmSync(dir,{recursive:true,force:true})}
+})
+test('production D1 catch isolates complete diagnostic call before independent D2',()=>{
+ assert(probe.includes('diagnosticStatus=await isolateDiagnostic(signal=>captureDiagnostic(c,reportPath,stage,error,signal))'))
+ assert(probe.includes('priorD1Diagnostic:diagnosticStatus'))
+})

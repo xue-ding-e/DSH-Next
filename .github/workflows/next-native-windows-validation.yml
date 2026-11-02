@@ -11,14 +11,14 @@ concurrency:
   cancel-in-progress: false
 jobs:
   fixture:
-    if: github.repository == 'xue-ding-e/DSH-Next' && github.ref == 'refs/heads/validation/released-windows-lifecycle' && github.event.before == 'ba934aded9422786f1517d4df2db09297329d8e4' && github.event.after == github.sha && github.event.created == false && github.event.deleted == false && github.event.forced == false
+    if: github.repository == 'xue-ding-e/DSH-Next' && github.ref == 'refs/heads/validation/released-windows-lifecycle' && github.event.before == 'da109251dab6fb620b64de2babbecf1b76b0e0fc' && github.event.after == github.sha && github.event.created == false && github.event.deleted == false && github.event.forced == false
     runs-on: windows-2025
     timeout-minutes: 35
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           ref: ${{ github.sha }}
-          fetch-depth: 10
+          fetch-depth: 11
           persist-credentials: false
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
         with:
@@ -60,6 +60,8 @@ jobs:
           name: dsh-config-and-check-${{ github.run_id }}
           path: |
             ${{ runner.temp }}/dsh-release-acceptance-*/retained-*.json
+            ${{ runner.temp }}/dsh-release-acceptance-*/renderer-*-report.json.diagnostic.json
+            ${{ runner.temp }}/dsh-release-acceptance-*/renderer-*-report.json.failure.png
             ${{ runner.temp }}/dsh-release-acceptance-*/seed-report.json
             ${{ runner.temp }}/dsh-release-acceptance-*/renderer-*-report.json.compatibility.json
             ${{ runner.temp }}/dsh-release-acceptance-*/renderer-*-report.json.update-check.json
