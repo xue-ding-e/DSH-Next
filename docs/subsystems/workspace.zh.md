@@ -190,6 +190,33 @@ interface SessionActivity {
 
 [`dsh-workspace-controller`](../../packages/api/workspace-controller) 经 `ctx.workspaceRegistry` 向 GUI 客户端提供工作区 CRUD，[`dsh-session-controller`](../../packages/api/session-controller) 执行上文「先建会话再 attach」的流程。[dsh-agent-instructions](../../packages/context/agent-instructions) 尽管名字如此，却**不是**消费方：它在 agent 自己的 cwd 下发现 AGENTS.md 风格的指令文件，从不触碰 `ctx.workspaceRegistry`——两者共用的这个词指的是用户的工作目录，而非本注册表的实体。
 
+```ts type-equiv
+/** One durable Workspace projected for browser consumers. */
+interface WorkspaceView {
+  readonly workspaceId: WorkspaceId
+  /** Canonical host directory path. */
+  readonly path: string
+  /** Defaults for new Sessions only; write entries remain pending requests. */
+  readonly additionalRoots: readonly WorkspaceAdditionalRoot[]
+  /** User-visible title. */
+  readonly title: string
+  /** Sessions accounted to this Workspace in manual order. */
+  readonly sessionIds: readonly SessionId[]
+  /** ISO-8601 creation instant. */
+  readonly createdAt: string
+  /** ISO-8601 last-mutation instant. */
+  readonly updatedAt: string
+}
+```
+
+```ts type-equiv
+/** Save directory defaults for newly created Sessions, not active execution grants. */
+interface WorkspaceRootsRequest {
+  readonly workspaceId: WorkspaceId
+  readonly roots: readonly WorkspaceAdditionalRoot[]
+}
+```
+
 <!-- BEGIN GENERATED cordis-surface (gen-cordis-catalog.ts) — do not edit between markers -->
 
 <a id="cordis-surface"></a>

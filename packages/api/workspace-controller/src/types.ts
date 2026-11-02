@@ -6,7 +6,7 @@
  */
 
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
-import type { SessionActivity, WorkspaceId } from '@deepseek-ai/dsh-workspace/types'
+import type { SessionActivity, WorkspaceId, WorkspaceAdditionalRoot } from '@deepseek-ai/dsh-workspace/types'
 
 export type { WorkspaceId } from '@deepseek-ai/dsh-workspace/types'
 export type {
@@ -19,6 +19,8 @@ export interface WorkspaceView {
   readonly workspaceId: WorkspaceId
   /** Canonical host directory path. */
   readonly path: string
+  /** Defaults for new Sessions only; write entries remain pending requests. */
+  readonly additionalRoots: readonly WorkspaceAdditionalRoot[]
   /** User-visible title. */
   readonly title: string
   /** Sessions accounted to this Workspace in manual order. */
@@ -31,6 +33,8 @@ export interface WorkspaceView {
 
 declare module '@deepseek-ai/dsh-typert-protocol' {
   interface RemoteErrorDetailsMap {
+    /** Directory default changes require a live authenticated owner Peer. */
+    'workspace/roots-owner-required': {}
     /** The requested directory cannot back a Workspace. */
     'workspace/invalid-path': { readonly path: string }
     /** Another Workspace already uses the requested name. */
@@ -174,3 +178,9 @@ export type WorkspaceFollowIncrement =
 export type WorkspaceFollowFrame =
   | { readonly type: 'baseline'; readonly value: WorkspaceBaseline }
   | WorkspaceFollowIncrement
+
+/** Save directory defaults for newly created Sessions, not active execution grants. */
+export interface WorkspaceRootsRequest {
+  readonly workspaceId: WorkspaceId
+  readonly roots: readonly WorkspaceAdditionalRoot[]
+}

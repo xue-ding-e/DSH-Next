@@ -2,7 +2,7 @@
 
 import { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
-import { Remote, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
+import { Remote, RemoteError, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
 import type {} from '@deepseek-ai/dsh-api-remote-access'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import { WorkspaceCommands } from './commands.ts'
@@ -25,6 +25,7 @@ import type {
   WorkspacePinSessionRequest,
   WorkspacePinValue,
   WorkspaceRenameRequest,
+  WorkspaceRootsRequest,
   WorkspaceUnarchiveSessionRequest,
   WorkspaceUnpinSessionRequest,
   WorkspaceValue,
@@ -119,6 +120,23 @@ export class WorkspaceController extends TypertRemoteService {
   @Remote('rename')
   rename(request: WorkspaceRenameRequest): Promise<WorkspaceValue> {
     return this.commands.rename(request)
+  }
+
+  /**
+   * Save owner-selected directory defaults without modifying existing Sessions.
+   * @param request - complete future-Session selection for this Workspace.
+   * @returns the durable Workspace projection; no execution permission is granted.
+   */
+  @Remote('setRoots')
+  setRoots(request: WorkspaceRootsRequest): Promise<WorkspaceValue> {
+    const invocation = this.ctx.invocation
+    // oxlint-disable-next-line typescript/no-unnecessary-condition -- remote drivers extend PrincipalMap with non-owner identities.
+    if (invocation === undefined || invocation.peer.principal.kind !== 'owner') {
+      throw new RemoteError('workspace/roots-owner-required', 'Directory defaults require an authenticated owner Remote call', {})
+    }
+    invocation.signal.throwIfAborted()
+    invocation.peer.signal.throwIfAborted()
+    return this.commands.setRoots(request, invocation)
   }
 
   /**

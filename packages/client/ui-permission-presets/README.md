@@ -53,6 +53,8 @@ The General row reads the explicitly exposed `permission` Settings descriptor th
 
 -----
 
+The Session header’s **Manage directories** control keeps the primary cwd unchanged. Save this Session’s pending selection or defaults for future Sessions separately; saving never grants access. Preview the exact paths and explicitly acknowledge confirmation before additional writes become active or the confirmed reference selection is exposed to authorized consumers. Reference directories add no writes and do not restrict reads. Current authority is reread from the Host after authorized Session notifications and reconnects; old previews and late responses are discarded. An edit retains its initial roots revision, so another owner’s newer selection cannot be silently overwritten. Session replacement clears edits and calls; changing tabs cancels the pending chooser. Confirmation lasts only for the exact live Agent in the current Host process. Windows extra writes remain unsupported; reference-only confirmation remains available. File-discovery consumer integration, trusted child inheritance, and CLI/MCP integration remain separate work.
+
 <a id="further-exploration"></a>
 ## Further Exploration
 

@@ -27,6 +27,7 @@ export function workspaceView(workspace: Workspace): WorkspaceView {
   return {
     workspaceId: workspace.id,
     path: workspace.path,
+    additionalRoots: workspace.additionalRoots.map(root => ({ ...root })),
     title: workspace.title,
     sessionIds: [...workspace.sessionIds],
     createdAt: workspace.createdAt,
@@ -39,6 +40,7 @@ function changedWorkspaceView(workspaceId: string, value: unknown): WorkspaceVie
   return {
     workspaceId: WorkspaceId(workspaceId),
     path: record.path,
+    additionalRoots: record.additionalRoots.map(root => ({ ...root })),
     title: record.title,
     sessionIds: [...record.sessionIds],
     createdAt: record.createdAt,

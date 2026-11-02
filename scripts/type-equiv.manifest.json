@@ -2641,6 +2641,31 @@
       "doc": "docs/subsystems/session.md",
       "symbol": "SessionRootsReceipt",
       "source": "packages/api/session-controller/src/types.ts"
+    },
+    {
+      "doc": "docs/subsystems/sandbox.md",
+      "symbol": "SessionDirectoryState",
+      "source": "packages/sandbox/sandbox-policy/src/types.ts"
+    },
+    {
+      "doc": "docs/subsystems/session.md",
+      "symbol": "SessionRootsReplaceRequest",
+      "source": "packages/api/session-controller/src/types.ts"
+    },
+    {
+      "doc": "docs/subsystems/session.md",
+      "symbol": "SessionRootsState",
+      "source": "packages/api/session-controller/src/types.ts"
+    },
+    {
+      "doc": "docs/subsystems/workspace.md",
+      "symbol": "WorkspaceView",
+      "source": "packages/api/workspace-controller/src/types.ts"
+    },
+    {
+      "doc": "docs/subsystems/workspace.md",
+      "symbol": "WorkspaceRootsRequest",
+      "source": "packages/api/workspace-controller/src/types.ts"
     }
   ]
 }

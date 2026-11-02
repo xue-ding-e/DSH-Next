@@ -72,3 +72,4 @@ No direct effect; Workspace mutations do not alter model requests.
 None.
 
 </details>
+`workspace/setRoots` saves `additionalRoots` for future Sessions through a live authenticated owner Peer. Workspace views and follow updates include these defaults. It does not change the primary path, existing Session snapshots, or execution grants; non-owner callers cannot use broader Workspace roles to grant themselves this operation.

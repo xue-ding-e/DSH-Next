@@ -52,6 +52,24 @@
     },
     {
       "path": "../ui-settings/tsconfig.client.json"
+    },
+    {
+      "path": "../resources"
+    },
+    {
+      "path": "../ui-workspace"
+    },
+    {
+      "path": "../../api/workspace-controller/tsconfig.client.json"
+    },
+    {
+      "path": "../../sandbox/sandbox-policy"
+    },
+    {
+      "path": "../../core/session"
+    },
+    {
+      "path": "../../typert/protocol"
     }
   ]
 }

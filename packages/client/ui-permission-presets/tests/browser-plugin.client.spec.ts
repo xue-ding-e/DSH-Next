@@ -7,6 +7,8 @@
  * disposal removes the contribution (HMR safety). The same plugin registers
  * its Settings row and invalidates that row on host settings changes.
  */
+import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
+import { apply as resourcesApply, inject as resourcesInject } from '../../resources/src/client/index.ts'
 import { Context } from '@deepseek-ai/cordis'
 import { describe, expect, it, onTestFinished, vi } from 'vitest'
 import { SlotRegistry } from '@deepseek-ai/dsh-client-ui-renderer/client'
@@ -24,6 +26,7 @@ import type {
 import {
   PermissionRow, type PermissionRowInjected,
 } from '../src/client/PermissionRow.tsx'
+import { SessionDirectories, type SessionDirectoriesInjected } from '../src/client/SessionDirectories.tsx'
 import { PermissionSelect } from '../src/client/PermissionSelect.tsx'
 import type { PermissionSelectInjected } from '../src/client/PermissionSelect.tsx'
 import { apply, inject } from '../src/client/index.ts'
@@ -48,6 +51,8 @@ const CATALOG: PermissionCatalog = {
 async function bench() {
   const ctx = new Context()
   await ctx.plugin(SlotRegistry)
+  await ctx.plugin({ inject: [...resourcesInject], apply: resourcesApply }).await()
+  ctx.provide('workspaces', { list: createSnapshotStore({ phase: 'ready', items: [], archivedSessionIds: [], pinnedSessionIds: [] }) } as never)
   const locale = new LocaleRuntime(ctx)
   locale.setLocale('en')
   ctx.provide('locale', locale)
@@ -68,7 +73,7 @@ async function bench() {
       return Promise.resolve({ ok: true as const, value: catalog })
     },
   }
-  const remote = new TestRemote(ctx, { settings: mock.remote.settings, permissionPresets })
+  const remote = new TestRemote(ctx, { settings: mock.remote.settings, session: mock.remote.session, permissionPresets })
   ctx.provide('connection', {
     generation: {
       getSnapshot: () => ({ id: 1, host: { home: '/host', isLoopback: true } }),
@@ -80,6 +85,7 @@ async function bench() {
     children: {
       'settings.general.item': { kind: 'list', scope: 'root' },
       'conversation.input.permission': { kind: 'single', scope: 'session' },
+      'conversation.session.header.utilities': { kind: 'list', scope: 'session' },
     },
   } as never, () => null)
   await ctx.plugin({ inject: [...settingsInject], apply: settingsApply }).await()
@@ -337,4 +343,21 @@ describe('ui-permission browser plugin', () => {
     expect(b.permissionRow()).toBeUndefined()
     expect(b.permissionSelect()).toBeUndefined()
   })
+})
+
+
+it('wires authorized added/removed notifications to the exact Session interaction lifetime', async () => {
+  const b = await bench()
+  try {
+    const entry = b.ctx.slots.entries('conversation.session.header.utilities').find(item => item.component === SessionDirectories)!
+    const injectDirectories = entry.inject as unknown as (sessionId: SessionId) => SessionDirectoriesInjected
+    const current = injectDirectories(sid('one')).hooks.directoryLifetime
+    const other = injectDirectories(sid('two')).hooks.directoryLifetime
+    b.remote.emit('api-session/removed', [sid('one')])
+    expect(current.getSnapshot()).toBe(1)
+    expect(other.getSnapshot()).toBe(0)
+    b.remote.emit('api-session/added', [{ sessionId: sid('one') }])
+    expect(current.getSnapshot()).toBe(2)
+    expect(other.getSnapshot()).toBe(0)
+  } finally { await b.ctx.fiber.dispose() }
 })

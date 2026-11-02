@@ -1,89 +1,19 @@
 /** Directory confirmation through the real Gateway, Peer, Agent and file sandbox. */
-import { Context } from '@deepseek-ai/cordis'
-import AgentLoop from '@deepseek-ai/dsh-agent-loop'
-import { mountAgentLoopTestDependencies } from '@deepseek-ai/dsh-agent-loop-testkit'
-import Gateway from '@deepseek-ai/dsh-api-gateway'
-import RemoteAccess from '@deepseek-ai/dsh-api-remote-access'
 import { Peer } from '@deepseek-ai/dsh-client-connection'
 import SandboxedFileSystem from '@deepseek-ai/dsh-fs-sandbox'
-import Jobs from '@deepseek-ai/dsh-jobs-local'
-import { SandboxProvider } from '@deepseek-ai/dsh-sandbox'
 import SandboxPolicy, { setSandboxMode } from '@deepseek-ai/dsh-sandbox-policy'
-import type { RootApprovalPreview } from '@deepseek-ai/dsh-sandbox-policy/types'
+import type { RootApprovalPreview, SessionDirectoryState } from '@deepseek-ai/dsh-sandbox-policy/types'
 import { SessionId, SessionSeq } from '@deepseek-ai/dsh-session'
-import type { PeerScope } from '@deepseek-ai/dsh-typert-protocol'
-import Subagents from '@deepseek-ai/dsh-subagent'
-import WorkingDirectory from '@deepseek-ai/dsh-working-directory'
-import Terminals from '@deepseek-ai/dsh-terminal'
-import TypertRegistry from '@deepseek-ai/dsh-typert-registry'
-import { mkdir, mkdtemp, realpath, rename, rm, symlink } from 'node:fs/promises'
+import { rename, rm, symlink } from 'node:fs/promises'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { assertWorkspaceOutsideTemp, outsideTempWorkspaceParent } from '../../../../scripts/snapshot-workspace-parent.ts'
-import { createSessionTestController } from './test-remote.ts'
-import { TYPERT } from '../lib/typert.host.js'
-
-declare module '@deepseek-ai/dsh-typert-protocol' {
-  interface PrincipalMap {
-    'root-test-guest': { readonly kind: 'root-test-guest' }
-  }
-}
-
-class SupportedSandbox extends SandboxProvider {
-  override supportsAdditionalWritableRoots(mode: import('@deepseek-ai/dsh-sandbox/types').SandboxMode): boolean { return mode === 'workspace-write' }
-  override confine(): Promise<never> { throw new Error('No process execution in this fixture') }
-}
-const cleanup: Array<() => Promise<void>> = []
-afterEach(async () => {
-  vi.restoreAllMocks()
-  for (const dispose of cleanup.splice(0).reverse()) await dispose()
-})
-async function fixture(scopedPolicy = false) {
-  const base = await realpath(await mkdtemp(join(outsideTempWorkspaceParent(), '.dsh-root-approval-')))
-  assertWorkspaceOutsideTemp(base)
-  cleanup.push(() => rm(base, { recursive: true, force: true }))
-  const primary = join(base, 'primary'), source = join(base, 'source'), reference = join(base, 'reference')
-  await Promise.all([primary, source, reference].map(path => mkdir(path)))
-  const ctx = new Context()
-  cleanup.push(() => ctx.fiber.dispose())
-  await ctx.plugin(TypertRegistry)
-  ctx.typert.register(TYPERT)
-  await mountAgentLoopTestDependencies(ctx)
-  await ctx.plugin(RemoteAccess)
-  await ctx.plugin(Gateway)
-  await ctx.plugin(SandboxPolicy, { mode: 'workspace-write', workspaceRoot: primary })
-  const fsFiber = ctx.plugin(SandboxedFileSystem, { cwd: primary })
-  await fsFiber
-  const sandboxFiber = ctx.plugin(SupportedSandbox)
-  await sandboxFiber
-  await ctx.plugin(Jobs)
-  await ctx.plugin(Terminals)
-  await ctx.plugin(WorkingDirectory)
-  const subagentFiber = ctx.plugin(Subagents)
-  await subagentFiber
-  const ownerCtx = scopedPolicy ? ctx.isolate('sandboxPolicy') : ctx
-  const policyFiber = scopedPolicy ? ownerCtx.plugin(SandboxPolicy, { mode: 'read-only', workspaceRoot: primary }) : undefined
-  await policyFiber
-  await ownerCtx.plugin(AgentLoop, { agents: [] })
-  const handle = await ownerCtx.agents.create({ sessionId: SessionId('approved-session'), meta: { cwd: primary } })
-  const { agent } = handle
-  ctx.sandboxPolicy.initializeRequestedRoots(agent.session, [
-    { path: source, access: 'write' }, { path: reference, access: 'reference' },
-  ])
-  const controller = await createSessionTestController(ctx, {
-    cwd: primary, defaultModelSelection: () => ({ provider: 'fixture', model: 'fixture' }),
-  })
-  const peer = new Peer(ctx, { principal: { kind: 'owner' } })
-  const call = (method: string, args: Record<string, unknown>, caller: PeerScope = peer, signal?: AbortSignal) =>
-    ctx.typertGateway.invoke({ peer: caller, namespace: 'session', method, args, ...signal === undefined ? {} : { signal } })
-  return { ctx, agent, controller, peer, call, source, reference,
-    subagentFiber, policyFiber, handle, fsFiber, sandboxFiber, primary, ownerCtx }
-}
+import { cleanupRootPermissionsFixture, rootPermissionsFixture as fixture, SupportedSandbox } from './root-permissions-fixture.ts'
+afterEach(cleanupRootPermissionsFixture)
 
 describe('explicit root permission Remote calls', () => {
   it('does not authorize a direct in-process call with no Peer', async () => {
     const { controller, agent } = await fixture()
-    await expect(controller.prepareRoots({ sessionId: agent.id })).rejects.toMatchObject({ code: 'session/roots-owner-required' })
+    await expect(controller.prepareRoots({ sessionId: agent.id }, new AbortController().signal)).rejects.toMatchObject({ code: 'session/roots-owner-required' })
   })
 
   it('confirms once and bridges only write selections into the real filesystem policy', async () => {
@@ -130,6 +60,43 @@ describe('explicit root permission Remote calls', () => {
     const { agent, call } = await fixture()
     await expect(call('prepareRoots', { request: { sessionId: 42 } })).rejects.toThrow()
     await expect(call('confirmRoots', { request: { sessionId: agent.id, nonce: 42 } })).rejects.toThrow()
+  })
+
+  it('replaces current-session selections, revokes writes, then activates only a fresh confirmation', async () => {
+    const { ctx, agent, call, source, reference } = await fixture()
+    const preview = await call('prepareRoots', { request: { sessionId: agent.id } }) as RootApprovalPreview
+    await call('confirmRoots', { request: { sessionId: agent.id, nonce: preview.nonce } })
+    const state = await call('roots', { request: { sessionId: agent.id } }) as SessionDirectoryState
+    expect(state.activeWritableRoots).toEqual([source])
+    const beforeContext = (await ctx.systemPrompt.assemble({ agent })).contexts.find(part => part.name === 'sandbox:policy')?.text
+    expect(beforeContext).toContain(JSON.stringify({ primaryCwd: state.primaryPath,
+      selectedReference: [reference], requestedWrite: [source], effectiveAdditionalWritable: [source] }))
+    agent.session.append('turn/start', { turn: 1 })
+    const request = { sessionId: agent.id, expectedRevision: state.rootsRevision,
+      roots: [{ path: source, access: 'write' }, { path: reference, access: 'reference' }] }
+    const saved = await call('replaceRoots', { request }) as SessionDirectoryState
+    expect(saved.activeWritableRoots).toEqual([])
+    expect(saved.primaryPath).toBe(state.primaryPath)
+    await expect(call('replaceRoots', { request })).rejects.toThrow(/changed/)
+    const target = await ctx.fs.resolve(join(source, 'selection-revoked.txt'))
+    await expect(ctx.fs.writeText(target, 'no', undefined, undefined, ctx.sandboxPolicy.resolve({ session: agent.session })))
+      .rejects.toMatchObject({ code: 'FS_SANDBOX_DENIED' })
+    const pendingContext = (await ctx.systemPrompt.assemble({ agent })).contexts.find(part => part.name === 'sandbox:policy')?.text
+    expect(pendingContext).toContain('"effectiveAdditionalWritable":[]')
+    const fresh = await call('prepareRoots', { request: { sessionId: agent.id } }) as RootApprovalPreview
+    await call('confirmRoots', { request: { sessionId: agent.id, nonce: fresh.nonce } })
+    await ctx.fs.writeText(target, 'yes', undefined, undefined, ctx.sandboxPolicy.resolve({ session: agent.session }))
+  })
+
+  it('does not mutate a selection while descendant resources are active or a directory is missing', async () => {
+    const { ctx, agent, call, source } = await fixture()
+    const state = await call('roots', { request: { sessionId: agent.id } }) as SessionDirectoryState
+    const activity = vi.spyOn(ctx.terminals, 'hasOwnerActivity').mockReturnValue(true)
+    await expect(call('replaceRoots', { request: { sessionId: agent.id, expectedRevision: state.rootsRevision, roots: [] } })).rejects.toThrow()
+    activity.mockRestore()
+    await expect(call('replaceRoots', { request: { sessionId: agent.id, expectedRevision: state.rootsRevision,
+      roots: [{ path: join(source, 'missing'), access: 'reference' }] } })).rejects.toThrow()
+    expect((await call('roots', { request: { sessionId: agent.id } }) as SessionDirectoryState).roots).toEqual(state.roots)
   })
 
   it('binds a nonce to the exact Peer and supports explicit cancellation', async () => {

@@ -93,6 +93,8 @@ The `sandbox:policy` contribution states the mode's capability-neutral file-effe
 
 -----
 
+`confirmedRootsOf(session)` returns the canonical confirmed reference/write selection only while the exact Agent, Session, policy generation, providers, and selection revisions remain current. Consumers must still authorize their own source and target access. Reference-only confirmation works without additional-write backend support; selected writes never silently downgrade. The model context serializes paths as untrusted JSON data and separates requested writes from effective additional writes.
+
 <a id="further-exploration"></a>
 ## Further Exploration
 

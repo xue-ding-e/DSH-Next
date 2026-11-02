@@ -31,3 +31,18 @@ export interface RootApprovalReceipt {
   readonly additionalWritableRoots: readonly string[]
   readonly lifetime: 'live-agent'
 }
+
+/** Current process facts; persisted selections never prove activation. */
+export interface SessionDirectoryState {
+  readonly sessionId: SessionId
+  readonly primaryPath: string
+  readonly roots: readonly SessionRootRequest[] | null
+  readonly rootsRevision: number | null
+  readonly mode: SandboxMode
+  readonly deploymentWritableRoots: readonly string[]
+  /** Canonical selections explicitly confirmed for this exact live Agent. */
+  readonly confirmedRoots: readonly SessionRootRequest[]
+  readonly activeWritableRoots: readonly string[]
+  readonly writeSupported: boolean
+  readonly lifetime: 'live-agent'
+}
