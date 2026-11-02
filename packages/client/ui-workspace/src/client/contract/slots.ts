@@ -237,9 +237,8 @@ export type DirectoryPickingHooks = PropsHooks<DirectoryPickingInjected['hooks']
 export interface SessionReferenceDrag {
   /** Optional bridge probe; absent on a directly mounted owner. */
   available?(): boolean
-  start(sessionId: SessionId, transfer: DataTransfer): void
-  /** True when a composer consumed the drag, so row reordering must be cancelled. */
-  end(): boolean | void
+  /** Start a token drag and return an idempotent local finish handle; true means consumed. */
+  start(sessionId: SessionId, transfer: DataTransfer): () => boolean
 }
 
 declare module '@deepseek-ai/cordis' {

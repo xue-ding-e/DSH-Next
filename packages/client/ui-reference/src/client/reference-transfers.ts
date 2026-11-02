@@ -2,26 +2,29 @@
 import { randomUUID } from '@deepseek-ai/dsh-util-crypto'
 
 export class ReferenceTransfers<Value> {
-  private current: { token: string; value: Value } | undefined
-  private consumed = false
+  private current: { token: string; value: Value; consumed: boolean } | undefined
   constructor(private readonly mime: string) {}
-  start(value: Value, transfer: DataTransfer): void {
-    this.consumed = false
-    const token = randomUUID()
-    this.current = { token, value }
-    transfer.setData(this.mime, token)
+  /** Return a local finish handle; browser drag events need not share DataTransfer objects. */
+  start(value: Value, transfer: DataTransfer): () => boolean {
+    const entry = { token: randomUUID(), value, consumed: false }
+    this.current = entry
+    transfer.setData(this.mime, entry.token)
+    return () => {
+      if (this.current !== entry) return false
+      this.current = undefined
+      return entry.consumed
+    }
   }
+  /** Dispose this owner's active transfer, independent of any source row. */
   end(): boolean {
-    const consumed = this.consumed
+    const consumed = this.current?.consumed ?? false
     this.current = undefined
-    this.consumed = false
     return consumed
   }
   take(transfer: DataTransfer): Value | undefined {
     const current = this.current
-    if (current === undefined || transfer.getData(this.mime) !== current.token) return undefined
-    this.current = undefined
-    this.consumed = true
+    if (current === undefined || current.consumed || transfer.getData(this.mime) !== current.token) return undefined
+    current.consumed = true
     return current.value
   }
 }

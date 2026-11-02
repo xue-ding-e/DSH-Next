@@ -191,25 +191,27 @@ describe('native row drag previews', () => {
 
   it('starts and clears the reference owner without losing session reorder behavior', () => {
     const referenceDrag = { start: vi.fn(), end: vi.fn() }
+    referenceDrag.start.mockImplementation(() => () => referenceDrag.end() === true)
     const { row, drag, transfer, start } = fixture('session', referenceDrag)
     start()
     expect(referenceDrag.start).toHaveBeenCalledWith(sid('session'), transfer)
     expect(transfer.effectAllowed).toBe('copyMove')
     expect(drag.start).toHaveBeenCalledTimes(1)
-    fireEvent.dragEnd(row)
+    fireEvent.dragEnd(row, { dataTransfer: transfer })
     expect(referenceDrag.end).toHaveBeenCalledTimes(1)
     expect(drag.end).toHaveBeenCalledTimes(1)
   })
 
   it('allows an authorized reference drag without granting session reorder permission', () => {
     const referenceDrag = { start: vi.fn(), end: vi.fn() }
+    referenceDrag.start.mockImplementation(() => () => referenceDrag.end() === true)
     const { row, drag, transfer, start } = fixture('session', referenceDrag, (_id, action) => action === 'session/page')
     expect(row.draggable).toBe(true)
     start()
     expect(referenceDrag.start).toHaveBeenCalledTimes(1)
     expect(transfer.effectAllowed).toBe('copy')
     expect(drag.start).not.toHaveBeenCalled()
-    fireEvent.dragEnd(row)
+    fireEvent.dragEnd(row, { dataTransfer: transfer })
     expect(referenceDrag.end).toHaveBeenCalledTimes(1)
     expect(drag.end).not.toHaveBeenCalled()
   })
@@ -224,11 +226,12 @@ describe('native row drag previews', () => {
 
   it('does not commit an old reorder marker after the composer consumes the drag', () => {
     const referenceDrag = { start: vi.fn(), end: vi.fn(() => true) }
-    const { row, drag, start } = fixture('session', referenceDrag)
+    referenceDrag.start.mockImplementation(() => () => referenceDrag.end())
+    const { row, drag, transfer, start } = fixture('session', referenceDrag)
     const cancel = vi.fn()
     Object.assign(drag, { cancel })
     start()
-    fireEvent.dragEnd(row)
+    fireEvent.dragEnd(row, { dataTransfer: transfer })
     expect(cancel).toHaveBeenCalledTimes(1)
     expect(drag.end).not.toHaveBeenCalled()
   })
@@ -1829,4 +1832,35 @@ describe('row menu positioning', () => {
     expect(screen.getByRole('menu').style.left).toBe('368px')
     expect(screen.getByRole('menu').style.top).toBe('308px')
   })
+})
+
+it('offers read-authorized search results as copy-only references without opening or reordering', () => {
+  const owner = { available: () => true, start: vi.fn(), end: vi.fn(() => false) }
+  owner.start.mockImplementation(() => () => owner.end())
+  const onOpen = vi.fn()
+  const result: SearchResultNode = { id: sid('search-reference'), title: 'Synthetic result', workspace: 'Synthetic workspace', running: false, runningSubagentCount: 0, completed: false, archived: false, snippet: 'synthetic snippet' }
+  render(<SearchResultItem result={result} currentId={undefined} onOpen={onOpen} onUnarchive={vi.fn()}
+    referenceDrag={owner} useSessionAccess={(_id, action) => action === 'session/page'} t={t} />)
+  const row = screen.getByRole('treeitem')
+  const setData = vi.fn()
+  const transfer = { effectAllowed: 'none', setData } as unknown as DataTransfer
+  expect(row.getAttribute('draggable')).toBe('true')
+  fireEvent.dragStart(row, { dataTransfer: transfer })
+  expect(transfer.effectAllowed).toBe('copy')
+  expect(owner.start).toHaveBeenCalledWith(result.id, transfer)
+  expect(setData).not.toHaveBeenCalled()
+  expect(onOpen).not.toHaveBeenCalled()
+  fireEvent.dragEnd(row, { dataTransfer: transfer })
+  expect(owner.end).toHaveBeenCalledTimes(1)
+})
+
+it.each(['archived', 'denied', 'missing-owner'] as const)('does not drag a %s search result', (reason) => {
+  const owner = { available: () => reason !== 'missing-owner', start: vi.fn(), end: vi.fn(() => false) }
+  const result: SearchResultNode = { id: sid('search-negative'), title: 'Synthetic', workspace: 'Synthetic', running: false, runningSubagentCount: 0, completed: false, archived: reason === 'archived' }
+  render(<SearchResultItem result={result} currentId={undefined} onOpen={vi.fn()} onUnarchive={vi.fn()}
+    referenceDrag={owner} useSessionAccess={() => reason !== 'denied'} t={t} />)
+  const row = screen.getByRole('treeitem')
+  expect(row.getAttribute('draggable')).not.toBe('true')
+  fireEvent.dragStart(row, { dataTransfer: {} })
+  expect(owner.start).not.toHaveBeenCalled()
 })

@@ -27,6 +27,7 @@ import type { WorkspaceId } from '@deepseek-ai/dsh-api-workspace-controller/clie
 import type { MenuOpenState, WorkspaceBrowserProps } from '../contract/slots.ts'
 import type { GroupNode, SearchResultNode, SessionNode } from '../tree.ts'
 import css from './Rows.module.css'
+import { useReferenceDragLifecycle } from './reference-drag-lifecycle.ts'
 
 /** Opening gesture determines placement and pointer-leave dismissal for one row menu. */
 type RowMenuAnchor =
@@ -586,13 +587,14 @@ function SessionHoverContent({ node, cwd, now, renderSlot, t }: {
  * @param props.currentId - selected session id.
  * @param props.onOpen - open the selected session.
  * @param props.onUnarchive - unarchive an archived result row.
+ * @param props.referenceDrag - optional copy-only reference owner; never reorders search results.
  * @param props.useSessionAccess - the browser root's Session access Hook; the restore control
  * appears only while the snapshot allows `workspace/unarchiveSession` for that Session.
  * @param props.t - Workspace-browser translation seat.
  * @returns the result row.
  */
 export function SearchResultItem({
-  result, currentId, onOpen, onUnarchive, useSessionAccess, t,
+  result, currentId, onOpen, onUnarchive, useSessionAccess, referenceDrag, t,
 }: {
   result: SearchResultNode
   currentId: string | undefined
@@ -602,11 +604,21 @@ export function SearchResultItem({
 } & Pick<WorkspaceBrowserProps, 'useSessionAccess' | 'referenceDrag'>) {
   const selected = result.id === currentId
   const canUnarchive = useSessionAccess(result.id, 'workspace/unarchiveSession')
+  const readable = useSessionAccess(result.id, 'session/page')
+  const referenceable = !result.archived && readable && referenceDrag !== undefined && referenceDrag.available?.() !== false
+  const referenceLifecycle = useReferenceDragLifecycle()
   const statuses = sessionStatuses(result, t)
   const primaryStatus = statuses[0]
   return (
     <div
       className={clsx(css.searchResultRow, selected && css.selected, result.archived && css.archived)}
+      draggable={referenceable || undefined}
+      onDragStart={!referenceable ? undefined : (event) => {
+        event.stopPropagation()
+        event.dataTransfer.effectAllowed = 'copy'
+        referenceLifecycle.start(() => referenceDrag.start(result.id, event.dataTransfer))
+      }}
+      onDragEnd={() => { referenceLifecycle.end() }}
       role="treeitem"
       aria-selected={selected}
       aria-description={result.archived ? t('toast.archivedNotOpenable') : undefined}
@@ -712,6 +724,7 @@ export function SessionNodeItem({
   // cannot start a drag still accepts drops from rows that can.
   const renamable = useSessionAccess(node.id, 'session/rename')
   const reorderable = useSessionAccess(node.id, 'workspace/insertSessionBefore')
+  const referenceLifecycle = useReferenceDragLifecycle()
   const readable = useSessionAccess(node.id, 'session/page')
   const referenceable = referenceDrag !== undefined && referenceDrag.available?.() !== false && readable
   const draggable = ((drag !== undefined && reorderable) || referenceable) && !row.blank && !row.archived
@@ -777,12 +790,13 @@ export function SessionNodeItem({
         : (e) => {
           e.dataTransfer.effectAllowed = referenceable ? (reorderable ? 'copyMove' : 'copy') : 'move'
           e.dataTransfer.setData('text/plain', node.id)
-          if (referenceable) referenceDrag.start(node.id, e.dataTransfer)
+          referenceLifecycle.start(() => referenceable ? referenceDrag.start(node.id, e.dataTransfer) : undefined)
           if (reorderable) drag?.start()
           dragPreview.start(e)
         }}
       onDragEnd={() => {
-        const consumed = referenceDrag?.end() === true
+        const { current, consumed } = referenceLifecycle.end()
+        if (!current) return
         if (!dragPreview.clear() || !reorderable) return
         if (consumed) drag?.cancel?.()
         else drag?.end()

@@ -8,6 +8,10 @@ import { SessionInputShell } from '../../ui-conversation/src/client/input/facade
 import { formatSessionReferenceMention } from '@deepseek-ai/dsh-session-reference'
 import { SessionReferenceTransfers, SESSION_REFERENCE_DRAG, stageSessionReference } from '../src/client/session-drag.ts'
 import { SessionReferenceDrop } from '../src/client/SessionReferenceDrop.tsx'
+import { SearchResultItem, SessionNodeItem } from '../../ui-workspace/src/client/rows/Rows.tsx'
+import { zh } from '../../ui-workspace/src/client/locales.ts'
+import { zh as commonZh } from '@deepseek-ai/dsh-client-locale/src/locales/zh.ts'
+import { makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
 
 afterEach(cleanup)
 const source = SessionId('synthetic-source')
@@ -119,4 +123,161 @@ it.each([[3, 3], [3, 5]])('inserts after a middle selection %i..%i without delet
     expect(current.draft.replace(mention + ' ', '')).toBe('前😀中后文')
     expect(sink).not.toHaveBeenCalled()
   } finally { input.dispose() }
+})
+
+
+it.each(['denied', 'archived', 'unavailable', 'removed-owner'] as const)('clears a search drag token after %s rerender and dragEnd', (change) => {
+  const registry = new SessionReferenceTransfers()
+  let allowed = true
+  let available = true
+  const owner = referenceOwner(registry, () => available)
+  const result = { id: source, title: 'Synthetic', workspace: 'Synthetic', running: false, runningSubagentCount: 0, completed: false, archived: false }
+  const props = { result, currentId: undefined, onOpen: vi.fn(), onUnarchive: vi.fn(),
+    useSessionAccess: () => allowed, t: makeTranslate(zh, commonZh) }
+  const view = render(<SearchResultItem {...props} referenceDrag={owner} />)
+  const item = transfer()
+  fireEvent.dragStart(view.getByRole('treeitem'), { dataTransfer: item })
+  expect(item.getData(SESSION_REFERENCE_DRAG)).not.toBe('')
+  allowed = change !== 'denied'
+  available = change !== 'unavailable'
+  view.rerender(<SearchResultItem {...props} result={{ ...result, archived: change === 'archived' }}
+    {...change === 'removed-owner' ? {} : { referenceDrag: owner }} />)
+  fireEvent.dragEnd(view.getByRole('treeitem'), { dataTransfer: item })
+  expect(owner.end).toHaveBeenCalledTimes(1)
+  expect(registry.take(item)).toBeUndefined()
+  expect(props.onOpen).not.toHaveBeenCalled()
+})
+
+
+function referenceOwner(registry: SessionReferenceTransfers, available = () => true) {
+  const end = vi.fn((finish: () => boolean) => finish())
+  return { available, end, start: (id: typeof source, item: DataTransfer) => {
+    const finish = registry.start(id, item)
+    return () => end(finish)
+  } }
+}
+
+function searchDragFixture(registry = new SessionReferenceTransfers()) {
+  const owner = referenceOwner(registry)
+  const props = { result: { id: source, title: 'Synthetic', workspace: 'Synthetic', running: false, runningSubagentCount: 0, completed: false, archived: false }, currentId: undefined, onOpen: vi.fn(), onUnarchive: vi.fn(), useSessionAccess: () => true, t: makeTranslate(zh, commonZh) }
+  return { registry, owner, props }
+}
+
+it('cleans the original owner after owner replacement without touching the new owner', () => {
+  const a = searchDragFixture()
+  const b = searchDragFixture()
+  const view = render(<SearchResultItem {...a.props} referenceDrag={a.owner} />)
+  const item = transfer()
+  fireEvent.dragStart(view.getByRole('treeitem'), { dataTransfer: item })
+  view.rerender(<SearchResultItem {...a.props} referenceDrag={b.owner} />)
+  fireEvent.dragEnd(view.getByRole('treeitem'), { dataTransfer: item })
+  expect(a.registry.take(item)).toBeUndefined()
+  expect(a.owner.end).toHaveBeenCalledTimes(1)
+  expect(b.owner.end).not.toHaveBeenCalled()
+  view.unmount()
+  expect(a.owner.end).toHaveBeenCalledTimes(1)
+})
+
+it('cleans an unmounted active row but never clears another row newer transfer', () => {
+  const h = searchDragFixture()
+  const view = render(<SearchResultItem {...h.props} referenceDrag={h.owner} />)
+  const old = transfer()
+  fireEvent.dragStart(view.getByRole('treeitem'), { dataTransfer: old })
+  const newer = transfer()
+  h.registry.start(source, newer)
+  view.unmount()
+  expect(h.registry.take(old)).toBeUndefined()
+  expect(h.registry.take(newer)).toBe(source)
+  expect(h.owner.end).toHaveBeenCalledTimes(1)
+})
+
+it('clears a token on unmount without needing browser dragEnd and leaves untouched rows inert', () => {
+  const h = searchDragFixture()
+  const view = render(<SearchResultItem {...h.props} referenceDrag={h.owner} />)
+  const item = transfer()
+  fireEvent.dragStart(view.getByRole('treeitem'), { dataTransfer: item })
+  view.unmount()
+  expect(h.registry.take(item)).toBeUndefined()
+  const untouched = render(<SearchResultItem {...h.props} referenceDrag={h.owner} />)
+  const other = transfer()
+  h.registry.start(source, other)
+  untouched.unmount()
+  expect(h.owner.end).toHaveBeenCalledTimes(1)
+  expect(h.registry.take(other)).toBe(source)
+})
+
+it('does not let an older row dragEnd clear a newer row generation', () => {
+  const registry = new SessionReferenceTransfers()
+  const a = searchDragFixture(registry)
+  const b = searchDragFixture(registry)
+  const first = render(<SearchResultItem {...a.props} referenceDrag={a.owner} />)
+  const second = render(<SearchResultItem {...b.props} referenceDrag={b.owner} />)
+  const old = browserDrag()
+  const newer = browserDrag()
+  const rowA = first.container.querySelector('[role="treeitem"]')!
+  const rowB = second.container.querySelector('[role="treeitem"]')!
+  fireEvent.dragStart(rowA, { dataTransfer: old.start })
+  fireEvent.dragStart(rowB, { dataTransfer: newer.start })
+  fireEvent.dragEnd(rowA, { dataTransfer: old.end })
+  expect(registry.take(newer.drop)).toBe(source)
+  fireEvent.dragEnd(rowB, { dataTransfer: newer.end })
+  expect(a.owner.end).toHaveBeenCalledTimes(1)
+  expect(b.owner.end).toHaveBeenCalledTimes(1)
+})
+
+it('keeps finish handles generation-scoped and owner disposal idempotent', () => {
+  const registry = new SessionReferenceTransfers()
+  const old = transfer()
+  const current = transfer()
+  const finishOld = registry.start(source, old)
+  const finishCurrent = registry.start(source, current)
+  expect(finishOld()).toBe(false)
+  expect(registry.take(current)).toBe(source)
+  expect(finishOld()).toBe(false)
+  expect(finishCurrent()).toBe(true)
+  expect(finishCurrent()).toBe(false)
+  const disposed = registry.start(source, current)
+  expect(registry.end()).toBe(false)
+  expect(registry.take(current)).toBeUndefined()
+  expect(disposed()).toBe(false)
+  expect(registry.end()).toBe(false)
+})
+
+/** Browser event wrappers share a data store, not DataTransfer object identity. */
+function browserDrag() {
+  const store = new Map<string, string>()
+  const protectedRead = vi.fn(() => '')
+  const wrapper = (mode: 'start' | 'drop' | 'end') => ({
+    setData: (type: string, value: string) => { if (mode === 'start') store.set(type, value) },
+    getData: mode === 'end' ? protectedRead : (type: string) => store.get(type) ?? '',
+    get types() { return [...store.keys()] }, effectAllowed: 'none', dropEffect: 'none', setDragImage: vi.fn(),
+  }) as unknown as DataTransfer
+  return { start: wrapper('start'), drop: wrapper('drop'), end: wrapper('end'), protectedRead }
+}
+
+it('cleans search cancellation with a different protected dragEnd wrapper', () => {
+  const h = searchDragFixture()
+  const event = browserDrag()
+  const view = render(<SearchResultItem {...h.props} referenceDrag={h.owner} />)
+  const row = view.getByRole('treeitem')
+  fireEvent.dragStart(row, { dataTransfer: event.start })
+  fireEvent.dragEnd(row, { dataTransfer: event.end })
+  expect(h.registry.take(event.drop)).toBeUndefined()
+  expect(event.protectedRead).not.toHaveBeenCalled()
+})
+
+it('cancels session reorder after a composer consumes a different drop wrapper', () => {
+  const h = searchDragFixture()
+  const event = browserDrag()
+  const drag = { active: true, marker: 'before' as const, start: vi.fn(), hover: vi.fn(), drop: vi.fn(), end: vi.fn(), cancel: vi.fn() }
+  const view = render(<SessionNodeItem node={{ ...h.props.result, blank: false, updatedAt: 0, pinned: false }}
+    currentId={undefined} now={0} onOpen={vi.fn()} onRenameRequest={vi.fn()} renderSlot={() => null}
+    drag={drag} referenceDrag={h.owner} useSessionAccess={() => true} t={h.props.t} />)
+  const row = view.getByRole('treeitem')
+  fireEvent.dragStart(row, { dataTransfer: event.start })
+  expect(h.registry.take(event.drop)).toBe(source)
+  fireEvent.dragEnd(row, { dataTransfer: event.end })
+  expect(drag.cancel).toHaveBeenCalledTimes(1)
+  expect(drag.end).not.toHaveBeenCalled()
+  expect(event.protectedRead).not.toHaveBeenCalled()
 })

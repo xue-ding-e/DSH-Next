@@ -274,8 +274,7 @@ export function apply(ctx: Context): void {
   const browserInjected = (): WorkspaceBrowserInjected => ({
     referenceDrag: {
       available: () => ctx.get('sessionReferenceDrag') !== undefined,
-      start: (id, transfer) => { ctx.get('sessionReferenceDrag')?.start(id, transfer) },
-      end: () => ctx.get('sessionReferenceDrag')?.end(),
+      start: (id, transfer) => ctx.get('sessionReferenceDrag')?.start(id, transfer) ?? (() => false),
     },
     // Explicit group actions keep their target; unscoped New Session inherits
     // the current Session Workspace before the recent-Workspace fallback.
