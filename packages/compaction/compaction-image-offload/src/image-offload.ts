@@ -5,6 +5,28 @@ import type { Session, SessionSeq } from '@deepseek-ai/dsh-session'
 import type { ImageOffloadTarget } from './projection.ts'
 
 /**
+ * Count input-image occurrences still retained (not yet offloaded) across the
+ * given events, in the order they would appear in a request.
+ * @param session - session whose derived messages are inspected.
+ * @param sourceEventSeqs - input message events in request order.
+ * @returns the number of occurrences a future request would still encode.
+ */
+export function retainedImageCount(session: Session, sourceEventSeqs: readonly SessionSeq[]): number {
+  let total = 0
+  for (const seq of sourceEventSeqs) {
+    // oxlint-disable-next-line typescript/no-non-null-assertion, typescript/no-deprecated
+    const event = session.eventAt(seq)!
+    if (event.type !== 'user/message' && event.type !== 'tool/result') continue
+    // oxlint-disable-next-line typescript/no-non-null-assertion -- both input node types produce a message
+    const message = session.deriveEventMessage(event)!
+    for (const block of message.content) {
+      if (block.type === 'image' && block.offloaded !== true) total += 1
+    }
+  }
+  return total
+}
+
+/**
  * Record one decision omitting the oldest retained input-image occurrences.
  * Assistant nodes carry model output and are excluded. Image indexes count
  * every occurrence, including previously offloaded ones, within each message.

@@ -39,7 +39,7 @@ kind: "package-reference"
 
 ### 失败与恢复
 
-本插件只处理带 `offloadImages` 的 `IMAGE_OFFLOAD_REQUIRED` 失败。它按模型请求顺序遍历表层，跳过 assistant 节点和已经标记的图片，给指定数量的出现位置打标记。没有可省略的图片时在 `agent/request-error` waterfall 上委派下游，由下游恢复或普通的轮次错误处理。这次重试不占提供方重试预算，也不追加 `llm/retry` 事件。记录选择前发生取消时会委派后续处理，不新增 `image/offload` 事件；选择提交后发生取消时停止重试，但保留省略记录。
+本插件处理两种失败码。对带 `offloadImages` 的 `IMAGE_OFFLOAD_REQUIRED`，它按模型请求顺序遍历表层，跳过 assistant 节点和已经标记的图片，给指定数量的出现位置打标记。对 `REQUEST_TOO_LARGE`——网关在模型看到请求之前拒绝了编码后的请求体——它统计仍保留的图片出现次数并省略最老的一半，因为 token 计量对图片的计价远低于其编码字节，减半策略几轮即可收敛，而不是每张图消耗一次尝试。`compaction/summary-error` 上适用同一套恢复，因为摘要器会重放同一份历史并撞上同样的上限。没有可省略的图片时在 waterfall 上委派下游，由下游恢复或普通的轮次错误处理。每次重试不占提供方重试预算，也不追加 `llm/retry` 事件。记录选择前发生取消时会委派后续处理，不新增 `image/offload` 事件；选择提交后发生取消时停止重试，但保留省略记录。
 
 -----
 

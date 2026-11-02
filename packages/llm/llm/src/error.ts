@@ -50,6 +50,17 @@ export const EMPTY_RESPONSE_CODE = 'EMPTY_RESPONSE'
  */
 export const INVALID_CREDENTIAL_CODE = 'INVALID_CREDENTIAL'
 
+/**
+ * Canonical provider-neutral code for a request rejected because the encoded
+ * request body exceeded a transport or gateway size cap, before the model ever
+ * saw it. Distinct from `CONTEXT_WINDOW_EXCEEDED`: the model's context window
+ * is irrelevant here (a gateway may cap a body far below the window), and the
+ * reduction that recovers is a smaller *request*, not token budgeting alone.
+ * Adapters classify it as recoverable precisely because retrying the identical
+ * bytes cannot succeed, while retrying a *reduced* request can.
+ */
+export const REQUEST_TOO_LARGE_CODE = 'REQUEST_TOO_LARGE'
+
 /** Structured codes and plain phrases that explicitly name a context bound being exceeded. */
 const STRUCTURED_CONTEXT_OVERFLOW = new RegExp(
   String.raw`(?:^|[^a-z0-9])context[\s_-](?:length|window)[\s_-]`
@@ -86,6 +97,31 @@ export function isContextWindowExceededError(detail: string): boolean {
     || TOO_LARGE_FOR_CONTEXT.test(detail)
     || /\b(?:input|prompt|request)\s+(?:is\s+)?too\s+(?:long|large)\s+for\s+(?:this|the)\s+model\b/i.test(detail)
     || EXCEEDS_MODEL_CONTEXT.test(detail)
+}
+
+/**
+ * Recognize provider or gateway wording that identifies the *encoded request
+ * body* exceeding a transport-level size cap.
+ *
+ * This is deliberately narrower than the context-overflow classifier: it only
+ * matches wording about the body/payload itself, so a genuine model context
+ * overflow keeps its own code. The distinction matters because the two need
+ * different recovery — a context overflow is reduced by token budgeting, while
+ * a body-size cap can be exceeded by image payloads that the token meter
+ * prices far below their encoded bytes.
+ *
+ * @param detail - provider error code/type/message text joined into one string.
+ * @returns true when the detail identifies an oversized request body.
+ */
+export function isRequestTooLargeError(detail: string): boolean {
+  // A route that names the model context is reporting overflow, not a body cap.
+  if (isContextWindowExceededError(detail)) return false
+  return /request\s+body\s+size\s+exceeds?\b/i.test(detail)
+    || /\brequest\s+body\s+too\s+large\b/i.test(detail)
+    || /\bpayload\s+too\s+large\b/i.test(detail)
+    || /\bfailed\s+to\s+buffer\s+the\s+request\s+body\b/i.test(detail)
+    || /\bentity\s+too\s+large\b/i.test(detail)
+    || /\bbody\s+(?:size\s+)?(?:limit|length)\s+exceeded\b/i.test(detail)
 }
 
 /**

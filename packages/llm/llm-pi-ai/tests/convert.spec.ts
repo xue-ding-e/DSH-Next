@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { AttachmentId, ImageVariantId } from '@deepseek-ai/dsh-attachment'
 import type { AttachmentStore, ImageAttachmentRef, ImageRequestTarget, RequestImageAttachment } from '@deepseek-ai/dsh-attachment'
-import { createToolResultMessage, createUserMessage, ToolCallId, CONTEXT_WINDOW_EXCEEDED_CODE, EMPTY_RESPONSE_CODE, createMessage } from '@deepseek-ai/dsh-llm'
+import { createToolResultMessage, createUserMessage, ToolCallId, CONTEXT_WINDOW_EXCEEDED_CODE, EMPTY_RESPONSE_CODE, createMessage, REQUEST_TOO_LARGE_CODE } from '@deepseek-ai/dsh-llm'
 import type { ContentBlock, StreamChunk } from '@deepseek-ai/dsh-llm'
 import type { AssistantMessage, AssistantMessageEvent, Usage } from '@earendil-works/pi-ai'
 import { transformMessages } from '@earendil-works/pi-ai/api/transform-messages'
@@ -926,12 +926,19 @@ describe('mapStopReason / mapUsage', () => {
       stopReason: 'error',
       errorMessage: 'HTTP 400: invalid input: temperature exceeds maximum allowed value',
     }))).toMatchObject({ kind: 'error', failure: { code: 'INVALID_REQUEST' } })
+    // An oversized encoded body is not a dead end: it is recoverable by
+    // shrinking the request, so it must not collapse into INVALID_REQUEST
+    // (which no recovery path listens for, stranding the session).
     expect(mapStopReason(assistant({ stopReason: 'error', errorMessage: 'HTTP 413: Payload Too Large' })))
-      .toMatchObject({ kind: 'error', failure: { code: 'INVALID_REQUEST' } })
+      .toMatchObject({ kind: 'error', failure: { code: REQUEST_TOO_LARGE_CODE } })
     expect(mapStopReason(assistant({
       stopReason: 'error',
       errorMessage: 'Failed to buffer the request body: length limit exceeded',
-    }))).toMatchObject({ kind: 'error', failure: { code: 'INVALID_REQUEST' } })
+    }))).toMatchObject({ kind: 'error', failure: { code: REQUEST_TOO_LARGE_CODE } })
+    expect(mapStopReason(assistant({
+      stopReason: 'error',
+      errorMessage: 'qoder upstream (http 413): {"code":"413","message":"Request body size exceeds maximum allowed 52428800 bytes"}',
+    }))).toMatchObject({ kind: 'error', failure: { code: REQUEST_TOO_LARGE_CODE } })
     expect(mapStopReason(assistant({
       stopReason: 'error',
       errorMessage: 'vector length limit exceeded',

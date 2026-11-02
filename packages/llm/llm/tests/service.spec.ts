@@ -7,6 +7,7 @@ import LlmRuntime, {
   HarnessError,
   isContextWindowExceededError,
   isQuotaExceededError,
+  isRequestTooLargeError,
   LlmAdapter,
   LlmError,
   ProviderRequestId,
@@ -142,6 +143,30 @@ describe('LlmRuntime', () => {
     ]) expect(isQuotaExceededError(detail)).toBe(true)
     expect(isQuotaExceededError('HTTP 429: rate limit reached')).toBe(false)
     expect(isQuotaExceededError('quota resets in one minute')).toBe(false)
+  })
+
+  it('recognizes a gateway request-body size cap as recoverable', () => {
+    // The exact wording a Qoder gateway returns; the session that hit this
+    // never recovered because it used to be classified as invalid.
+    expect(isRequestTooLargeError(
+      'qoder upstream (http 413): {"code":"413","message":"Request body size exceeds maximum allowed 52428800 bytes"}',
+    )).toBe(true)
+    for (const detail of [
+      'HTTP 413 Payload Too Large',
+      '413 Request Entity Too Large',
+      'failed to buffer the request body: length limit exceeded',
+      'request body too large',
+      'body size limit exceeded',
+    ]) expect(isRequestTooLargeError(detail)).toBe(true)
+  })
+
+  it('does not claim genuine context overflow as a request-body cap', () => {
+    // These must keep routing to CONTEXT_WINDOW_EXCEEDED so token-based
+    // compaction, not image offload, performs the reduction.
+    expect(isRequestTooLargeError('context_length_exceeded maximum context length')).toBe(false)
+    expect(isRequestTooLargeError('input is too long for this model')).toBe(false)
+    expect(isRequestTooLargeError('request too large for model context')).toBe(false)
+    expect(isRequestTooLargeError('invalid request: malformed tool arguments')).toBe(false)
   })
 
   it('errorChain renders the full cause chain of a wrapped transport failure', () => {

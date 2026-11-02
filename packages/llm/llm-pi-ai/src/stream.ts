@@ -9,7 +9,7 @@
  */
 
 import { brandString } from '@deepseek-ai/dsh-brand'
-import { CONTEXT_WINDOW_EXCEEDED_CODE, EMPTY_RESPONSE_CODE, isContextWindowExceededError, isQuotaExceededError, LlmError, QUOTA_EXCEEDED_CODE } from '@deepseek-ai/dsh-llm'
+import { CONTEXT_WINDOW_EXCEEDED_CODE, EMPTY_RESPONSE_CODE, isContextWindowExceededError, isQuotaExceededError, isRequestTooLargeError, LlmError, QUOTA_EXCEEDED_CODE, REQUEST_TOO_LARGE_CODE } from '@deepseek-ai/dsh-llm'
 import type { FinishReason, StreamChunk, TokenUsage, ToolCallId } from '@deepseek-ai/dsh-llm'
 import { isContextOverflow } from '@earendil-works/pi-ai/utils/overflow'
 import type { AssistantMessage, AssistantMessageEvent, Usage as PiUsage } from '@earendil-works/pi-ai'
@@ -43,9 +43,16 @@ function classifyPiAiError(message: string): string {
   if (/\b(?:401|403)\b/.test(message)) return 'AUTH'
   if (isQuotaExceededError(message)) return QUOTA_EXCEEDED_CODE
   if (/\b429\b|rate.?limit/i.test(message)) return 'RATE_LIMIT'
-  // A rejected request body (gateway or provider size cap): resending the
-  // same request cannot succeed, so it is invalid, not transient.
-  if (/\b413\b|failed to buffer the request body:\s*length limit exceeded|payload too large|request body too large/i.test(message)) return 'INVALID_REQUEST'
+  // An oversized encoded body is recoverable, but only by a *smaller* request:
+  // a gateway size cap can sit far below the model's context window and be
+  // blown by image payloads the token meter prices cheaply, so classifying it
+  // as a plain invalid request strands the session on a request that retries
+  // identically forever. `compaction-basic` and `compaction-image-offload`
+  // both handle this code by shrinking the request before retrying.
+  if (isRequestTooLargeError(message)) return REQUEST_TOO_LARGE_CODE
+  // Any other rejected request body: resending the same request cannot succeed,
+  // so it is invalid, not transient.
+  if (/\b413\b|payload too large|request body too large/i.test(message)) return 'INVALID_REQUEST'
   if (/\b400\b|invalid.?request/i.test(message)) return 'INVALID_REQUEST'
   if (/\b5\d\d\b/.test(message)) return 'SERVER'
   if (/\btime(?:d)?\s*out\b|timeout/i.test(message)) return 'TIMEOUT'

@@ -9,7 +9,7 @@ import z from '@deepseek-ai/schemastery'
 import { CompactionEngine, ManualCompactionError } from '@deepseek-ai/dsh-compaction'
 import type { CompactionResult, CompactionTrigger } from '@deepseek-ai/dsh-compaction'
 import type { EpochHeader, Session, SessionSeq } from '@deepseek-ai/dsh-session'
-import { CONTEXT_WINDOW_EXCEEDED_CODE, LlmError } from '@deepseek-ai/dsh-llm'
+import { CONTEXT_WINDOW_EXCEEDED_CODE, LlmError, REQUEST_TOO_LARGE_CODE } from '@deepseek-ai/dsh-llm'
 import type { LlmCallConfig } from '@deepseek-ai/dsh-llm'
 import { assertNever } from '@deepseek-ai/dsh-util-values'
 import type { Agent, PreStepDecision } from '@deepseek-ai/dsh-agent'
@@ -214,7 +214,13 @@ export class BasicCompactionEngine extends CompactionEngine {
       { agent, failure, signal },
       next,
     ) => {
-      if (failure.code !== CONTEXT_WINDOW_EXCEEDED_CODE || signal.aborted) return next()
+      // Both codes mean "this exact request is too big to send", and both are
+      // recovered the same way: durably reduce the surface, then retry. They
+      // stay distinct upstream because the cause differs (model context vs. an
+      // encoded-body cap), but the recovery here is identical.
+      const bodyTooLarge = failure.code === REQUEST_TOO_LARGE_CODE
+      if (failure.code !== CONTEXT_WINDOW_EXCEEDED_CODE && !bodyTooLarge) return next()
+      if (signal.aborted) return next()
       this.overflowAgents.set(agent.session, agent)
       const target = routedTarget(agent.session)
       if (target === undefined) return next()

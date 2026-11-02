@@ -13,7 +13,7 @@ import { ImageVariantId } from '@deepseek-ai/dsh-attachment'
 import { resolveAdapterOptions } from '@deepseek-ai/dsh-llm-deepseek'
 import { inlineImages } from '@deepseek-ai/dsh-llm-deepseek/src/images.ts'
 import { mountAgentLoopTestDependencies } from '@deepseek-ai/dsh-agent-loop-testkit'
-import { createAssistantMessage, createToolResultMessage, createUserMessage, projectOffloadedImages, offloadedImageText, IMAGE_OFFLOAD_REQUIRED_CODE, LlmAdapter, LlmError, ToolCallId } from '@deepseek-ai/dsh-llm'
+import { createAssistantMessage, createToolResultMessage, createUserMessage, projectOffloadedImages, offloadedImageText, IMAGE_OFFLOAD_REQUIRED_CODE, LlmAdapter, LlmError, REQUEST_TOO_LARGE_CODE, ToolCallId } from '@deepseek-ai/dsh-llm'
 import type { ContentBlock, GenerateOptions, StreamChunk } from '@deepseek-ai/dsh-llm'
 import { isReplacementSurfaceEvent, SessionId } from '@deepseek-ai/dsh-session'
 import type { Session } from '@deepseek-ai/dsh-session'
@@ -61,6 +61,16 @@ function textResponse(text: string): StreamChunk[] {
 function offloadRequired(offloadImages: number): () => never {
   return () => {
     throw new LlmError('request images exceed the route budget', IMAGE_OFFLOAD_REQUIRED_CODE, { offloadImages })
+  }
+}
+
+/** The gateway wording that permanently stranded a real session before this recovery existed. */
+function bodyTooLarge(): () => never {
+  return () => {
+    throw new LlmError(
+      'qoder upstream (http 413): {"code":"413","message":"Request body size exceeds maximum allowed 52428800 bytes"}',
+      REQUEST_TOO_LARGE_CODE,
+    )
   }
 }
 
@@ -468,5 +478,36 @@ describe('compaction-image-offload', () => {
     expect(delegated).toEqual([IMAGE_OFFLOAD_REQUIRED_CODE])
     expect(replacements(agent.session)).toHaveLength(0)
     expect(agent.session.snapshotEvents().at(-1)).toMatchObject({ type: 'turn/end', data: { reason: { kind: 'error' } } })
+  })
+
+  it('sheds the oldest half of the images when a gateway rejects the body size', async () => {
+    // A 413 body cap is invisible to the token meter: four tiny images can blow
+    // an encoded-byte limit while pricing as almost nothing. Halving converges
+    // without spending one attempt per image.
+    const adapter = new ScriptedAdapter([bodyTooLarge(), bodyTooLarge(), textResponse('sent')])
+    const ctx = await harness(adapter)
+    const agent = await ctx.agentLoop.create(SessionId('body-too-large'), { provider: 'mock', model: 'mock' })
+    agent.followup(createUserMessage({
+      content: [image('a'), image('b'), image('c'), image('d')], source: { kind: 'user' },
+    }))
+    await agent.whenIdle()
+    expect(adapter.requests.map(offloadedNames)).toEqual([[], ['a', 'b'], ['a', 'b', 'c']])
+    expect(agent.session.surface.replaceGeneration).toBe(0)
+    expect(agent.session.snapshotEvents().at(-1)).toMatchObject({ type: 'turn/end', data: { reason: { kind: 'completed' } } })
+  })
+
+  it('delegates a body-size failure once no images remain', async () => {
+    const adapter = new ScriptedAdapter([bodyTooLarge()])
+    const ctx = await harness(adapter)
+    const agent = await ctx.agentLoop.create(SessionId('body-too-large-text'), { provider: 'mock', model: 'mock' })
+    const delegated: string[] = []
+    ctx.on('agent/request-error', ({ failure }, next) => {
+      delegated.push(failure.code)
+      return next()
+    })
+    agent.followup(createUserMessage({ content: [{ type: 'text', text: 'text only' }], source: { kind: 'user' } }))
+    await agent.whenIdle()
+    expect(delegated).toEqual([REQUEST_TOO_LARGE_CODE])
+    expect(decisions(agent.session)).toEqual([])
   })
 })
