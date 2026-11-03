@@ -103,6 +103,15 @@ export function resolveAntigravityOAuthConfig(config?: Partial<AntigravityOAuthC
     return { clientId: environmentId, ...environmentSecret ? { clientSecret: environmentSecret } : {} }
   }
   if (environmentSecret) throw new Error('ANTIGRAVITY_CLIENT_SECRET requires ANTIGRAVITY_CLIENT_ID')
+  if (!ANTIGRAVITY_DEFAULT_CLIENT_ID) {
+    // The public desktop client identity is not committed to this repository, so
+    // a fresh checkout has no default. Fail with the fix instead of sending an
+    // empty client_id to Google and surfacing an opaque invalid_request.
+    throw new Error(
+      'Antigravity sign-in is not configured: export ANTIGRAVITY_CLIENT_ID and ANTIGRAVITY_CLIENT_SECRET, ' +
+        'or set config.antigravity.clientId / clientSecret.'
+    )
+  }
   return { clientId: ANTIGRAVITY_DEFAULT_CLIENT_ID, clientSecret: ANTIGRAVITY_DEFAULT_CLIENT_SECRET }
 }
 

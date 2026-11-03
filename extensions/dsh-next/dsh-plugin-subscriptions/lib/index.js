@@ -9861,6 +9861,7 @@ function resolveAntigravityOAuthConfig(config) {
 		...environmentSecret ? { clientSecret: environmentSecret } : {}
 	};
 	if (environmentSecret) throw new Error("ANTIGRAVITY_CLIENT_SECRET requires ANTIGRAVITY_CLIENT_ID");
+	if (!ANTIGRAVITY_DEFAULT_CLIENT_ID) throw new Error("Antigravity sign-in is not configured: export ANTIGRAVITY_CLIENT_ID and ANTIGRAVITY_CLIENT_SECRET, or set config.antigravity.clientId / clientSecret.");
 	return {
 		clientId: ANTIGRAVITY_DEFAULT_CLIENT_ID,
 		clientSecret: ANTIGRAVITY_DEFAULT_CLIENT_SECRET
