@@ -1,4 +1,4 @@
-﻿# Verify that the installed profile copy matches this repository copy.
+# Verify that the installed profile copy matches this repository copy.
 #
 # The profile installs these plugins through a `link:` dependency, so a stale
 # `node_modules` entry or a moved directory would silently run yesterday's code.
@@ -8,7 +8,16 @@
 $ErrorActionPreference = 'Stop'
 
 $repo = $PSScriptRoot
-$profileModules = 'C:\Users\78140\.dsh\profiles\desktop\node_modules'
+
+# Resolve the profile from the running environment instead of a hard-coded home.
+# An absolute path here silently checks the wrong profile after the home moves
+# (`.dsh` -> `.dsh-next`), which reports green while the real install drifts.
+if (-not $env:DSH_HOME) {
+    Write-Host 'DSH_HOME is not set; run this from a DSH session or set it explicitly.' -ForegroundColor Red
+    exit 2
+}
+$profileDir = if ($env:DSH_PROFILE) { Join-Path $env:DSH_HOME "profiles/$env:DSH_PROFILE" } else { Join-Path $env:DSH_HOME 'profiles/desktop' }
+$profileModules = Join-Path $profileDir 'node_modules'
 $plugins = @('dsh-browser-control', 'dsh-nav-buttons', 'dsh-input-guard')
 
 if (-not (Test-Path -LiteralPath $profileModules)) {
