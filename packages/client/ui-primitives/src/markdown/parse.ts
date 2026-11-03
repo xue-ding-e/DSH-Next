@@ -10,6 +10,7 @@
 
 import type { Root } from 'mdast'
 import { recoverLocalImages } from './local-image-syntax.ts'
+import { restorePathBackslashes } from './pathBackslashes.ts'
 import { fromMarkdown } from 'mdast-util-from-markdown'
 import { gfmFromMarkdown } from 'mdast-util-gfm'
 import { mathFromMarkdown } from 'mdast-util-math'
@@ -28,10 +29,10 @@ const gfmOptions = { singleTilde: false }
  * @returns The mdast root.
  */
 export function parseGfm(text: string): Root {
-  return recoverLocalImages(fromMarkdown(text, {
+  return restorePathBackslashes(recoverLocalImages(fromMarkdown(text, {
     extensions: [gfm(gfmOptions), cjkFriendlyStrong()],
     mdastExtensions: [gfmFromMarkdown()],
-  }), text)
+  }), text), text)
 }
 
 /**
@@ -41,11 +42,11 @@ export function parseGfm(text: string): Root {
  * @returns The mdast root.
  */
 export function parseGfmWithMath(text: string): Root {
-  return recoverLocalImages(fromMarkdown(text, {
+  return restorePathBackslashes(recoverLocalImages(fromMarkdown(text, {
     // `mathCompatibility()` MUST stay last: micromark dispatches the extension
     // registered last first, so its dollar flow takes precedence over `math()`
     // and keeps the opening line's text as math instead of upstream's fence meta.
     extensions: [gfm(gfmOptions), cjkFriendlyStrong(), math(), mathCompatibility()],
     mdastExtensions: [gfmFromMarkdown(), mathFromMarkdown()],
-  }), text)
+  }), text), text)
 }
