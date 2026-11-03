@@ -51,3 +51,6 @@ worktrees/
 .agents/worktrees/
 .typert-*/
 native/system/test/bin/
+
+# Local code-graph index written by the codegraph CLI; never part of the build.
+.codegraph/
