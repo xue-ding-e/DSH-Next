@@ -137,7 +137,8 @@ describe('MarkdownBody', () => {
     ].join('\n')
     const view = render(<MarkdownBody {...props(content([text], true))} />)
     await act(async () => { await import('../src/client/markdown/frontmatter-fields.tsx') })
-    const fields = await vi.waitUntil(() => view.container.querySelector('[data-document-frontmatter] dl'))
+    // The lazily loaded field-list chunk can exceed the default 1 s wait under coverage.
+    const fields = await vi.waitUntil(() => view.container.querySelector('[data-document-frontmatter] dl'), { timeout: 10_000 })
     expect([...fields.querySelectorAll('dt')].map(node => node.textContent))
       .toEqual(['name', 'description', 'metadata', 'anchor', 'copy', 'license', 'version', 'beta', '1', 'orphan'])
     expect([...fields.querySelectorAll('dd')].map(node => node.textContent)).toEqual([

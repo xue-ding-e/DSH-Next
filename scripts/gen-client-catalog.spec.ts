@@ -8,7 +8,10 @@
  */
 
 import { describe, expect, it } from 'vitest'
-import { collectSlotEntries, oversizedSlotReports, resolveSlotEntries, validateSlotContracts } from './gen-client-catalog.ts'
+import ts from 'typescript'
+import {
+  collectSlotEntries, oversizedSlotReports, renderClientCatalog, resolveSlotEntries, validateSlotContracts,
+} from './gen-client-catalog.ts'
 import type { SlotDeclaration, SlotRegistration, TypeDeclaration } from './slot-walk.ts'
 
 /** A declaration with every field the catalog needs, overridable per case. */
@@ -101,6 +104,18 @@ describe('client slot contract validation', () => {
 
 describe('client slot projection', () => {
   const kits = new Map<string, readonly string[]>([['root', ['useSessions: Hook']]])
+
+  it('emits compilable literals for owner declarations containing CRLF', () => {
+    const entries = resolveSlotEntries([declaration()], [], OWNER_TYPES, kits)
+    const entry = entries[0]!
+    const rendered = renderClientCatalog([{ ...entry, ownerProps: ['export interface Owner {\r\n  label: string\r\n}'] }])
+    expect(rendered).not.toContain('\r')
+    expect(rendered).toContain('export interface Owner {\\r\\n  label: string\\r\\n}')
+    const compiled = ts.transpileModule(rendered, {
+      compilerOptions: { module: ts.ModuleKind.ESNext }, reportDiagnostics: true,
+    })
+    expect(compiled.diagnostics).toEqual([])
+  })
 
   it('warns that a single seat with a shipped occupant is replaced, not shared', () => {
     const [entry] = resolveSlotEntries([declaration()], [registration()], OWNER_TYPES, kits)
@@ -241,13 +256,17 @@ describe('the real workspace surface', () => {
     expect(entries.length).toBeGreaterThan(30)
     for (const entry of entries) {
       expect(entry.summary, `${entry.key} has no summary`).not.toBe('')
-      expect(['single', 'list', 'keyed', 'chain']).toContain(entry.kind)
+      expect(['single', 'list', 'keyed', 'chain', 'hoc']).toContain(entry.kind)
       expect(['root', 'session', 'session-maybe']).toContain(entry.scope)
     }
     // The frame root is the canonical trap: occupied by the shipped app frame,
     // so a dynamic package registering there replaces the whole UI.
     const root = entries.find(entry => entry.key === 'root')
     expect(root?.replaceRisk).toBe('shadows-shipped-ui')
+    // A hoc layer wraps the owner content; its example must keep rendering it.
+    const frame = entries.find(entry => entry.key === 'conversation.hero.frame')
+    expect(frame?.replaceRisk).toBe('wraps-owner-content')
+    expect(frame?.example).toContain('({ children }) => React.createElement(\'div\', null, children)')
     expect(root?.occupants.join(' ')).toContain('AppFrame')
     expect(entries.find(entry => entry.key === 'conversation.session')?.declaredBy)
       .toContain("factory 'conversation.content' (client-ui-conversation)")

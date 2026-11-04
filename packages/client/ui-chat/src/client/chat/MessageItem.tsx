@@ -1,7 +1,7 @@
 import { memo, useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import type { PendingSubmission } from '@deepseek-ai/dsh-api-session-controller/client'
-import type { PropsRenderFactories } from '@deepseek-ai/dsh-client-ui-slots'
+import type { PropsRenderFactories, PropsRenderSlots } from '@deepseek-ai/dsh-client-ui-slots'
 import type { UserTextFacts } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import { Button, InlineEditor, JsonBlock, StateDot, TextShimmer } from '@deepseek-ai/dsh-client-ui-primitives'
 import type {
@@ -162,15 +162,34 @@ function TurnMaxTokensItem({ t }: {
   )
 }
 
+/**
+ * A row the message-source seat decorates. A durable Chat node satisfies it;
+ * pending and local-echo rows pass a source-less stand-in.
+ */
+interface DecoratedRow {
+  readonly kind: 'user' | 'steering'
+  readonly data: { readonly source: unknown }
+}
+
+/** Pending and local-echo rows carry no durable source for the seat to elect. */
+const UNDECORATED_ROW: DecoratedRow = { kind: 'user', data: { source: null } }
+
+/** Occupant used by rows that do not own the message-source seat. */
+const NO_MESSAGE_SOURCE: PropsRenderSlots<'conversation.chat.user.before'>['renderSlotChain'] = () => null
+
 /** Right-aligned bubble shared by user and steering rows. */
 function UserStyleBubble({
-  content, loadImage, renderFactorySlot, time, pending = false, echo = false, batchStart = false,
+  node, renderSlotChain, content, loadImage, renderFactorySlot, time, pending = false, echo = false, batchStart = false,
   referenceLabels, skillNames, previewAttachments, facts: inputFacts = EMPTY_TEXT_FACTS, interactive = false, onEdit, t,
 }: {
   content: readonly unknown[]
   renderFactorySlot: PropsRenderFactories['renderFactorySlot']
   /** Durable or locally captured timestamp, absent for pending steering. */
   time?: number | undefined
+  /** Row whose durable source owns the message-source decoration. */
+  node: DecoratedRow
+  /** Renderer supplied by the user registration; other rows use NO_MESSAGE_SOURCE. */
+  renderSlotChain: PropsRenderSlots<'conversation.chat.user.before'>['renderSlotChain']
   /** Whether this is the Host-authoritative pre-admission steering projection. */
   pending?: boolean
   /** Whether this is a local submission echo (invisible marker; the echo renders exactly like its durable replacement). */
@@ -209,6 +228,7 @@ function UserStyleBubble({
       data-submission-echo={echo || undefined}
       data-chat-steering-batch={batchStart ? 'start' : undefined}
     >
+      {renderSlotChain('conversation.chat.user.before', { source: node.data.source, kind: node.kind }, { fallback: null })}
       {renderFactorySlot('conversation.chat.user.content', {
         content: prepared,
         loadImage,
@@ -233,6 +253,8 @@ export function PendingSteeringBubble({ content, loadImage, renderFactorySlot, t
 } & Pick<ChatNodeOwnerProps, 'loadImage'>): ReactNode {
   return (
     <UserStyleBubble
+      node={UNDECORATED_ROW}
+      renderSlotChain={NO_MESSAGE_SOURCE}
       content={content}
       renderFactorySlot={renderFactorySlot}
       loadImage={loadImage}
@@ -277,6 +299,8 @@ export function PendingSubmissionBubble({ submission, loadImage, renderFactorySl
   )
   return (
     <UserStyleBubble
+      node={UNDECORATED_ROW}
+      renderSlotChain={NO_MESSAGE_SOURCE}
       content={content}
       previewAttachments={previewAttachments}
       renderFactorySlot={renderFactorySlot}
@@ -352,8 +376,10 @@ function UserMessageEditor({ initialText, operation, onCancel, hasAttachments, t
 
 /** User and admitted-steering keyed Chat renderer. */
 export const UserMessageNodeView = memo(function UserMessageNodeView({
-  node, renderFactorySlot, loadImage, editUserMessage, t,
-}: ChatNodeViewProps<'user' | 'steering'>) {
+  node, renderFactorySlot, loadImage, editUserMessage, renderSlotChain, t,
+}: ChatNodeViewProps<'user' | 'steering'> & {
+  renderSlotChain: PropsRenderSlots<'conversation.chat.user.before'>['renderSlotChain']
+}) {
   const data = node.data
   const row = useRef<HTMLDivElement>(null)
   const [edit, setEdit] = useState<UserMessageEdit | null>(null)
@@ -365,6 +391,8 @@ export const UserMessageNodeView = memo(function UserMessageNodeView({
   return (
     <div ref={row} className={css.userMessage}>
       <UserStyleBubble
+        node={node}
+        renderSlotChain={renderSlotChain}
         content={data.content}
         interactive
         renderFactorySlot={renderFactorySlot}

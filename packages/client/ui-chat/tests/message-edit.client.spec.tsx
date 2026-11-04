@@ -11,6 +11,7 @@ import { UserMessageNodeView } from '../src/client/chat/MessageItem.tsx'
 import { en } from '../src/client/locale.ts'
 import { createUserContentFixture } from './user-content-component-fixture.tsx'
 import { unusedImageLoader } from './reasoning-component-fixture.tsx'
+import type { ComponentProps, ReactNode } from 'react'
 
 const t = makeTranslate(en, commonEn)
 const IMAGE: ImageAttachmentRef = {
@@ -28,22 +29,50 @@ beforeEach(() => {
 })
 afterEach(() => { cleanup(); vi.unstubAllGlobals() })
 
-function fixture(operation: UserMessageEdit, message = MESSAGE, available = true) {
+function fixture(operation: UserMessageEdit, message = MESSAGE, available = true, sourceDecoration: ReactNode = null) {
   const begin = vi.fn(() => operation)
   const renderContent = createUserContentFixture()
   const renderFactorySlot: ChatNodeViewProps['renderFactorySlot'] = (name, input) => {
     if (name !== 'conversation.chat.user.content') throw new Error(`Unexpected Factory: ${name}`)
     return renderContent(input as UserContentInput, () => <span>Image attachment</span>, t)
   }
+  const renderSlotChainCalls = vi.fn()
+  const renderSlotChain: ComponentProps<typeof UserMessageNodeView>['renderSlotChain'] = (name, owner, options) => {
+    renderSlotChainCalls(name, owner, options)
+    if (name !== 'conversation.chat.user.before') throw new Error(`Unexpected source chain: ${name}`)
+    return sourceDecoration ?? options?.fallback ?? null
+  }
   const props = {
-    node: { key: 'user:edited-user', kind: message.kind, id: message.messageId ?? 'synthetic', target: 'chat',
-      anchorSeq: message.seq, location: { kind: 'session' }, visibility: 'visible', data: message },
-    renderFactorySlot, loadImage: unusedImageLoader, editUserMessage: available ? begin : undefined, t,
-  } as ChatNodeViewProps<'user' | 'steering'>
-  return { ...render(<UserMessageNodeView {...props} />), begin }
+    node: { key: 'user:edited-user', kind: 'user' as const, id: message.messageId ?? 'synthetic', target: 'chat' as const,
+      anchorSeq: message.seq, location: { kind: 'session' as const }, visibility: 'visible' as const, data: message },
+    renderFactorySlot, renderSlotChain, loadImage: unusedImageLoader, editUserMessage: available ? begin : undefined, t,
+    useTurnData: () => undefined,
+    useDisclosure: () => ({ expanded: false, setExpanded: () => {}, toggle: () => {} }),
+    useGroupAction: () => { throw new Error('unused group action') },
+    openFile: vi.fn(), inspectCall: undefined, forkAt: vi.fn(),
+  }
+  return { ...render(UserMessageNodeView(props as never)), begin, renderSlotChain: renderSlotChainCalls }
 }
 
 describe('editing a recorded user message', () => {
+  it('preserves the durable user source decoration while its inline editor opens and closes', () => {
+    const shared = { ...MESSAGE, source: { kind: 'user', principal: { kind: 'share-viewer', shareId: 'shared-origin' } } }
+    const submit = vi.fn<UserMessageEdit['submit']>()
+    const view = fixture({ submit }, shared, true, <span data-testid="source-origin">Shared sender</span>)
+    const origin = view.getByTestId('source-origin')
+    expect(view.renderSlotChain).toHaveBeenCalledExactlyOnceWith(
+      'conversation.chat.user.before', { source: shared.source, kind: 'user' }, { fallback: null },
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Edit and resend' }))
+    expect(view.begin).toHaveBeenCalledWith(shared)
+    expect(view.getByTestId('source-origin')).toBe(origin)
+    expect(view.renderSlotChain.mock.lastCall?.[1]).toEqual({ source: shared.source, kind: 'user' })
+    expect(screen.getByRole<HTMLTextAreaElement>('textbox').value).toBe('Original message')
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(view.getByTestId('source-origin')).toBe(origin)
+    expect(submit).not.toHaveBeenCalled()
+  })
+
   it('opens below the original without sending, and Cancel discards only the edit', () => {
     const submit = vi.fn<UserMessageEdit['submit']>()
     fixture({ submit })

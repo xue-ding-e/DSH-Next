@@ -11,6 +11,8 @@
 - button "Copy"
 - tooltip "Copy"
 - button "Edit and resend"
+- button "Context injection runtime-context"
+- button "Context injection time-context"
 - button "Think The user wants me to begin with \"Reading the workspace now.\" and call bash with \"echo alpha\" in the same message. Then after the tool result, reply with the single word DONE and stop."
 - paragraph: Reading the workspace now.
 - button "Bash Print alpha to stdout"

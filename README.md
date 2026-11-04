@@ -4,9 +4,9 @@ English | [中文](README.zh.md)
 
 DSH-Next is an independent community-maintained source repository based on [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness). It is not an official DeepSeek release and is not affiliated with or endorsed by DeepSeek.
 
-`main` has independent linear history; `upstream-main` preserves the complete official `master` history without changes. The initial source snapshot is [22ddee3](https://github.com/deepseek-ai/deepseek-harness/commit/22ddee3792402c3e70ec5f86a63c3e3e895a2f60). The original [MIT license](LICENSE), [third-party notices](THIRD_PARTY_NOTICES.md), and author attribution are preserved.
+`main` has independent linear history; `upstream-main` preserves the complete official `master` history without changes. The [source-import tag](https://github.com/xue-ding-e/DSH-Next/tree/source-import) preserves the initial source snapshot and its upstream attribution. The original [MIT license](LICENSE), [third-party notices](THIRD_PARTY_NOTICES.md), and author attribution are preserved.
 
-Release automation is not configured. Upstream GitHub Actions workflows are preserved in `.github/upstream-workflows/` with `.disabled` suffixes, while reviewed manual validation workflows are enabled. Inherited release and deployment workflows remain disabled. This repository has no published DSH-Next packages or binaries; the npm command below installs upstream software, not DSH-Next.
+Windows installers and updates are published through this repository's [GitHub Releases](https://github.com/xue-ding-e/DSH-Next/releases). Personal extensions are maintained in [DSH-Next-Plugins](https://github.com/xue-ding-e/DSH-Next-Plugins), with versions and installation managed by [DSH-Next-Profile](https://github.com/xue-ding-e/DSH-Next-Profile). The npm command below installs the official upstream program. The Next installer uses its own application identity, update feed and data directory.
 
 DeepSeek Harness (`dsh`) is an open-source agent harness developed by [DeepSeek AI](https://deepseek.com).
 

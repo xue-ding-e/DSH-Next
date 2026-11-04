@@ -9,7 +9,7 @@ kind: persistence-change
 
 ## 概述
 
-在现有 agent/inbox/spliced 事件中增加可选的撤回请求身份和被移除用户内容，用于恢复中断的队列到输入框交付。
+为现有 agent/inbox/spliced 事件添加可选的召回请求身份和被移除的用户内容，用于恢复被中断的队列到输入框交接。
 
 ## 目录
 
@@ -27,20 +27,20 @@ id: 2026-10-27-queued-message-recall
 baseline: false
 changes:
   - root: "event:agent/inbox/spliced"
-    previous: "2026-10-22-action-card-status"
-    after: "4ee9d5bde7cfa90e7c66e9245a3fff014f9535baaf90fa2b7d2e8661f007309b"
+    previous: "2026-10-27-retry-control-input"
+    after: "58e19083c1e104320107ca3b3e73543e39c060a402adf746d72f10691529a9ea"
     decision: same-version
 ```
 
 <a id="compatibility"></a>
 ## 兼容性
 
-不含 recall 的已有事件仍然有效，恢复投影忽略这些事件。已有读取方按未改变的 canceled splice 执行移除，不使用可选元数据，因此保留移除结果且不会重新入队。新的恢复只处理本 Session 所有的已提交操作，排除分叉继承事件。旧客户端不会获得撤回恢复能力；这并非通用降级保证。
+没有 recall 的已有 splice 事件仍然有效。不消费可选召回元数据的读取方仍按原有取消语义处理，不会重新排入已移除的输入。恢复仅读取当前会话已提交的操作，并排除分支继承的事件。组合后的事件保留上游 skill-catalog 的 incomplete 判别字段；该可选字段不改变 splice 行为。旧客户端不会因此获得召回恢复能力，也不获得一般降级支持。
 
 <a id="verification"></a>
 ## 验证
 
-已检查双向 inbox 读取和恢复投影源码；本地 90 项有界适配测试通过，包括 JSON Session 回放及响应丢失恢复。CI 运行 40591419528 生成了 schema，将唯一变化判定为 optional-property-added、requiresCompatibilityReview false；620 个类型未变。完整锁定工具链行为、磁盘持久化、SDK 和原生 UI 验证仍待完成。
+组合后的源码通过 142 项提示词准入和打包纯度检查，以及 62 项队列召回和 Liveshare 测试。召回事务用例覆盖已提交操作的回复丢失恢复和写入所有权。生成类型验证和完整构建另行检查；这些单元测试不构成原生桌面行为的证明。
 
 <a id="dev-note"></a>
 ## 开发备注

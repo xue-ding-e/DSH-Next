@@ -1,12 +1,10 @@
 /** Resolve the update channel sealed into the installed application manifest. */
 
 /**
- * Installer-owned channel, independent of release version and upload environment.
- *
- * A prerelease build's channel is the first prerelease field of the version the build publishes,
- * because electron-updater only accepts a release whose first prerelease field equals the channel.
+ * Installed feed name: official packages use nightly/stable; Next uses its version's channel.
+ * The GitHub provider matches a prerelease's first field, while official feeds accept either version kind.
  */
-export type DesktopUpdateChannel = 'nightly' | 'latest' | string
+export type DesktopUpdateChannel = string
 
 /**
  * Read the first prerelease field of a version, or undefined for a stable one.
@@ -27,8 +25,8 @@ function firstPrereleaseField(version: string): string | undefined {
 /**
  * Read the packaged channel; older manifests retain their existing nightly behavior.
  *
- * A version-derived channel (`rc` for `0.2.1-rc.3`) is accepted only when the packaged version
- * declares it, so a release cycle can name its own feed instead of borrowing a fixed one.
+ * Next must name its packaged version's first prerelease field, or latest for a stable version.
+ * Official nightly/stable feeds are independent of the packaged version.
  * @param manifest Parsed application manifest.
  * @returns Validated channel. Invalid explicit values reject instead of changing feeds.
  */
@@ -37,7 +35,14 @@ export function desktopUpdateChannel(manifest: unknown): DesktopUpdateChannel {
   if (!('dshDesktopUpdateChannel' in manifest)) return 'nightly'
   const channel = manifest.dshDesktopUpdateChannel
   if (typeof channel !== 'string') throw new Error('desktop update: invalid packaged channel')
-  if (channel === 'nightly' || channel === 'latest') return channel
+  if ('dshNext' in manifest) {
+    const version = 'version' in manifest ? manifest.version : undefined
+    if (typeof version !== 'string' || (firstPrereleaseField(version) ?? 'latest') !== channel) {
+      throw new Error('desktop update: Next channel must match the packaged version')
+    }
+    return channel
+  }
+  if (channel === 'nightly' || channel === 'stable') return channel
   // A custom channel must be the prerelease field of the packaged version; anything else
   // would request a feed that no release of this version can ever satisfy.
   const version = 'version' in manifest ? manifest.version : undefined

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 
 export const ROWS = 'packages/client/ui-workspace/src/client/rows/Rows.tsx'
 export const ROW_TEST = 'packages/client/ui-workspace/tests/rows.client.spec.tsx'
-export const BASE = 'fae57ca3e87f40b0fdb0500334d5519a212ae1c2'
+export const BASE = 'refs/tags/validation/initial-main'
 export const WORKSPACE_REGRESSION = 'workspace right-click and keyboard menu open the clicked folder without toggling'
 export const BROWSER_WORKSPACE_TEST = 'DSH-Next workspace menu opens only the clicked Host folder'
 export const REGRESSION = 'right-click opens the target row menu without selecting it'
