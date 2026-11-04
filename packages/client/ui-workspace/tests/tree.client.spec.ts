@@ -12,7 +12,7 @@ import type { SessionProjectionSnapshot } from '@deepseek-ai/dsh-api-session-con
 import {
   type ArchivedFilter,
   deriveFlat, deriveGroups, deriveSearchResults, orderByRecency, owningGroupKey, owningParentFolder,
-  pinCurrentBlank, reconcileManualOrder, sessionMemberIds, visibleSessionIds, workspaceLabel, UNGROUPED_KEY,
+  pinCurrentBlank, recentSessionIds, reconcileManualOrder, sessionMemberIds, visibleSessionIds, workspaceLabel, UNGROUPED_KEY,
 } from '../src/client/tree.ts'
 import { createWorkspaceViewStore } from '../src/client/stores.ts'
 
@@ -109,7 +109,7 @@ describe('owningGroupKey', () => {
 })
 
 describe('Session ordering', () => {
-  it.each(['workspace', 'ungrouped', 'flat'] as const)('keeps the current New Session before pins in %s', (mode) => {
+  it.each(['workspace', 'ungrouped', 'flat'] as const)('hides the current blank while retaining pin order in %s', (mode) => {
     const sessions = withMain(list(
       summary('pin', 30),
       summary('ordinary', 20),
@@ -126,7 +126,7 @@ describe('Session ordering', () => {
         noAttention,
         view([mode === 'workspace' ? 'alpha' : UNGROUPED_KEY], order),
       )[0]!.sessions
-    expect(rows.map(row => row.id)).toEqual([sid('blank'), sid('pin'), sid('ordinary')])
+    expect(rows.map(row => row.id)).toEqual([sid('pin'), sid('ordinary')])
   })
 
   it('orders known members by recency with a stable identity tie-break', () => {
@@ -135,6 +135,11 @@ describe('Session ordering', () => {
       [sid('unknown'), sid('tie-b'), sid('older'), sid('tie-a')],
       summaries,
     )).toEqual([sid('tie-a'), sid('tie-b'), sid('older')])
+  })
+
+  it('orders equally recent conversations by stable Session identity', () => {
+    const sessions = list(summary('tie-b', 20), summary('tie-a', 20))
+    expect(recentSessionIds(sessions, [], 5)).toEqual([sid('tie-a'), sid('tie-b')])
   })
 
   it('orders each partition strictly by Session recency, independent of pin-array order', () => {
@@ -252,6 +257,27 @@ describe('Session ordering', () => {
 })
 
 describe('deriveGroups', () => {
+  it('keeps the current empty Workspace without a Session row or a phantom Ungrouped bucket', () => {
+    const draft = { ...summary('draft', 1), blank: true }
+    const sessions = withMain(list(draft), draft.id)
+    expect(deriveGroups(sessions, [workspace('alpha', ['draft'])], noRows, noAttention, view(['alpha'])))
+      .toMatchObject([{ key: 'alpha', containsCurrent: true, sessionCount: 0, sessions: [] }])
+    expect(deriveGroups(sessions, [], noRows, noAttention, view([UNGROUPED_KEY]))).toEqual([])
+  })
+
+  it.each(['新会话', 'New Session'])('keeps a started conversation titled %s visible in lists, recent and search', (title) => {
+    const started = { ...summary('started', 1), title, displayTitle: title }
+    const draft = { ...summary('draft', 2), title, displayTitle: title, blank: true }
+    const sessions = withMain(list(started, draft), draft.id)
+    expect(visibleSessionIds(sessions, [], 'default')).toEqual([started.id])
+    expect(recentSessionIds(sessions, [], 5)).toEqual([started.id])
+    expect(deriveFlat(sessions, sessions.ids, noRows, noAttention)).toMatchObject([{ id: started.id, title }])
+    expect(deriveSearchResults(
+      sessions, [workspace('alpha', ['started', 'draft'])], title, [], 'default', noAttention,
+      { items: [], hasMore: false }, 20,
+    ).items).toMatchObject([{ id: started.id, title }])
+  })
+
   it('keeps caller-supplied Workspace and sessionIds order', () => {
     const sessions = list(summary('newer', 20), summary('older', 10))
     const workspaces = [workspace('first', ['older', 'newer']), workspace('empty', [])]
@@ -311,22 +337,18 @@ describe('deriveGroups', () => {
     ])
   })
 
-  it('shows the current blank row while counting only conversations in its Workspace', () => {
+  it('hides blank rows while retaining their current Workspace and counting conversations', () => {
     const currentBlank = { ...summary('current-blank', 5), blank: true, retainedBy: { mainView: 1 } }
     const staleBlank = { ...summary('stale-blank', 4), blank: true }
-    const real = summary('shown', 3)
+    const real = { ...summary('shown', 3), title: '新会话', displayTitle: '新会话' }
     const sessions = list(real, currentBlank, staleBlank)
     const groups = deriveGroups(
       sessions, [workspace('first', ['shown', 'current-blank', 'stale-blank'])],
       noRows, noAttention, view(['first']),
     )
-    expect(groups[0]!.sessions.map(session => session.id)).toEqual([currentBlank.id, real.id])
-    const blankNode = groups[0]!.sessions.find(session => session.id === currentBlank.id)!
-    // The stored placeholder title stays canonical; the renderer swaps in
-    // the localized New Session label via the blank flag.
-    expect(blankNode.title).toBe('')
-    expect(blankNode.blank).toBe(true)
-    expect(groups[0]!.sessions.find(session => session.id === real.id)!.blank).toBe(false)
+    expect(groups[0]!.sessions.map(session => session.id)).toEqual([real.id])
+    expect(groups[0]!.sessions[0]).toMatchObject({ title: '新会话', blank: false })
+    expect(groups[0]!.containsCurrent).toBe(true)
     expect(groups[0]!.sessionCount).toBe(1)
     // A non-current blank stray never surfaces an Ungrouped bucket either.
     const strayGroups = deriveGroups(
@@ -590,14 +612,16 @@ describe('deriveFlat', () => {
     expect(groups[0]!.sessions.every(row => !('fork' in row))).toBe(true)
   })
 
-  it('shows only the current blank session and excludes blanks from search', () => {
+  it('hides all blank sessions while keeping the current blank in complete membership', () => {
     const currentBlank = { ...summary('current-blank', 9), blank: true, retainedBy: { mainView: 1 } }
     const staleBlank = { ...summary('stale-blank', 8), blank: true }
     const sessions = list(currentBlank, summary('real', 1), staleBlank)
     const rows = deriveFlat(sessions, visibleSessionIds(sessions, noArchive, 'default'), noRows, noAttention)
-    expect(rows.map(row => row.id)).toEqual([currentBlank.id, sid('real')])
-    expect(rows.map(row => row.title)).toEqual(['', 'real'])
-    expect(rows.map(row => row.blank)).toEqual([true, false])
+    expect(rows.map(row => row.id)).toEqual([sid('real')])
+    expect(rows.map(row => row.title)).toEqual(['real'])
+    expect(rows.map(row => row.blank)).toEqual([false])
+    expect(sessionMemberIds(sessions)).toEqual([currentBlank.id, sid('real')])
+    expect(deriveFlat(sessions, sessionMemberIds(sessions), noRows, noAttention)).toEqual(rows)
   })
 
   it('hides archived sessions in flat mode', () => {

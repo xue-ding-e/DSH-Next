@@ -55,17 +55,12 @@ const SESSION_WATERMARK_BASE = 5
 /** Highest watermark that attention-bearing Sessions raise automatically; Show more and search reveals may exceed it. */
 const SESSION_WATERMARK_AUTO_MAX = 50
 
-/** Show the blank row plus the first `watermark` non-blank rows, in list order. */
+/** Show the first `watermark` conversation rows, in list order. */
 function watermarkRows(sessions: readonly SessionNode[], watermark: number): {
   rows: readonly SessionNode[]
   hiddenCount: number
 } {
-  let count = 0
-  const rows = sessions.filter((session) => {
-    if (session.blank) return true
-    count += 1
-    return count <= watermark
-  })
+  const rows = sessions.slice(0, watermark)
   return { rows, hiddenCount: sessions.length - rows.length }
 }
 
@@ -81,7 +76,6 @@ function requiredWatermark(
   let index = 0
   let required = 0
   for (const session of sessions) {
-    if (session.blank) continue
     index += 1
     const attention = index <= SESSION_WATERMARK_AUTO_MAX && (
       session.running || session.runningSubagentCount > 0 || session.pendingInteraction !== undefined
@@ -222,7 +216,7 @@ function sessionDragOrder(
 ): SessionId[] | undefined {
   const source = rows.find(row => row.id === drag.sessionId)
   const target = rows.find(row => row.id === over.id)
-  if (source === undefined || target === undefined || source.blank
+  if (source === undefined || target === undefined
     || source.pinned !== drag.pinned || target.pinned !== drag.pinned
     || source.id === target.id || !order.includes(source.id)) return
   const section = rows.filter(row => row.pinned === drag.pinned)
@@ -234,7 +228,7 @@ function sessionDragOrder(
   const targetIndex = next.indexOf(target.id)
   if (targetIndex === -1) return
   next.splice(targetIndex + (over.half === 'after' ? 1 : 0), 0, source.id)
-  return pinCurrentBlank(next, rows.find(row => row.blank)?.id)
+  return next
 }
 
 /** In-flight Workspace-row drag: source identity plus the current marker. */
