@@ -46,7 +46,8 @@ jobs:
         run: |
           $base = node -p "JSON.parse(require('fs').readFileSync('package.json', 'utf8')).version"
           $date = [DateTime]::UtcNow.ToString('yyyyMMdd')
-          $version = "$base.$date.$env:GITHUB_RUN_NUMBER"
+          $prefix = node -e "import('./apps/desktop/scripts/desktop-build-version.mjs').then(m => process.stdout.write(m.desktopBuildVersionPrefix(process.argv[1])))" $base
+          $version = "$prefix$date.$env:GITHUB_RUN_NUMBER"
           # electron-updater reads the release tag with /\/tag\/(v?[^/]+)$/ and requires semver.valid,
           # so only a plain "v<version>" tag reaches its version comparison. The channel is the
           # version's own prerelease field, which is the name electron-updater matches by equality.
@@ -58,6 +59,9 @@ jobs:
           "NEXT_TAG=v$version" >> $env:GITHUB_ENV
           "NEXT_CHANNEL=$channel" >> $env:GITHUB_ENV
 
+      - name: Validate release build identity
+        run: node --test apps/desktop/tests/desktop-build-identity.test.mjs
+
       - name: Build unsigned DSH Next installer
         run: pnpm run package:desktop:win:x64 -- --next --unsigned --build-version $env:NEXT_VERSION
 
@@ -66,6 +70,10 @@ jobs:
           $dir = 'apps/desktop/.desktop-build/targets/win-x64/unsigned-artifacts'
           $installer = Join-Path $dir "dsh-next-$env:NEXT_VERSION-win-x64-unsigned.exe"
           if (!(Test-Path -LiteralPath $installer)) { throw "Missing $installer" }
+          $client = (Get-Content -LiteralPath '.dsh-build/client-build-environment.json' -Raw | ConvertFrom-Json).environment
+          if ($client.DSH_CLIENT_VERSION -ne $env:NEXT_VERSION -or $client.DSH_CLIENT_BUILD_VERSION -ne $env:NEXT_VERSION) {
+            throw "Client build identity does not match release $env:NEXT_VERSION"
+          }
           $hash = (Get-FileHash -LiteralPath $installer -Algorithm SHA256).Hash.ToLowerInvariant()
           "$hash *$(Split-Path -Leaf $installer)" | Set-Content -LiteralPath (Join-Path $dir 'SHA256SUMS') -Encoding utf8NoBOM
           $sha512 = [Convert]::ToBase64String([Security.Cryptography.SHA512]::Create().ComputeHash([IO.File]::ReadAllBytes($installer)))

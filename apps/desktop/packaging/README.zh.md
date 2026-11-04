@@ -13,7 +13,7 @@ description: "在本地或 Windows／macOS Actions 中生成 Desktop 安装包�
 ## 目录
 
 - [选择打包方式](#choose-a-build)
-- [DSH Next 安装包与手动更新](#next-distribution)
+- [DSH Next 安装包与更新](#next-distribution)
 - [发布版本](#release-versions)
 - [配置与本地构建](#configuration-and-local-builds)
 - [Windows Actions 打包](#windows-actions)
@@ -37,13 +37,13 @@ description: "在本地或 Windows／macOS Actions 中生成 Desktop 安装包�
 
 <a id="next-distribution"></a>
 
-## DSH Next 安装包与手动更新
+## DSH Next 安装包与更新
 
 `DSH Next` 是面向 `xue-ding-e/DSH-Next` 的独立未签名发行版，不是覆盖官方 Harness 安装的更新。应用 ID 为 `io.github.xue-ding-e.dsh-next`，Windows 安装 GUID 为 `e74d59b9-768b-51ae-bb11-7f24bfbafa5a`。包名、协议及可选终端命令分别为 `dsh-next-desktop`、`dsh-next` 和 `dsh-next`。它不会注册官方 `dsh` 命令，也不会复制官方 profile。官方原有签名与更新配置保持不变。
 
 在已安装锁定依赖及本文所述安装工具链的原生 Windows x64 构建主机上，使用 `pnpm --dir apps/desktop run package:next:win:x64 -- --build-version <approved-version>`。`--next` 必须配合 `--unsigned`，不继承签名凭据及上游更新服务。`--build-version auto` 只扫描本地 Next 产物，不能在干净 runner 上预留全局唯一发布版本；发布前须确认所选版本尚未使用。打包保留 `--publish never`，不创建 release、tag 或更新清单。
 
-安装包匿名检查公开 release，并在筛选更高版本的兼容未签名安装器前验证仓库 ID。release tag 以单个 `v` 前缀携带版本号（`v<version>`），这是 `electron-updater` 唯一接受的前缀：它用 `/\/tag\/(v?[^/]+)$/` 解析 tag，凡是 `semver.valid` 拒绝的 tag 都会被跳过。预发布包按相同 tag 规则发布预发布 release。产物必须命名为 `dsh-next-<version>-win-x64-unsigned.exe` 或 `dsh-next-<version>-mac-<arch>-unsigned.dmg`。渠道为空、安装器缺失或列表不完整会明确报告，不要求 token。确认提示后仅打开已验证的 release 页面，不下载、执行或自动安装未签名程序。运行安装器前，用户须检查源码提交、产物校验和及平台未签名警告。签名自动更新还需单独配置签名者并验证清单；手动更新路径不会伪造 `latest.yml`、`latest-mac.yml`、`nightly.yml` 或 `nightly-mac.yml`。
+Next 安装包通过 `electron-updater` 使用 `xue-ding-e/DSH-Next` 的公开 GitHub Releases feed。封装的 Next 元数据独立于上游配置标识该仓库及其 ID。release tag 使用单个 `v` 前缀（`v<version>`）；provider 会跳过 `semver.valid` 拒绝的 tag。已安装的预发布通道筛选匹配的 tag，例如 `rc`，并比较完整安装版本，禁止降级。Windows 发布工作流提供 `dsh-next-<version>-win-x64-unsigned.exe`、校验和、通道 feed（`rc` 版本使用 `rc.yml`）及内容相同的 `latest.yml` 回退。本机构建及 provider 回归不代表已安装应用的下载、替换或重启验收通过；须在发布主机上执行[已安装更新流程](../tests/installed-update/README.zh.md)。
 
 Next 默认使用 `~/.dsh-next`，也可通过绝对路径 `DSH_NEXT_HOME` 指定目录。它拒绝与官方默认 home、继承的自定义 `DSH_HOME` 或应用安装目录发生规范路径重叠，包括已有软链接或 junction 祖先。同身份重装保留数据；Next 卸载只移除应用文件，明确保留 profile、偏好设置和缓存。
 
@@ -68,11 +68,13 @@ Next 默认使用 `~/.dsh-next`，也可通过绝对路径 `DSH_NEXT_HOME` 指�
 
 Desktop 手动 CI 使用独立的未发布构建标识：`auto` 追加 UTC 日期、工作流运行编号和尝试次数（`.YYYYMMDD.run.attempt`，稳定基础版本使用 `-test`）。例如 `0.2.1-alpha.1.20261008.42.2`。这些编号不是预留的发布序号。
 
-把确认后的版本通过 `--build-version` 传给打包命令，该值同时决定产物文件名、更新 feed 与上传校验。清单保留产品版本，因此 test 打包不再改写发布家族，也不留下需要还原的改动：
+把确认后的版本通过 `--build-version` 传给打包命令。该值同时用于安装清单、产物文件名、更新 feed、上传校验及 Web 与 Desktop 客户端元数据（`DSH_CLIENT_VERSION` 和 `DSH_CLIENT_BUILD_VERSION`）。About、Settings 和更新提示中的当前版本展示与更新器从 `app.getVersion()` 取得的完整版本一致。受 Git 跟踪的清单保留产品版本。未指定打包版本的源码构建继续在展示标识中包含产品版本、Git commit 及 dirty 标记；安装清单单独保留 `dshBuildCommit` 和 `dshBuildDirty`：
 
 ```sh
 pnpm --dir apps/desktop run package:win:x64 --build-version 0.1.6-alpha.1.20260916.1
 ```
+
+运行 `node --test apps/desktop/tests/desktop-build-identity.test.mjs`，通过 native tsdown 配置加载器及真实 GitHub 更新 provider 检查发布版与源码版标识。回归使用独立临时构建目录和合成 feed 响应，不生成安装包，也不启动 Electron 进程。
 
 `--build-version auto` 会给出当天的下一个序号：读取目标 bucket 中已发布的对象，未配置 bucket 或列举未能在期限内完成时回退到本目标的本地输出目录。上传前请确认它打印的版本号；run script 会自行透传 `--`，打包入口两种写法都接受。
 
@@ -84,7 +86,7 @@ production 发布使用产品版本本身，不传 `--build-version`。其上传
 
 ## 配置与本地构建
 
-macOS 和 Windows 未签名安装包使用与本地 Web 构建相同的本地化 **DSH 本地构建** 标签及版本/commit 徽标。签名安装包保留官方品牌，包括 test 部署和跳过公证的 macOS 构建。原生应用及安装器名称不变。
+macOS 和 Windows 未签名安装包使用本地化 **DSH 本地构建** 标签；版本徽标遵循[发布版本](#release-versions)。签名安装包保留官方品牌，包括 test 部署和跳过公证的 macOS 构建。原生应用及安装器名称不变。
 
 本地 Windows 命令通过 `DSH_PACKAGING_CONFIG_DIR` 指定机器配置绝对目录，通过 `DSH_PACKAGING_PRESET` 选择 `test` 或 `production`。加载器读取 `presets/<preset>.env`；签名命令另读 `secrets/windows-signing.env`。相对证书和 SignTool 路径以声明它们的文件所在目录为基准。公开 preset 拒绝凭据，签名文件不能覆盖公开配置。配置缺失立即失败，不回退到 `.env.windows`；不选择 preset 的命令保留原 dotenv 行为。未签名和仅准备 preset 不读取签名文件。缓存维护也只读取公开 preset 配置。签名测试包还需现有下载 origin 和 release ID，但无需上传凭据。本地 preset 命令使用 `--build-version auto` 时仅按本地产物编号；Actions 使用运行编号和重试次数。
 
@@ -124,7 +126,7 @@ macOS 正式发布和本地未签名 DMG 都通过 [electron-builder 配置](../
 
 runner 的受监督启动和恢复见 [Windows runner 机器准备](../windows-signing/README.zh.md#machine-setup)。
 
-`Package Desktop · Windows` [手动工作流](../../../.github/workflows/windows-package.yml) 选择专用 Windows x64 runner 标签 `dsh-win-package-trial`，并使用机器 preset `test` 或 `production`。选择 `signed`（默认）或 `unsigned`；签名模式复用现有 EV token 预检、签名缓存与失败 interlock，不发布或上传 release。`build_version` 默认为 `auto`，使用[发布版本](#release-versions)中的 CI 标识；显式值可以是源码产品版本，或扩展构建版本，例如产品 `0.2.1-alpha.1` 对应 `0.2.1-alpha.1.20261009.1`。版本前缀必须匹配所选源码；校验错误显示其当前示例。manifest 保持不变。
+`Package Desktop · Windows` [上游工作流，Next 中已停用](../../../.github/upstream-workflows/windows-package.yml.disabled) 选择专用 Windows x64 runner 标签 `dsh-win-package-trial`，并使用机器 preset `test` 或 `production`。选择 `signed`（默认）或 `unsigned`；签名模式复用现有 EV token 预检、签名缓存与失败 interlock，不发布或上传 release。`build_version` 默认为 `auto`，使用[发布版本](#release-versions)中的 CI 标识；显式值可以是源码产品版本，或扩展构建版本，例如产品 `0.2.1-alpha.1` 对应 `0.2.1-alpha.1.20261009.1`。版本前缀必须匹配所选源码；校验错误显示其当前示例。manifest 保持不变。
 
 在 Actions 选择工作流、源码分支、preset、签名模式和版本，再点击 Run workflow。输入变更合并前，用 `gh workflow run windows-package.yml --ref <branch> -f preset=test -f signing=unsigned -f build_version=auto` 测试已推送分支；合并后验证网页表单。它不监听 push 或 PR。日志和成功生成的 EXE 保留 14 天。依赖打包流程前检查日志和安装包；安装是独立操作。检出前，Node 删除 runner 专用源码目录，不跟随依赖 junction；工作流校验目标位置并拒绝链接祖先目录。不得指向日常开发目录。运行共享一个并发组，不取消正在进行的构建；最多保留一个待运行任务，新触发会替换它。仅在成功完成干净检出后上传诊断。机器配置位于 checkout 之外，不作为产物上传。
 
@@ -142,7 +144,7 @@ runner 的受监督启动和恢复见 [Windows runner 机器准备](../windows-s
 
 ## macOS 自托管打包
 
-`Package Desktop · macOS` [手动工作流](../../../.github/workflows/macos-package.yml) 使用带有 `dsh-mac-package-trial` 标签的 Apple Silicon runner。它选择 `test` 或 `production`，以 UTC 日期、运行编号和重试次数解析 `build_version=auto`，并复用现有签名、公证和打包运行时检查。安装包上传关闭重复 ZIP 压缩；诊断日志保留普通压缩。成功的 DMG／ZIP 与诊断日志保留 14 天；工作流不发布 release。操作人员须注册 runner，并验收完整 Actions 运行后再依赖该流程。 `zip_compression_level` 下拉选项默认为 `3`，也可选择 `7`；本次运行以该选项覆盖机器预设，只影响 ZIP 和自动升级下载，不影响 DMG。
+`Package Desktop · macOS` [上游工作流，Next 中已停用](../../../.github/upstream-workflows/macos-package.yml.disabled) 使用带有 `dsh-mac-package-trial` 标签的 Apple Silicon runner。它选择 `test` 或 `production`，以 UTC 日期、运行编号和重试次数解析 `build_version=auto`，并复用现有签名、公证和打包运行时检查。安装包上传关闭重复 ZIP 压缩；诊断日志保留普通压缩。成功的 DMG／ZIP 与诊断日志保留 14 天；工作流不发布 release。操作人员须注册 runner，并验收完整 Actions 运行后再依赖该流程。 `zip_compression_level` 下拉选项默认为 `3`，也可选择 `7`；本次运行以该选项覆盖机器预设，只影响 ZIP 和自动升级下载，不影响 DMG。
 
 运行 `node apps/desktop/scripts/setup-macos-packaging.mjs "$HOME/dsh-ci"` 创建私有 `runner/`、`packaging/{presets,secrets,certificates}` 和 `cache/macos-signatures` 目录，不覆盖已有文件；追加 `--check` 仅检查。在 checkout 外填写 [preset](../config/macos-packaging/test.env.example) 和[签名](../config/macos-packaging/macos-signing.env.example)模板，将秘密和证书文件权限设为 `0600`。`DSH_PACKAGING_CONFIG_DIR` 指定 `packaging` 的绝对目录，`DSH_PACKAGING_PRESET` 选择其中的 preset；缺少文件立即失败，不回退到 `.env.macos`。Mac 签名和仅准备构建读取 `secrets/macos-signing.env`，相对凭据路径以该文件所在目录为基准。公开 preset 拒绝签名凭据，签名文件不能覆盖公开配置。本地未签名 Mac 构建保留无需配置的行为。
 

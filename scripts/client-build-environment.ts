@@ -9,6 +9,7 @@ import {
   writeFileSync,
 } from 'node:fs'
 import { dirname, resolve } from 'node:path'
+import { DESKTOP_BUILD_VERSION_ENV, resolveDesktopBuildVersion } from '../apps/desktop/scripts/desktop-build-version.mjs'
 
 /** Prefix reserved for build-time values that may be embedded in browser artifacts. */
 const CLIENT_BUILD_ENV_PREFIX = 'DSH_CLIENT_'
@@ -25,7 +26,7 @@ const OFFICIAL_CLIENT_BUILD_ENVIRONMENT = {
 /** Public variable carrying the source commit embedded in client artifacts. */
 const CLIENT_COMMIT_HASH_VARIABLE = 'DSH_CLIENT_COMMIT_HASH'
 
-/** Public variable carrying the repository package version embedded in client artifacts. */
+/** Public variable carrying the release or source package version embedded in client artifacts. */
 const CLIENT_VERSION_VARIABLE = 'DSH_CLIENT_VERSION'
 
 /** Public variable carrying the one display identity embedded in client artifacts. */
@@ -56,6 +57,26 @@ export type ClientBuildEnvironment = Readonly<Record<string, string>>
  */
 export function formatClientBuildVersion(version: string, commit?: string, dirty = false): string {
   return version + (commit === undefined ? '' : `-${commit}`) + (dirty ? '-dirty' : '')
+}
+
+/**
+ * Select the installer's exact published version or the source checkout's display identity.
+ * @param root - Repository supplying the product version.
+ * @param environment - Packaging version and public build inputs.
+ * @param commit - Source commit retained separately from a release version.
+ * @param dirty - Whether a source build includes worktree changes.
+ * @returns Version values shared by the Web UI and Desktop shell.
+ * @throws When the packaging version does not extend the repository's product version.
+ */
+function repositoryClientVersionEnvironment(
+  root: string, environment: NodeJS.ProcessEnv, commit: string, dirty = false,
+): ClientBuildEnvironment {
+  const version = resolveDesktopBuildVersion(environment, repositoryVersion(root))
+  const packaged = Boolean(environment[DESKTOP_BUILD_VERSION_ENV]?.trim())
+  return {
+    DSH_CLIENT_VERSION: version,
+    [CLIENT_BUILD_VERSION_VARIABLE]: packaged ? version : formatClientBuildVersion(version, commit, dirty),
+  }
 }
 
 /**
@@ -125,7 +146,9 @@ export function repositoryGitDirty(root: string): boolean | undefined {
 
 /**
  * Resolve the public environment for a complete default build from one checkout.
- * Repository-owned metadata replaces inherited values; other public values pass through.
+ * Repository-owned metadata replaces inherited values; a validated packaging version replaces the product version.
+ * Source builds include Git display metadata; packaged builds display the exact version the updater compares.
+ * Other public values pass through.
  * @param root - repository root supplying version and Git metadata.
  * @param environment - caller environment supplying optional commit and public extensions.
  * @returns complete public client environment for the default build.
@@ -140,21 +163,19 @@ export function repositoryClientBuildEnvironment(
   delete inherited.DSH_CLIENT_VERSION
   delete inherited.DSH_CLIENT_BUILD_VERSION
   const commit = repositoryCommitHash(root, environment)
-  const version = repositoryVersion(root)
   const dirty = repositoryGitDirty(root)
   return {
     ...inherited,
     DSH_CLIENT_COMMIT_HASH: commit,
     ...(dirty === true ? { DSH_CLIENT_GIT_DIRTY: 'true' } : {}),
-    DSH_CLIENT_VERSION: version,
-    [CLIENT_BUILD_VERSION_VARIABLE]: formatClientBuildVersion(version, commit, dirty === true),
+    ...repositoryClientVersionEnvironment(root, environment, commit, dirty === true),
   }
 }
 
 /**
  * Resolve the exact public values required by an official build at one commit.
  * @param root - repository root whose HEAD must match the built source.
- * @param environment - optional explicit commit source for non-Git build environments.
+ * @param environment - Optional explicit commit source and validated Desktop packaging version.
  * @returns complete official client environment.
  */
 export function officialClientBuildEnvironment(
@@ -162,11 +183,9 @@ export function officialClientBuildEnvironment(
   environment: NodeJS.ProcessEnv = process.env,
 ): Readonly<Record<`DSH_CLIENT_${string}`, string>> {
   const commit = repositoryCommitHash(root, environment)
-  const version = repositoryVersion(root)
   return {
     DSH_CLIENT_COMMIT_HASH: commit,
-    DSH_CLIENT_VERSION: version,
-    [CLIENT_BUILD_VERSION_VARIABLE]: formatClientBuildVersion(version, commit),
+    ...repositoryClientVersionEnvironment(root, environment, commit),
     ...OFFICIAL_CLIENT_BUILD_ENVIRONMENT,
   }
 }
@@ -202,8 +221,9 @@ function clientBuildEnvironment(environment: NodeJS.ProcessEnv): ClientBuildEnvi
 
 /**
  * Resolve the exact public environment selected for a complete client build.
- * Named profiles discard inherited public overrides. Local builds retain the supplied
+ * Named profiles select only declared public values. Local builds retain the supplied
  * commit, version, and true dirty marker; repositoryClientBuildEnvironment supplies that metadata.
+ * A display value equal to the selected version retains the packaging identity across profile selection.
  * @param environment - parent process environment.
  * @param profile - explicit profile, or the non-public selector when omitted.
  * @returns the inherited public values when no profile is selected, otherwise the named profile.
@@ -227,7 +247,8 @@ export function resolveClientBuildEnvironment(
     return {
       DSH_CLIENT_COMMIT_HASH: commit,
       DSH_CLIENT_VERSION: version,
-      [CLIENT_BUILD_VERSION_VARIABLE]: formatClientBuildVersion(version, commit, dirty),
+      [CLIENT_BUILD_VERSION_VARIABLE]: environment[CLIENT_BUILD_VERSION_VARIABLE] === version
+        ? version : formatClientBuildVersion(version, commit, dirty),
       ...(profile === 'official' ? OFFICIAL_CLIENT_BUILD_ENVIRONMENT : {
         DSH_CLIENT_BUILD_PROFILE: 'local',
         ...(dirty ? { DSH_CLIENT_GIT_DIRTY: 'true' } : {}),

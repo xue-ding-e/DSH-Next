@@ -566,8 +566,9 @@ describe('desktop main startup', () => {
     ['darwin', false, 'zh-CN'],
     ['win32', true, 'zh-CN'],
     ['win32', false, 'en-US'],
-  ] as const)('offers the About command before other commands on %s (packaged=%s, locale=%s)', async (platform, packaged, locale) => {
+  ] as const)('offers About first with the installed or source version on %s (packaged=%s, locale=%s)', async (platform, packaged, locale) => {
     vi.stubGlobal('process', { ...process, platform })
+    vi.stubEnv('DSH_CLIENT_BUILD_VERSION', '1.2.3-0123456-dirty')
     harness.app.isPackaged = packaged
     vi.spyOn(harness.app, 'getLocale').mockReturnValue(locale)
     vi.spyOn(harness.app, 'getPreferredSystemLanguages').mockReturnValue([locale])
@@ -587,9 +588,10 @@ describe('desktop main startup', () => {
     ;(about!.click as () => void)()
     await vi.advanceTimersByTimeAsync(0)
     const zh = locale === 'zh-CN'
+    const version = packaged ? '1.0.0' : '1.2.3-0123456-dirty'
     expect(harness.dialog.showMessageBox).toHaveBeenLastCalledWith(expect.objectContaining({
       type: 'info', title: zh ? '关于 DeepSeek Harness' : 'About DeepSeek Harness', message: 'DeepSeek Harness',
-      detail: zh ? '版本 V1.2.3' : 'Version V1.2.3', buttons: [zh ? '确定' : 'OK'], cancelId: 0,
+      detail: zh ? `版本 V${version}` : `Version V${version}`, buttons: [zh ? '确定' : 'OK'], cancelId: 0,
     }))
     // A dialog that cannot open is logged, not surfaced as an unhandled rejection.
     harness.dialog.showMessageBox.mockRejectedValueOnce(new Error('overlay unavailable'))
@@ -1718,6 +1720,7 @@ describe('desktop main startup', () => {
   })
 
   it('keeps one checking dialog open until the manual check settles, then reports the current version', async () => {
+    vi.stubEnv('DSH_CLIENT_BUILD_VERSION', '1.2.3-0123456-dirty')
     await readyForUpdate()
     const checked = Promise.withResolvers<DesktopUpdateState>()
     const checking = Promise.withResolvers<AbortSignal>()
@@ -1745,7 +1748,7 @@ describe('desktop main startup', () => {
     await prompt
     expect(signal.aborted).toBe(true)
     expect(harness.dialog.showMessageBox).toHaveBeenLastCalledWith(expect.objectContaining({
-      message: 'You’re up to date!', detail: 'Current version: 1.2.3',
+      message: 'You’re up to date!', detail: 'Current version: 1.0.0',
     }))
   })
 

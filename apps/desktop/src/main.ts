@@ -340,6 +340,7 @@ function createWindow(preload: string, show = false, primary = false): BrowserWi
 
 async function main(): Promise<void> {
   const manifest: unknown = JSON.parse(await readFile(join(app.getAppPath(), 'package.json'), 'utf8'))
+  const displayVersion = app.isPackaged ? app.getVersion() : desktopClientBuildVersion()
   const nextDistribution = app.isPackaged ? nextDesktopDistribution(manifest) : undefined
   if (!app.isPackaged && process.platform === 'win32') {
     app.setAppUserModelId(`${NEXT_DESKTOP_IDENTITY.appId}.development`)
@@ -445,7 +446,7 @@ async function main(): Promise<void> {
   // chrome and its content never mix languages.
   const showAbout = async (): Promise<void> => {
     await ordinaryMessageBox({ type: 'info', title: locale.messages.aboutMenu, message: nextDistribution === undefined ? locale.messages.aboutProduct : NEXT_DESKTOP_IDENTITY.productName,
-      detail: formatDesktopMessage(locale.messages.aboutVersion, { version: desktopClientBuildVersion() }),
+      detail: formatDesktopMessage(locale.messages.aboutVersion, { version: displayVersion }),
       buttons: [locale.messages.updateAcknowledge], cancelId: 0 })
   }
   const commandManager = new DesktopCommandManager({
@@ -906,7 +907,7 @@ async function main(): Promise<void> {
         if (state.phase === 'idle') {
           await ordinaryMessageBox({ type: 'info', title: locale.messages.updateCheckTitle,
             message: locale.messages.updateCurrent,
-            detail: formatDesktopMessage(locale.messages.updateCurrentDetail, { version: desktopClientBuildVersion() }) })
+            detail: formatDesktopMessage(locale.messages.updateCurrentDetail, { version: displayVersion }) })
           return
         }
         if (state.phase === 'ready' || (state.phase === 'error' && state.failedOperation === 'install')) {
@@ -1015,8 +1016,8 @@ async function main(): Promise<void> {
     : join(process.resourcesPath, 'icon.png')
   app.setAboutPanelOptions({
     applicationName: nextDistribution === undefined ? 'DeepSeek Harness' : NEXT_DESKTOP_IDENTITY.productName,
-    applicationVersion: desktopClientBuildVersion(),
-    // The shared build identity is already in applicationVersion; omit Electron's separate bundle version.
+    applicationVersion: displayVersion,
+    // The application identity is already in applicationVersion; omit Electron's separate bundle version.
     version: '',
     copyright: '',
     iconPath: applicationIconPath,

@@ -1,9 +1,9 @@
-/** Desktop client identity for one Platform account call. */
+/** Shared Desktop version display and client identity for Platform account calls. */
 import type { AccountClientMetadata } from '@deepseek-ai/dsh-deepseek-account/types'
 
 /**
  * Read the client build version inlined by the Desktop build.
- * @returns the version embedded in this application build.
+ * @returns The packaged release version, or the product version for a source build.
  * @throws Error when the build carries no client version, instead of reporting a guessed one.
  */
 export function desktopClientVersion(): string {
@@ -16,7 +16,7 @@ export function desktopClientVersion(): string {
 
 /**
  * Read the one display identity embedded by the client build.
- * @returns The shared product, commit, and dirty-state display value.
+ * @returns The exact packaged release version, or the source product, commit and dirty-state display value.
  * @throws Error when neither the display identity nor the product version is embedded.
  */
 export function desktopClientBuildVersion(): string {

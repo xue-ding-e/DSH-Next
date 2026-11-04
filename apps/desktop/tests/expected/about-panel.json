@@ -6,7 +6,7 @@
     ],
     "options": {
       "applicationName": "DeepSeek Harness",
-      "applicationVersion": "1.2.3",
+      "applicationVersion": "1.0.0",
       "version": "",
       "copyright": "",
       "iconPath": "<app icon>"
@@ -19,7 +19,7 @@
     ],
     "options": {
       "applicationName": "DeepSeek Harness",
-      "applicationVersion": "1.2.3",
+      "applicationVersion": "1.2.3-0123456-dirty",
       "version": "",
       "copyright": "",
       "iconPath": "<app icon>"
@@ -32,7 +32,7 @@
     ],
     "options": {
       "applicationName": "DeepSeek Harness",
-      "applicationVersion": "1.2.3",
+      "applicationVersion": "1.0.0",
       "version": "",
       "copyright": "",
       "iconPath": "<app icon>"
@@ -45,7 +45,7 @@
     ],
     "options": {
       "applicationName": "DeepSeek Harness",
-      "applicationVersion": "1.2.3",
+      "applicationVersion": "1.2.3-0123456-dirty",
       "version": "",
       "copyright": "",
       "iconPath": "<app icon>"
