@@ -15,6 +15,7 @@ import { chromium } from 'playwright'
 import { afterAll, beforeAll, describe, expect, it, onTestFailed, onTestFinished } from 'vitest'
 import { basename, join } from 'node:path'
 import { SessionId } from '@deepseek-ai/dsh-session'
+import { readClientBuildRecord } from '../../../scripts/client-build-environment.ts'
 import {
   acknowledgeReloadConnectionLoss, assertFixtureInventory, captureStableAria, compareOrRefreshGolden,
   launchWebScaffold, watchConsole, webSnapshotMode, type WebScaffold,
@@ -31,7 +32,9 @@ const PLUGIN_ROW_SELECTOR = '[data-plugin-scope="preset"] [data-plugin-entry="to
 const MODE = webSnapshotMode()
 const SCREENSHOTS = 'screenshots/collapse-timing-settings'
 const SCREENSHOT_DIR = fileURLToPath(new URL(`../../../.artifacts/${SCREENSHOTS}`, import.meta.url))
-const { version } = JSON.parse(await readFile(new URL('../../../package.json', import.meta.url), 'utf8')) as { version: string }
+const { environment } = readClientBuildRecord(fileURLToPath(new URL('../../..', import.meta.url)))
+const version = environment.DSH_CLIENT_BUILD_VERSION ?? environment.DSH_CLIENT_VERSION
+if (version === undefined) throw new Error('Settings chrome requires the current client build version')
 const versionCapture = { replacements: [[version, '{{version}}']] as const }
 
 async function saveSettingsFailureShot(page: Page, name: string): Promise<void> {

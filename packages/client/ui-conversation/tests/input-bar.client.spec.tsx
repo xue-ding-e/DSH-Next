@@ -28,6 +28,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type { SubmitOutcome } from '../src/client/contract/input.ts'
 import { SessionInputShell } from '../src/client/input/facade.ts'
+import { SESSION_REFERENCE_DRAG_TYPE } from '../src/client/contract/draft-editor.ts'
 import { $replaceDetectSpanWithText, $selectDetectSpan } from '../src/client/input/editor/span-map.ts'
 import type {
   ComposerAttachment, ComposerAttachmentsOwnerProps, DraftFileUploads, InputActivityOwnerProps,
@@ -50,6 +51,7 @@ const ZERO_RECT = (): DOMRect => ({ top: 0, bottom: 0 }) as DOMRect
 Range.prototype.getBoundingClientRect = ZERO_RECT
 
 const SCTX = {} as Context
+type ShellDeps = ConstructorParameters<typeof SessionInputShell>[0]
 const SID = 's1' as SessionId
 const CONTINUABLE_CHILD = {
   address: { parentSessionId: 'parent' as SessionId, childSessionId: SID, mode: 'continuable' as const },
@@ -93,6 +95,7 @@ interface BenchOptions {
   nextStep?: InboxState['next-step']
   /** The hub's steer-all face (empty-draft accelerated Enter). */
   steerQueue?: () => void
+  recallQueue?: ShellDeps['recallQueue']
   variant?: 'hero' | 'composer'
   placeholder?: string
   t?: InputBarProps['t']
@@ -137,7 +140,6 @@ function bench(over?: BenchOptions) {
     removed: over?.disabled ?? false,
     promptError: over?.promptError ?? null,
   }))
-  type ShellDeps = ConstructorParameters<typeof SessionInputShell>[0]
   const shell = new SessionInputShell({
     actx: SCTX,
     defaultSink: sink,
@@ -147,6 +149,7 @@ function bench(over?: BenchOptions) {
       'next-step': over?.nextStep ?? [],
     }),
     ...(over?.steerQueue !== undefined ? { steerQueue: over.steerQueue } : {}),
+    ...(over?.recallQueue !== undefined ? { canRecallQueue: () => true, recallQueue: over.recallQueue } : {}),
     // Lexicon-only stub: adjudication untouched (undefined slash methods are
     // never reached — these benches drive plain-draft flows only).
     ...(lex !== undefined
@@ -289,7 +292,180 @@ function writeDraft(shell: SessionInputShell, text: string): void {
   act(() => { shell.setDraft(text) })
 }
 
+describe('sidebar conversation drops', () => {
+  const mention = '@[Earlier conversation](dsh-session:ImVhcmxpZXIi)'
+  const payload = { sessionId: 'earlier', label: 'Earlier conversation', mention }
+  const transferOf = (value = JSON.stringify(payload)) => ({
+    types: [SESSION_REFERENCE_DRAG_TYPE], files: [], items: [],
+    dropEffect: 'none' as DataTransfer['dropEffect'],
+    getData: (type: string) => type === SESSION_REFERENCE_DRAG_TYPE ? value : '',
+  })
+
+  it('inserts after selected text while preserving existing chips, attachments and queued input', () => {
+    const attachment: ComposerAttachment = {
+      id: 'draft-image' as DraftAttachmentId, kind: 'image',
+      file: new File(['image'], 'draft.png', { type: 'image/png' }), previewUrl: 'blob:draft',
+    }
+    const queued = row('queued')
+    const { shell, textarea, view, button } = bench({ draft: 'before after', attachments: [attachment], queue: [queued] })
+    act(() => {
+      shell.insertReferenceAtCaret({ source: 'file', ref: '/file.ts', label: 'file.ts',
+        appearance: 'file', clipboardText: '@file.ts' })
+    })
+    const existing = shell.snapshot.occurrences[0]!
+    act(() => { shell.editor.update(() => { $selectDetectSpan({ start: 0, end: 7 }) }, { discrete: true }) })
+    act(() => { button.focus() })
+    const transfer = transferOf()
+
+    expect(fireEvent.dragOver(textarea, { dataTransfer: transfer })).toBe(false)
+    expect(transfer.dropEffect).toBe('copy')
+    expect(fireEvent.drop(textarea, { dataTransfer: transfer })).toBe(false)
+
+    expect(view.getByText('Earlier conversation')).toBeDefined()
+    expect(shell.snapshot.draft).toBe(`before ${mention} after@file.ts `)
+    expect(shell.snapshot.occurrences).toHaveLength(2)
+    expect(shell.snapshot.occurrences[1]).toMatchObject({ ...existing, offset: 13 + mention.length })
+    expect(shell.snapshot.attachmentIds).toEqual([attachment.id])
+    expect(shell.snapshot.queue).toEqual([queued])
+    expect(document.activeElement).toBe(textarea)
+    act(() => { shell.paste('typed ') })
+    expect(shell.snapshot.draft).toBe(`before ${mention} typed after@file.ts `)
+  })
+
+  it.each([
+    { inert: true }, { disabled: true }, { blocked: { reason: 'Unavailable' } },
+    { deniedEndpoints: ['session/prompt'] },
+    { subagent: { ...CONTINUABLE_CHILD, parentAvailable: false } },
+  ])('rejects a drop into an unavailable composer: %j', (options) => {
+    const { shell, textarea } = bench({ ...options, draft: 'keep draft' })
+    const before = shell.draftSnapshot
+    const transfer = transferOf()
+    fireEvent.dragOver(textarea, { dataTransfer: transfer })
+    expect(transfer.dropEffect).toBe('none')
+    fireEvent.drop(textarea, { dataTransfer: transfer })
+    expect(shell.draftSnapshot).toEqual(before)
+    expect(shell.snapshot.occurrences).toEqual([])
+  })
+
+  it.each(['{', 'null', '[]', JSON.stringify({ ...payload, sessionId: 1 }),
+    JSON.stringify({ ...payload, label: '' }), JSON.stringify({ ...payload, mention: 'foreign text' }),
+    JSON.stringify({ ...payload, sessionId: '' }),
+    JSON.stringify({ ...payload, sessionId: 'different-session' }),
+    JSON.stringify({ ...payload, label: 'Different title' }),
+    JSON.stringify({ ...payload, label: 1 }),
+    JSON.stringify({ ...payload, mention: 'text containing dsh-session:ImVhcmxpZXIi' }),
+    JSON.stringify({ ...payload, mention: '@[Earlier conversation](dsh-session:ImVhcmxpZXIi=)' }),
+    JSON.stringify({ ...payload, mention: mention + ' extra text' }),
+  ])('consumes malformed custom drags without inserting their plain text: %s', (value) => {
+    const { shell, textarea } = bench({ draft: 'keep draft' })
+    expect(fireEvent.drop(textarea, { dataTransfer: transferOf(value) })).toBe(false)
+    expect(shell.snapshot.draft).toBe('keep draft')
+    expect(shell.snapshot.occurrences).toEqual([])
+  })
+
+  it('rejects a drop immediately after recall reserves the draft, before React publishes read-only state', async () => {
+    const pending = Promise.withResolvers<Awaited<ReturnType<NonNullable<ShellDeps['recallQueue']>>>>()
+    const { shell, textarea } = bench({ recallQueue: () => pending.promise })
+    act(() => {
+      expect(shell.recallQueue()).toBe(true)
+      const transfer = transferOf()
+      fireEvent.drop(textarea, { dataTransfer: transfer })
+      expect(transfer.dropEffect).toBe('none')
+    })
+    expect(shell.snapshot.draft).toBe('')
+    expect(shell.snapshot.occurrences).toEqual([])
+    await act(async () => { pending.resolve(undefined); await pending.promise })
+  })
+
+  it('rejects a canonical reference to the current Session without changing the draft or queue', () => {
+    const queued = row('queued')
+    const { shell, textarea } = bench({ draft: 'keep this draft', queue: [queued] })
+    const draft = shell.draftSnapshot
+    const transfer = transferOf(JSON.stringify({
+      sessionId: SID, label: 'Current Session', mention: '@[Current Session](dsh-session:InMxIg)',
+    }))
+    expect(fireEvent.drop(textarea, { dataTransfer: transfer })).toBe(false)
+    expect(transfer.dropEffect).toBe('none')
+    expect(shell.draftSnapshot).toEqual(draft)
+    expect(shell.snapshot.queue).toEqual([queued])
+  })
+})
+
 describe('composer focus handoff', () => {
+  it('restores the recalled caret after unlocking and accepts the next edit at the end', async () => {
+    const pending = Promise.withResolvers<Awaited<ReturnType<NonNullable<ShellDeps['recallQueue']>>>>()
+    const commit = vi.fn()
+    const { shell, textarea } = bench({ recallQueue: () => pending.promise })
+    act(() => { shell.focus() })
+    fireEvent.keyDown(textarea, { key: 'ArrowUp', keyCode: 38 })
+    await act(async () => { await Promise.resolve() })
+    expect(editableOf(textarea)).toBe(false)
+    textarea.blur()
+
+    await act(async () => {
+      pending.resolve({ text: 'queued message', attachmentIds: [], commit })
+      await pending.promise
+    })
+
+    expect(commit).toHaveBeenCalledOnce()
+    expect(shell.snapshot.phase).toBe('plain')
+    expect(editableOf(textarea)).toBe(true)
+    expect(document.activeElement).toBe(textarea)
+    // Native caret placement and unassisted keyboard input run in queue-recall-focus.e2e.ts.
+    expect(shell.caretSpan()).toEqual({ start: 'queued message'.length, end: 'queued message'.length })
+    act(() => { shell.paste(' suffix') })
+    expect(textarea.textContent).toBe('queued message suffix')
+  })
+
+  it('leaves focus with a control selected while recall was pending', async () => {
+    const pending = Promise.withResolvers<Awaited<ReturnType<NonNullable<ShellDeps['recallQueue']>>>>()
+    const { shell, textarea, view } = bench({
+      recallQueue: () => pending.promise,
+      modelEntry: <input aria-label="Choose model" />,
+    })
+    act(() => { shell.focus() })
+    fireEvent.keyDown(textarea, { key: 'ArrowUp', keyCode: 38 })
+    await act(async () => { await Promise.resolve() })
+    const control = view.getByRole('textbox', { name: 'Choose model' })
+    act(() => { control.focus() })
+    await act(async () => {
+      pending.resolve({ text: 'queued message', attachmentIds: [], commit: () => {} })
+      await pending.promise
+    })
+    expect(textarea.textContent).toBe('queued message')
+    expect(document.activeElement).toBe(control)
+  })
+
+  it('settles recall into its original shell without focusing a different Session on the resident DOM', async () => {
+    const pending = Promise.withResolvers<Awaited<ReturnType<NonNullable<ShellDeps['recallQueue']>>>>()
+    const { shell, textarea, view, props } = bench({ recallQueue: () => pending.promise })
+    act(() => { shell.focus() })
+    fireEvent.keyDown(textarea, { key: 'ArrowUp', keyCode: 38 })
+    await act(async () => { await Promise.resolve() })
+    const next = new SessionInputShell({
+      actx: SCTX, defaultSink: async () => ({ kind: 'success' }),
+      commandAttachments: { serialize: async () => [], release: () => {}, unsupportedNotice: () => '' },
+    })
+    onTestFinished(() => { next.dispose() })
+    next.setDraft('another Session draft')
+    view.rerender(<InputBar {...props} sessionId={'s2' as SessionId}
+      useInput={bindSnapshotSelector(next.state)} inputActions={next.actions} keyboard={next} />)
+    const control = document.createElement('button')
+    document.body.append(control)
+    onTestFinished(() => { control.remove() })
+    act(() => { control.focus() })
+
+    await act(async () => {
+      pending.resolve({ text: 'recalled into s1', attachmentIds: [], commit: () => {} })
+      await pending.promise
+    })
+
+    expect(shell.snapshot.draft).toBe('recalled into s1')
+    expect(next.editor.getRootElement()).toBe(textarea)
+    expect(textarea.textContent).toBe('another Session draft')
+    expect(document.activeElement).toBe(control)
+  })
+
   it.each(['hero', 'composer'] as const)('focuses the %s editor when its card background is pressed', (variant) => {
     const { view, shell, textarea } = bench({ variant })
     writeDraft(shell, 'draft text')

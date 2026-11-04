@@ -8,7 +8,8 @@
 // trajectory ledger/timing lanes), turn 2 a markdown-rich reply.
 import { mkdir, readFile, stat, writeFile } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
-import { join } from 'node:path'
+import { EOL } from 'node:os'
+import { basename, join, sep } from 'node:path'
 import type { Browser, Page, Response } from 'playwright'
 import { chromium } from 'playwright'
 import { strFromU8, unzipSync } from 'fflate'
@@ -213,7 +214,9 @@ describe('web e2e: navigation & panes over a rich seeded session', () => {
     await page.getByRole('status', { name: 'Searching session history…' }).waitFor({ state: 'detached', timeout: 30_000 })
     await compareOrRefreshGolden(
       ID_SEARCH_EXPECTED,
-      await captureStableAria(page, '[class*="listArea"]', scaffold.workspaceCwd),
+      await captureStableAria(page, '[class*="listArea"]', scaffold.workspaceCwd, {
+        replacements: [[basename(scaffold.workspaceCwd), '{{workspace}}']],
+      }),
       MODE,
     )
 
@@ -222,7 +225,9 @@ describe('web e2e: navigation & panes over a rich seeded session', () => {
     await expect.poll(() => result.getByText('WATERFALL', { exact: false }).count(), {
       timeout: 10_000,
     }).toBeGreaterThanOrEqual(1)
-    const snapshot = (await captureStableAria(page, '[class*="listArea"]', scaffold.workspaceCwd))
+    const snapshot = (await captureStableAria(page, '[class*="listArea"]', scaffold.workspaceCwd, {
+      replacements: [[basename(scaffold.workspaceCwd), '{{workspace}}']],
+    }))
       .split(SEED_ID).join('{{seededId}}')
     await compareOrRefreshGolden(SEARCH_EXPECTED, snapshot, MODE)
 
@@ -306,7 +311,9 @@ describe('web e2e: navigation & panes over a rich seeded session', () => {
     await page.getByRole('tab', { name: 'Result' }).click()
     await expect.poll(() => page.getByText('NAVIGATION_OK', { exact: false }).count(), { timeout: 10_000 }).toBeGreaterThanOrEqual(1)
     expect(await page.locator('[data-timeline-span="message"][data-assistant-timing="true"]').count()).toBeGreaterThan(0)
-    const snapshot = (await captureStableAria(page, '[class*="viewArea"]', scaffold.workspaceCwd))
+    const snapshot = (await captureStableAria(page, '[class*="viewArea"]', scaffold.workspaceCwd, {
+      replacements: [[JSON.stringify(scaffold.workspaceCwd).slice(1, -1), '{{cwd}}']],
+    }))
       .split(SEED_ID).join('{{seededId}}')
     await compareOrRefreshGolden(TRAJECTORY_EXPECTED, snapshot, MODE)
     await details.getByRole('button', { name: 'Close details' }).click()
@@ -458,10 +465,12 @@ describe('web e2e: navigation & panes over a rich seeded session', () => {
     const sourcePath = (await scaffold.ctx.sessionPersistence.stat(SessionId(SEED_ID)))?.location?.path
     if (sourcePath === undefined) throw new Error('seeded Session has no materialized artifact location')
     expect((await stat(sourcePath)).isFile()).toBe(true)
-    expect(sourcePath.startsWith(`${scaffold.persistenceRoot}/`)).toBe(true)
+    expect(sourcePath.startsWith(`${scaffold.persistenceRoot}${sep}`)).toBe(true)
     const markdown = await page.evaluate(() => navigator.clipboard.readText())
-    expect(markdown).toContain(`Session file:\n\n\`\`\`text\n${sourcePath}\n\`\`\``)
-    const normalized = markdown
+    // Native clipboard text uses the platform's line endings; the HTTP Markdown stays verbatim.
+    expect(markdown).toBe((await response.text()).replaceAll('\n', EOL))
+    expect(markdown).toContain(`Session file:${EOL}${EOL}\`\`\`text${EOL}${sourcePath}${EOL}\`\`\``)
+    const normalized = markdown.replaceAll(EOL, '\n')
       .split(sourcePath).join('{{sessionFile}}')
       .split(scaffold.workspaceCwd).join('{{cwd}}')
     // compareOrRefreshGolden appends its own newline; the clipboard text already ends with exactly one.
@@ -546,7 +555,7 @@ describe('web e2e: navigation & panes over a rich seeded session', () => {
     if (await bashRow.getAttribute('aria-expanded') !== 'true') await bashRow.click()
     const card = page.locator('[data-sample="bash"] ~ div [data-terminal]').first()
     await card.waitFor({ timeout: 15_000 })
-    const commandWrap = await expectWrappedTerminalCommand(page, card, 'echo NAVIGATION_OK', 300)
+    const commandWrap = await expectWrappedTerminalCommand(page, card, 'echo NAVIGATION_OK', 240)
     await compareOrRefreshGolden(COMMAND_WRAP_EXPECTED, JSON.stringify(commandWrap, null, 2), MODE)
     // Real layout, not jsdom's stub (which computes no geometry at all):
     // squeeze the output pane below its content width and the line must keep
@@ -609,7 +618,9 @@ describe('web e2e: navigation & panes over a rich seeded session', () => {
     expect(dot.color).toBe(dot.success)
     // Golden of the card at rest — captured before the copy click, whose
     // confirmation label self-reverts on a timer and would not hold still.
-    const snapshot = (await captureStableAria(page, '[data-terminal]', scaffold.workspaceCwd))
+    const snapshot = (await captureStableAria(page, '[data-terminal]', scaffold.workspaceCwd, {
+      replacements: [[basename(scaffold.workspaceCwd), '{{workspace}}']],
+    }))
       .split(SEED_ID).join('{{seededId}}')
     await compareOrRefreshGolden(TERMINAL_EXPECTED, snapshot, MODE)
     // Copy writes the raw output through the browser's own clipboard, which in

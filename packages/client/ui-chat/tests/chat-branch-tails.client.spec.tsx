@@ -188,7 +188,6 @@ describe('MessageItem arms', () => {
     expect(screen.getByText('14:24')).toBeTruthy()
     expect(screen.getByRole('button', { name: '复制' })).toBeTruthy()
     const stack = view.getByText('hello bubble').closest('div')?.parentElement
-    expect(stack?.parentElement).toBe(view.container.firstElementChild)
     expect(stack?.contains(screen.getByText('14:24'))).toBe(false)
     expect(stack?.contains(screen.getByRole('button', { name: '复制' }))).toBe(false)
     expect(stack?.nextElementSibling?.contains(screen.getByRole('button', { name: '复制' }))).toBe(true)

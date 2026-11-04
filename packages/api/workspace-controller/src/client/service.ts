@@ -60,12 +60,13 @@ export interface IWorkspaces {
    */
   initializeDefault(signal?: AbortSignal): Promise<WorkspaceView | undefined>
   /**
-   * Rename a Workspace.
+   * Save a Workspace title and optional source directories atomically.
    * @param workspaceId - target Workspace.
    * @param title - new display title.
+   * @param sourcePaths - ordered source directories, first primary; omission preserves existing sources.
    * @returns the renamed Workspace.
    */
-  rename(workspaceId: WorkspaceId, title: string): Promise<WorkspaceView>
+  rename(workspaceId: WorkspaceId, title: string, sourcePaths?: readonly string[]): Promise<WorkspaceView>
   /**
    * Delete a Workspace registration without deleting Sessions or files.
    * @param workspaceId - target Workspace.
@@ -139,8 +140,8 @@ export class WorkspaceController extends Service implements IWorkspaces {
     return result.value?.workspace
   }
 
-  async rename(workspaceId: WorkspaceId, title: string): Promise<WorkspaceView> {
-    const result = await this.model.rename(workspaceId, title)
+  async rename(workspaceId: WorkspaceId, title: string, sourcePaths?: readonly string[]): Promise<WorkspaceView> {
+    const result = await this.model.rename(workspaceId, title, sourcePaths)
     if (!result.ok) throw commandError('rename', result.error)
     return result.value.workspace
   }

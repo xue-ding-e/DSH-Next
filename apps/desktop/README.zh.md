@@ -198,6 +198,8 @@ pnpm run dev:desktop
 
 开发 Harness 状态默认写入 `apps/desktop/.desktop-build/development/home`，一次性 npm 项目位于 `apps/desktop/.desktop-build/development/project`，Electron 浏览器数据则位于 `apps/desktop/.desktop-build/development/electron-user-data`。因此，会话、设置、凭据、包链接和浏览器数据都不会进入用户正常使用的 Harness home；显式 `DSH_HOME` 只会替换开发 Harness home。Renderer DevTools 默认自动打开，Main、Renderer 和 dsh Host 调试端口依次为 9229、9222 和 9230。`DSH_DESKTOP_MAIN_INSPECT_PORT`、`DSH_DESKTOP_RENDERER_DEBUG_PORT` 与 `DSH_DESKTOP_HOST_INSPECT_PORT` 可以替换这些端口，`DSH_DESKTOP_OPEN_DEVTOOLS=0` 则保持 Renderer 调试窗口关闭。
 
+在 Windows 上，这些启动器会在 `.desktop-build/development/windows-app` 中准备隔离的 Electron 发行包。其未签名 EXE 将产品名称和文件描述嵌入为 `DeepSeek Harness (development)`，并使用产品 ICO 提供原生通知发送者的品牌标识。已安装的 Electron 包保持原样。启动器通过源发行包、ICO 和已准备副本的内容摘要判断能否复用；文件变化或损坏时会刷新副本。准备失败会阻止启动；刷新可执行文件前应关闭开发应用。副本保留 `electron.exe` 文件名以维持 Electron 的未打包状态，并显式传入工作区应用路径，使用上述开发数据和调试设置。
+
 显式构建完成后，`start:desktop` 会重新生成一次性项目，并跳过构建直接启动已有产物：
 
 ```sh

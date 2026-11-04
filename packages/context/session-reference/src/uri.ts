@@ -1,7 +1,7 @@
-/** Canonical session URI and inline mention encoding. */
+/** Browser-safe canonical session URI and inline mention encoding. */
 
 import { brandString } from '@deepseek-ai/dsh-brand'
-import type { SessionId as SessionIdType } from '@deepseek-ai/dsh-session'
+import type { SessionId as SessionIdType } from '@deepseek-ai/dsh-session/types'
 import { SessionReferenceError } from './config.ts'
 import type { SessionReferenceInput } from './types.ts'
 
@@ -14,7 +14,10 @@ export const SESSION_REFERENCE_SCHEME = 'dsh-session:'
  * @returns canonical `dsh-session:` URI.
  */
 export function encodeSessionReferenceUri(sessionId: SessionIdType): string {
-  const payload = Buffer.from(JSON.stringify(sessionId), 'utf8').toString('base64url')
+  const bytes = new TextEncoder().encode(JSON.stringify(sessionId))
+  let binary = ''
+  for (const byte of bytes) binary += String.fromCharCode(byte)
+  const payload = btoa(binary).replaceAll('+', '-').replaceAll('/', '_').replace(/=+$/u, '')
   return `${SESSION_REFERENCE_SCHEME}${payload}`
 }
 
@@ -30,7 +33,9 @@ export function decodeSessionReferenceUri(uri: string): SessionIdType {
   const payload = uri.slice(SESSION_REFERENCE_SCHEME.length)
   if (!/^[A-Za-z0-9_-]+$/.test(payload)) throw invalidUri(uri)
   try {
-    const parsed: unknown = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8'))
+    const binary = atob(payload.replaceAll('-', '+').replaceAll('_', '/'))
+    const bytes = Uint8Array.from(binary, character => character.charCodeAt(0))
+    const parsed: unknown = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes))
     if (typeof parsed !== 'string') throw new TypeError('decoded session id is not a string')
     const sessionId = brandString<SessionIdType>(parsed)
     if (encodeSessionReferenceUri(sessionId) !== uri) throw new TypeError('URI is not canonical')

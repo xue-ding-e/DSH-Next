@@ -13,7 +13,9 @@ function fixture(path = '/projects/中文 folder,= & $()') {
   let failures = 0
   const remote = {
     canOpenWorkspacePath: async (): Promise<{ ok: true; value: boolean } | { ok: false }> => ({ ok: true, value: true }),
-    openWorkspacePath: async (request: { path: string }, _signal: AbortSignal): Promise<{ ok: true; value: { opened: true } } | { ok: false }> => {
+    openWorkspacePath: async (
+      request: { path: string }, _signal: AbortSignal,
+    ): Promise<{ ok: true; value: { opened: true } } | { ok: false }> => {
       opened.push(request.path)
       return { ok: true, value: { opened: true } }
     },
@@ -36,6 +38,28 @@ it('opens exactly the clicked registered path without shell encoding or choosing
 it('never sends an unknown workspace identity to the native opener', async () => {
   const f = fixture()
   f.open('wrong' as WorkspaceId)
+  await settle()
+  assert.deepEqual(f.opened, [])
+  assert.equal(f.failures(), 1)
+})
+
+it('opens the current primary source while preserving registration identity', async () => {
+  const f = fixture('/original')
+  f.change({ phase: 'ready', state: 'idle', items: [{ ...f.workspace, sourcePaths: ['/primary', '/original'] }] })
+  f.open(id)
+  await settle()
+  assert.deepEqual(f.opened, ['/primary'])
+  assert.equal(f.workspace.path, '/original')
+})
+
+it('refuses a primary source changed while native capability checking is pending', async () => {
+  const f = fixture('/original')
+  f.change({ phase: 'ready', state: 'idle', items: [{ ...f.workspace, sourcePaths: ['/first'] }] })
+  f.remote.canOpenWorkspacePath = async () => {
+    f.change({ phase: 'ready', state: 'idle', items: [{ ...f.workspace, sourcePaths: ['/later'] }] })
+    return { ok: true, value: true }
+  }
+  f.open(id)
   await settle()
   assert.deepEqual(f.opened, [])
   assert.equal(f.failures(), 1)
@@ -122,7 +146,7 @@ for (const invalidate of ['dispose', 'reset'] as const) {
   it(`does not open or notify after ${invalidate} during capability checking`, async () => {
     const f = fixture()
     let resolve!: (value: { ok: true; value: boolean }) => void
-    f.remote.canOpenWorkspacePath = () => new Promise(done => { resolve = done })
+    f.remote.canOpenWorkspacePath = () => new Promise((done) => { resolve = done })
     f.open(id)
     f[invalidate]()
     resolve({ ok: true, value: true })
@@ -136,7 +160,7 @@ for (const invalidate of ['dispose', 'reset'] as const) {
     let finish!: (value: { ok: false }) => void
     f.remote.openWorkspacePath = (_request, signal) => {
       received = signal
-      return new Promise(done => { finish = done })
+      return new Promise((done) => { finish = done })
     }
     f.open(id)
     await settle()
@@ -161,7 +185,7 @@ it('a disposed callback cannot start a new request', async () => {
 it('an old generation settling cannot clear the new generation deduplication entry', async () => {
   const f = fixture()
   const waiting: ((value: { ok: true; value: boolean }) => void)[] = []
-  f.remote.canOpenWorkspacePath = () => new Promise(done => { waiting.push(done) })
+  f.remote.canOpenWorkspacePath = () => new Promise((done) => { waiting.push(done) })
   f.open(id)
   f.reset()
   f.open(id)

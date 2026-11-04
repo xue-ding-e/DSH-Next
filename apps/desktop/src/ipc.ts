@@ -4,6 +4,7 @@ import type { DesktopKeyboardApi, DesktopShortcutsApi } from '@deepseek-ai/dsh-c
 import type { IpcMainInvokeEvent } from 'electron'
 import type { DesktopBrowserBridge } from '@deepseek-ai/dsh-client-ui-sidebar-browser/types'
 import type { DesktopFileDrag } from '@deepseek-ai/dsh-util-file-drag'
+import type { DesktopQuestionNotifications } from '@deepseek-ai/dsh-client-ui-user-questions'
 
 /** IPC channel names kept private to the desktop application bundle. */
 export const DESKTOP_IPC = {
@@ -24,6 +25,9 @@ export const DESKTOP_IPC = {
   // Side mouse buttons arrive as App Commands in the main process, never as DOM
   // events in the page. See the note on DesktopNavigationCommand.
   navigationCommand: 'dsh-desktop:navigation-command',
+  questionNotificationShow: 'dsh-desktop:question-notification-show',
+  questionNotificationClose: 'dsh-desktop:question-notification-close',
+  questionNotificationEvent: 'dsh-desktop:question-notification-event',
   directoryPick: 'dsh-desktop:directory-pick',
   fileDragPrepare: 'dsh-desktop:file-drag-prepare',
   fileDragCancel: 'dsh-desktop:file-drag-cancel',
@@ -95,6 +99,7 @@ export interface DshDesktopProductApi {
   readonly fileDrag: DesktopFileDrag
   readonly keyboard: DesktopKeyboardApi
   readonly shortcuts: DesktopShortcutsApi
+  readonly questionNotifications: DesktopQuestionNotifications
   readonly navigation: {
     /**
      * Subscribe to side-button navigation from the main process.

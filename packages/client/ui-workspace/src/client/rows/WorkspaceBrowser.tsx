@@ -19,8 +19,8 @@ import clsx from 'clsx'
 import {
   AnimatedRows, Button, HoverCardGroup, IconArchiveCheckOutlineRegular, IconArchiveOffOutlineRegular, IconArchiveOutlineRegular,
   IconChevronsUpDownOutlineRegular, IconClockOutlineRegular, IconCloseFillRegular,
-  IconFlatListOutlineRegular, IconFolderCloseRegular, IconProjectAddOutlineRegular,
-  IconQueueOutlineRegular, IconSearchOutlineRegular, IconSlidersTwoOutlineRegular,
+  IconFlatListOutlineRegular, IconFolderCloseRegular, IconFolderOpenRegular, IconPlusOutlineRegular,
+  IconProjectAddOutlineRegular, IconQueueOutlineRegular, IconSearchOutlineRegular, IconSlidersTwoOutlineRegular,
   IconWorkspaceTreeOutlineRegular, Menu, Modal, Tooltip,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type {
@@ -34,7 +34,7 @@ import type { WorkspaceBrowserProps } from '../contract/slots.ts'
 import type { ArchivedFilter, GroupNode, SessionNode, SessionOrderBy, SessionRowState } from '../tree.ts'
 import {
   deriveFlat, deriveGroups, deriveSearchResults, orderByRecency, owningGroupKey, owningParentFolder,
-  pinCurrentBlank, reconcileManualOrder, sessionMemberIds, UNGROUPED_KEY,
+  pinCurrentBlank, reconcileManualOrder, sessionMemberIds, UNGROUPED_KEY, workspaceLabel,
 } from '../tree.ts'
 import { ProjectRowItem, SearchResultItem, SessionNodeItem } from './Rows.tsx'
 import { FLAT_SESSION_ORDER_KEY, type SessionGroupBy } from '../stores.ts'
@@ -116,14 +116,14 @@ function sanitizeSearchQuery(value: string): string {
 }
 
 /**
- * Accept the native drag at document level while a row drag is active: row
- * hover still owns the insertion marker, and releasing outside the list must
- * not be rendered as a rejected drop before dragend commits that last marker.
+ * Accept unhandled row drags within the list. Composer drops retain their own copy semantics.
  */
 function useNativeDragAcceptance(active: boolean): void {
   useEffect(() => {
     if (!active) return
     const acceptDrag = (event: DragEvent): void => {
+      if (event.defaultPrevented) return
+      if (!(event.target instanceof Element) || event.target.closest('[role="tree"]') === null) return
       event.preventDefault()
       if (event.dataTransfer !== null) event.dataTransfer.dropEffect = 'move'
     }
@@ -621,8 +621,7 @@ function SessionTree({
               commitSessionDrag(drag, { id: node.id, half: normalizeHalf(half) })
             },
             end: () => {
-              if (drag?.over !== null && drag?.over !== undefined) commitSessionDrag(drag, drag.over)
-              else setDrag(null)
+              setDrag(null)
               sessionDropCommitted.current = false
             },
           }
@@ -786,8 +785,7 @@ function FlatList({
                   if (drag !== null) commitDrag(drag, { id: node.id, half: normalizeHalf(half) })
                 },
                 end: () => {
-                  if (drag?.over !== null && drag?.over !== undefined) commitDrag(drag, drag.over)
-                  else setDrag(null)
+                  setDrag(null)
                   dropCommitted.current = false
                 },
               }}
@@ -1213,30 +1211,63 @@ export function WorkspaceBrowser({
   const [renameDraft, setRenameDraft] = useState('')
   const [renaming, setRenaming] = useState(false)
   const [renameError, setRenameError] = useState<string | null>(null)
+  const [editSourceFolders, setEditSourceFolders] = useState<readonly string[]>([])
+  const [sourceFolderFlowOpen, setSourceFolderFlowOpen] = useState(false)
+  const [sourceFolderError, setSourceFolderError] = useState<string | null>(null)
   const renameTrimmed = renameDraft.trim()
   // Self is excluded by identity, not by title: the draft is seeded with the
   // localized label, which for an automatically titled Workspace equals its
   // own displayed title without being a conflict with itself.
   const renameDuplicate = renameTarget !== null && renameTrimmed !== ''
     && workspaces.some(w => w.workspaceId !== renameTarget.workspaceId && w.title === renameTrimmed)
+  const editedWorkspace = workspaces.find(workspace => workspace.workspaceId === renameTarget?.workspaceId)
+  const originalSourceFolders = editedWorkspace?.sourcePaths ?? (editedWorkspace === undefined ? [] : [editedWorkspace.path])
+  const sourceFoldersChanged = editSourceFolders.length !== originalSourceFolders.length
+    || editSourceFolders.some((path, index) => path !== originalSourceFolders[index])
   const renameBlocked = renaming || renameTrimmed === ''
-    || renameTarget === null || renameTrimmed === renameTarget.storedTitle || renameDuplicate
+    || renameTarget === null || (renameTrimmed === renameTarget.storedTitle && !sourceFoldersChanged) || renameDuplicate
   const closeRename = () => {
     if (renaming) return
     setRenameTarget(null)
     setRenameError(null)
+    setSourceFolderError(null)
+    setSourceFolderFlowOpen(false)
   }
   const confirmRename = () => {
     if (renameBlocked) return
     setRenaming(true)
     setRenameError(null)
-    renameWorkspace(renameTarget.workspaceId, renameTrimmed).then(() => {
+    const rename = sourceFoldersChanged
+      ? renameWorkspace(renameTarget.workspaceId, renameTrimmed, editSourceFolders)
+      : renameWorkspace(renameTarget.workspaceId, renameTrimmed)
+    rename.then(() => {
       setRenaming(false)
       setRenameTarget(null)
+      setSourceFolderFlowOpen(false)
     }).catch((reason: unknown) => {
       setRenaming(false)
       setRenameError(reason instanceof Error ? reason.message : String(reason))
     })
+  }
+
+  const sourceFolderFlowOwner: import('../contract/slots.ts').DirectoryFlowOwnerProps = {
+    open: sourceFolderFlowOpen,
+    busy: false,
+    onPicked: (path) => {
+      if (editSourceFolders.includes(path)) {
+        setSourceFolderError(t('workspace.sources.duplicate'))
+        setSourceFolderFlowOpen(false)
+        return
+      }
+      setEditSourceFolders(current => [...current, path])
+      setSourceFolderError(null)
+      setSourceFolderFlowOpen(false)
+    },
+    onCancel: () => { setSourceFolderFlowOpen(false) },
+    onError: (message) => {
+      setSourceFolderFlowOpen(false)
+      setSourceFolderError(message)
+    },
   }
 
   // The search results' restore button; the row actions own the rest of the
@@ -1489,12 +1520,15 @@ export function WorkspaceBrowser({
                 t={t}
                 openWorkspaceFolder={openWorkspaceFolder}
                 onRenameRequest={(workspaceId, displayTitle) => {
+                  const workspace = storedWorkspaces.find(item => item.workspaceId === workspaceId)
                   setRenameTarget({
                     workspaceId,
-                    storedTitle: storedWorkspaces.find(w => w.workspaceId === workspaceId)?.title ?? displayTitle,
+                    storedTitle: workspace?.title ?? displayTitle,
                   })
                   setRenameDraft(displayTitle)
+                  setEditSourceFolders(workspace?.sourcePaths ?? (workspace === undefined ? [] : [workspace.path]))
                   setRenameError(null)
+                  setSourceFolderError(null)
                 }}
                 onDeleteRequest={(workspaceId, title) => {
                   setDeleteTarget({ workspaceId, title })
@@ -1504,15 +1538,18 @@ export function WorkspaceBrowser({
             ))}
       </div>
 
+      {renderSlot('sidebar.workspaces.directoryFlow', sourceFolderFlowOwner)}
+
       <Modal
         open={renameTarget !== null}
+        className={clsx(css.workspaceEditor)}
         onClose={closeRename}
         closeLabel={t('close')}
-        title={t('rename.workspace.title')}
+        title={t('workspace.edit')}
         footer={(
           <>
             <Button variant="outline" disabled={renaming} onClick={closeRename}>{t('cancel')}</Button>
-            <Button variant="primary" disabled={renameBlocked} onClick={confirmRename}>{t('rename')}</Button>
+            <Button variant="primary" disabled={renameBlocked} onClick={confirmRename}>{t('save')}</Button>
           </>
         )}
       >
@@ -1533,6 +1570,40 @@ export function WorkspaceBrowser({
             }
           }}
         />
+        <div className={css.sourceFolders}>
+          <div className={css.sourceFoldersTitle}>{t('workspace.sources.title')}</div>
+          {editSourceFolders.map((path, index) => (
+            <div className={css.sourceFolderRow} key={path}>
+              <IconFolderOpenRegular size={14} />
+              <span title={path}>{workspaceLabel(path)}</span>
+              {index === 0 ? <span className={css.primarySource}>{t('workspace.sources.primary')}</span> : (
+                <Button size="sm" disabled={renaming} onClick={() => {
+                  setEditSourceFolders(current => [path, ...current.filter(value => value !== path)])
+                }}>{t('workspace.sources.makePrimary')}</Button>
+              )}
+              {editSourceFolders.length > 1 && (
+                <button
+                  type="button"
+                  className={css.sourceFolderRemove}
+                  aria-label={t('workspace.sources.remove')}
+                  disabled={renaming}
+                  onClick={() => { setEditSourceFolders(current => current.filter((_, itemIndex) => itemIndex !== index)) }}
+                >
+                  ×
+                </button>
+              )}
+            </div>
+          ))}
+          <Button
+            variant="outline"
+            disabled={renaming || sourceFolderFlowOpen}
+            onClick={() => { setSourceFolderError(null); setSourceFolderFlowOpen(true) }}
+          >
+            <IconPlusOutlineRegular size={14} />
+            {t('workspace.sources.add')}
+          </Button>
+          {sourceFolderError !== null && <div className={css.renameError} role="alert">{sourceFolderError}</div>}
+        </div>
         {renameDuplicate && (
           <div className={css.renameError} role="alert">{t('conflict.named', { name: renameTrimmed })}</div>
         )}

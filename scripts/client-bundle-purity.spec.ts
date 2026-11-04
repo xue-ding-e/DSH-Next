@@ -234,6 +234,13 @@ describe('client bundle purity gate', () => {
     expect(() => resolveId('@deepseek-ai/dsh-spill-policy/notice/internal')).toThrow(/purity/)
   })
 
+  it('inlines only the canonical session URI entry', () => {
+    expect(resolveId('@deepseek-ai/dsh-session-reference/uri')).toBeNull()
+    expect(() => resolveId('@deepseek-ai/dsh-session-reference')).toThrow(/purity/)
+    expect(() => resolveId('@deepseek-ai/dsh-session-reference/uri/internal')).toThrow(/purity/)
+    expect(() => resolveId('@deepseek-ai/dsh-session-reference/src/config.ts')).toThrow(/purity/)
+  })
+
   it('inlines the stateless file-drag entry without admitting its subpaths or UI plugin', () => {
     expect(resolveId('@deepseek-ai/dsh-util-file-drag')).toBeNull()
     expect(() => resolveId('@deepseek-ai/dsh-util-file-drag/internal')).toThrow(/purity/)

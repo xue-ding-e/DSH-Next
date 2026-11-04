@@ -136,7 +136,9 @@ async function bench(snapshot: ChatSnapshot) {
   const sidebarRight = { openResource: vi.fn<(address: string) => void>() }
   ctx.provide('sidebarRight', sidebarRight as never)
   ctx.provide('uiWorkspace', {} as never)
-  runtime.remote.provideNamespaces({ session: { openWorkspacePath } })
+  runtime.remote.provideNamespaces({ session: { openWorkspacePath },
+    fileUploads: { stageHistory: vi.fn(async () => { throw new Error('Unexpected historical file staging') }) },
+  })
   const locale = new LocaleRuntime(ctx)
   ctx.provide('locale', locale)
   locale.register(CONVERSATION_NS, { zh: conversationZh, en: conversationEn })

@@ -1,7 +1,7 @@
 /**
  * The sandbox POLICY home (`ctx.sandboxPolicy`): the single owner of the
  * deployment's sandbox fallbacks plus per-session resolution: the file-effect
- * {@link SandboxMode}, the `workspace-write` root, the explicit extra writable
+ * {@link SandboxMode}, the `workspace-write` root, the configured extra writable
  * directories, and the override kit (the `sandbox/mode` event, its fold, and
  * its write path; the fold is the `sandboxMode` session-projection unit
  * registered here, while the event and write path come from
@@ -30,6 +30,7 @@ import type { SandboxExecutionPolicy, SandboxMode } from '@deepseek-ai/dsh-sandb
 import type { Session } from '@deepseek-ai/dsh-session'
 import type { ProjectionHandle } from '@deepseek-ai/dsh-session-projection'
 import type {} from '@deepseek-ai/dsh-system-prompt'
+import type {} from '@deepseek-ai/dsh-workspace'
 
 export { SANDBOX_MODES, setSandboxMode } from './session-mode.ts'
 
@@ -112,7 +113,7 @@ export interface Config {
 
 /** Inputs that select the sandbox policy for one capability call. */
 export interface SandboxPolicyRequest {
-  /** Calling session; its immutable cwd becomes the workspace boundary. */
+  /** Calling session; its immutable cwd supplies the root and its Workspace supplies current sources. */
   session?: Session
   /** Explicit approved mode override, which outranks session policy. */
   mode?: SandboxMode
@@ -188,18 +189,29 @@ export class SandboxPolicyService extends Service {
   /**
    * Resolve the complete policy for one capability call. An approved explicit
    * mode outranks the session's last `sandbox/mode` event, which outranks the
-   * deployment default. A session cwd is its workspace-write boundary; the
-   * configured root is the fallback for agentless calls and sessions without a
-   * cwd.
+   * deployment default. The immutable session cwd supplies the root, falling
+   * back to configuration when absent. Under workspace-write, the optional
+   * Workspace registry adds the owning Workspace's current source directories
+   * to configured extra roots; removal or registry unload withdraws those
+   * derived grants on the next call without changing the session root.
    * @param request - optional session and approved mode override.
    * @returns the fully resolved per-call mode and absolute workspace root.
    */
   resolve(request: SandboxPolicyRequest = {}): SandboxExecutionPolicy {
     const { session } = request
+    const mode = request.mode ?? (session === undefined ? undefined : this.overrideOf(session)) ?? this.defaultMode
+    const workspaceRoot = resolveWorkspaceRoot(session?.header.cwd ?? this.workspaceRoot)
+    const sourcePaths = mode === 'workspace-write' && session !== undefined
+      ? this.ctx.get('workspaceRegistry')?.list().find(workspace => workspace.sessionIds.includes(session.id))
+        ?.sourcePaths.filter(path => path !== workspaceRoot)
+      : undefined
+    const additionalWritableRoots = sourcePaths === undefined || sourcePaths.length === 0
+      ? this.additionalWritableRoots
+      : Object.freeze([...new Set([...(this.additionalWritableRoots ?? []), ...sourcePaths])])
     return {
-      mode: request.mode ?? (session === undefined ? undefined : this.overrideOf(session)) ?? this.defaultMode,
-      workspaceRoot: resolveWorkspaceRoot(session?.header.cwd ?? this.workspaceRoot),
-      ...this.additionalWritableRoots === undefined ? {} : { additionalWritableRoots: this.additionalWritableRoots },
+      mode,
+      workspaceRoot,
+      ...additionalWritableRoots === undefined ? {} : { additionalWritableRoots },
       ...session === undefined ? {} : { sessionId: session.id },
     }
   }

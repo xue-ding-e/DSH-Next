@@ -178,6 +178,7 @@ const harness = await vi.hoisted(async () => {
     getVersion: () => '1.0.0',
     getAppPath: (): string => 'desktop-test-app',
     setAppLogsPath: vi.fn(),
+    setAppUserModelId: vi.fn(),
     getPath: vi.fn<(name: string) => string>(),
     setAboutPanelOptions: vi.fn<(options: Electron.AboutPanelOptionsOptions) => void>(),
     requestSingleInstanceLock: () => true,
@@ -302,6 +303,7 @@ vi.mock('../src/policy-test-auth.ts', () => ({ DesktopPolicyTestAuth: class {
 vi.mock('electron', () => ({
   app: harness.app,
   BrowserWindow: harness.FakeWindow,
+  Notification: { isSupported: () => false },
   WebContentsView: harness.FakeView,
   dialog: harness.dialog,
   shell: { openExternal: harness.openExternal },
@@ -587,7 +589,7 @@ describe('desktop main startup', () => {
     const zh = locale === 'zh-CN'
     expect(harness.dialog.showMessageBox).toHaveBeenLastCalledWith(expect.objectContaining({
       type: 'info', title: zh ? '关于 DeepSeek Harness' : 'About DeepSeek Harness', message: 'DeepSeek Harness',
-      detail: zh ? '版本 V1.0.0' : 'Version V1.0.0', buttons: [zh ? '确定' : 'OK'], cancelId: 0,
+      detail: zh ? '版本 V1.2.3' : 'Version V1.2.3', buttons: [zh ? '确定' : 'OK'], cancelId: 0,
     }))
     // A dialog that cannot open is logged, not surfaced as an unhandled rejection.
     harness.dialog.showMessageBox.mockRejectedValueOnce(new Error('overlay unavailable'))
@@ -850,6 +852,27 @@ describe('desktop main startup', () => {
       expect(() => handler({ sender, senderFrame: sender.mainFrame })).toThrow('unowned renderer')
       sender.mainFrame.url = original
     }
+  })
+
+  it.each([true, false])('scopes notification IPC for packaged=%s', async (packaged) => {
+    harness.app.isPackaged = packaged
+    await readyForUpdate()
+    if (packaged) expect(harness.app.setAppUserModelId).toHaveBeenCalledWith('com.deepseek.dsh')
+    else expect(harness.app.setAppUserModelId).toHaveBeenCalledWith(`${NEXT_DESKTOP_IDENTITY.appId}.development`)
+    const sender = harness.windows[0]!.webContents
+    const notice = { id: 'native-question', title: 'Your answer is needed', body: 'Choose a mode' }
+    for (const [channel, value] of [
+      [DESKTOP_IPC.questionNotificationShow, notice], [DESKTOP_IPC.questionNotificationClose, notice.id],
+    ] as const) {
+      const handler = harness.handlers.get(channel)!
+      expect(() => handler({ sender, senderFrame: sender.mainFrame }, value)).not.toThrow()
+      for (const event of [
+        { sender: {}, senderFrame: sender.mainFrame },
+        { sender, senderFrame: { url: sender.mainFrame.url } },
+        { sender, senderFrame: { url: 'https://external.example/' } },
+      ]) expect(() => handler(event, value)).toThrow('unowned renderer')
+    }
+    expect(harness.handlers.get(DESKTOP_IPC.questionNotificationShow)!({ sender, senderFrame: sender.mainFrame }, notice)).toBe('unsupported')
   })
 
   it.each(['darwin', 'win32', 'linux'] as const)('limits native titlebar styling to macOS on %s', async (platform) => {
@@ -1722,7 +1745,7 @@ describe('desktop main startup', () => {
     await prompt
     expect(signal.aborted).toBe(true)
     expect(harness.dialog.showMessageBox).toHaveBeenLastCalledWith(expect.objectContaining({
-      message: 'You’re up to date!', detail: 'Current version: 1.0.0',
+      message: 'You’re up to date!', detail: 'Current version: 1.2.3',
     }))
   })
 

@@ -27,7 +27,7 @@ import type { FlowMotionRows } from '../chat/flow-motion.ts'
 import type { ToolCallId } from './store.ts'
 import type { ChatConversationViewNode, ChatNode, ChatNodeKind } from './chat-nodes.ts'
 import type {
-  ChatNodeProcessSource, ChatNodeSource, ChatSnapshot, ChatTurnProcessPresentation,
+  ChatNodeProcessSource, ChatNodeSource, ChatSnapshot, ChatTurnProcessPresentation, UserMessageNode,
 } from './snapshot.ts'
 import type { TurnProcessSpec } from './turn-process.ts'
 import type { PerformanceUsageMode } from '../../chat-settings.ts'
@@ -209,6 +209,22 @@ export interface ChatNodeInjected {
   }
 }
 
+/** One confirmed replacement's settlement; uncertain sends retry the same request and text. */
+export type UserMessageEditResult =
+  | { readonly kind: 'sent' }
+  | { readonly kind: 'failed'; readonly reason: 'retry' | 'uncertain-send' | 'uncertain-fork' }
+
+/** Local edit transaction, retained until cancellation or a successful send. */
+export interface UserMessageEdit {
+  /**
+   * Fork before the original message and submit its replacement.
+   * @param text - complete edited text; non-text content remains owned by the transaction.
+   * @param signal - editor lifetime and submission cancellation; cancellation suppresses navigation.
+   * @returns settlement; failures retain any created child and request identity for safe retry.
+   */
+  submit(text: string, signal: AbortSignal): Promise<UserMessageEditResult>
+}
+
 /** Stable owner currency delivered to a keyed Chat renderer. */
 export interface ChatNodeOwnerProps {
   /** Renderer-owned Node portion selected by the grouping Definition. */
@@ -217,6 +233,8 @@ export interface ChatNodeOwnerProps {
   openFile: (path: string, options?: OpenFileOptions) => void
   inspectCall: ((callId: ToolCallId) => void) | undefined
   forkAt: (seq: number) => void
+  /** Prepare a local edit; undefined explicitly hides editing in this assembly. */
+  editUserMessage: ((message: UserMessageNode) => UserMessageEdit) | undefined
   /** Session-authorized image loader supplied by the Chat view. */
   loadImage: MessageImageLoader
   fileMentions: (owner: TurnTailOwnerProps) => MarkdownFileMentions | undefined
@@ -330,6 +348,8 @@ export interface ChatViewInjected {
     read: () => ChatScrollPosition | null
   }
   forkAt: (seq: number) => void
+  /** Prepare a local edit without creating a branch; submission owns fork, send, and guarded navigation. */
+  editUserMessage: ChatNodeOwnerProps['editUserMessage']
   fileMentions: (owner: TurnTailOwnerProps) => MarkdownFileMentions | undefined
 }
 
@@ -343,7 +363,7 @@ export type ChatFlowDataInjected = Pick<ChatViewInjected, 'keyedHooks'> & {
 
 /** Ordered rows and reconciled local echoes rendered inside one Chat viewport. */
 export interface ChatFlowOwnerProps extends Pick<ChatNodeOwnerProps,
-  'cwd' | 'openFile' | 'inspectCall' | 'forkAt' | 'loadImage' | 'fileMentions'> {
+  'cwd' | 'openFile' | 'inspectCall' | 'forkAt' | 'editUserMessage' | 'loadImage' | 'fileMentions'> {
   readonly entries: readonly RenderEntry[]
   readonly pendingInputs: readonly (PendingSubmission | InboxState['next-step'][number])[]
   readonly lastInputTurn: number | undefined

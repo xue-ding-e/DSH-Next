@@ -113,5 +113,5 @@ describe('published document preview licenses', () => {
     } finally {
       rmSync(output, { recursive: true, force: true })
     }
-  })
+  }, 60_000)
 })

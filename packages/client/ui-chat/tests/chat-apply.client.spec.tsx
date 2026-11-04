@@ -71,6 +71,9 @@ async function bench() {
   } as never)
   runtime.remote.provideNamespaces({
     session: { openWorkspacePath: vi.fn(async () => ({ ok: true, value: { opened: true } })) },
+    fileUploads: { stageHistory: vi.fn(async () => {
+      throw new Error('this Chat fixture does not script historical file staging')
+    }) },
   })
   const locale = new LocaleRuntime(runtime.ctx)
   runtime.ctx.provide('locale', locale)

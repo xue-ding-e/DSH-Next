@@ -18,6 +18,7 @@ import { createWorkspaceShortcutControls } from '../src/client/shortcuts.ts'
 import { createWorkspaceViewStore, FLAT_SESSION_ORDER_KEY } from '../src/client/stores.ts'
 import { UNGROUPED_KEY } from '../src/client/tree.ts'
 import { WorkspaceBrowser } from '../src/client/rows/WorkspaceBrowser.tsx'
+import { RecentSessions } from '../src/client/RecentSessions.tsx'
 import { zh } from '../src/client/locales.ts'
 
 // Every fixture carries the resource hook the resources plugin merges into GlobalStandardProps.
@@ -191,6 +192,77 @@ describe('WorkspaceBrowser', () => {
     expect(names()).toEqual(['newer', 'older'])
   })
 
+  it('opens recent Session shortcuts in last-use order without changing the Workspace tree', () => {
+    const b = mount({
+      useSessions: hook(sessionState([summary('older', 10), summary('newer', 20)])),
+      useWorkspaces: hook(workspaceState([workspace('alpha', ['older', 'newer'])], [], [sid('older')])),
+    })
+    fireEvent.click(within(b.view.container).getByText('alpha'))
+    const treeRows = () => within(b.view.container).getAllByRole('treeitem').map(row => row.textContent)
+    const workspaceRows = treeRows()
+    expect(workspaceRows).toEqual([
+      expect.stringContaining('alpha'), expect.stringContaining('older'), expect.stringContaining('newer'),
+    ])
+    const manualOrder = b.store.getSnapshot().sessionOrderByAccount
+    const view = render(<RecentSessions {...b.props} />)
+    const recent = within(view.container).getByRole('button', { name: 'newer' })
+    expect(within(view.container).getAllByRole('button').map(button => button.textContent)).toEqual(['newer', 'older'])
+    expect(within(view.container).getByRole('button', { name: 'older' })).toBeTruthy()
+    fireEvent.click(recent)
+    expect(b.props.open).toHaveBeenCalledWith(sid('newer'))
+    act(() => { b.store.actions.recordOpened(sid('older'), 30) })
+    expect(within(view.container).getAllByRole('button').map(button => button.textContent)).toEqual(['older', 'newer'])
+    expect(treeRows()).toEqual(workspaceRows)
+    expect(b.store.getSnapshot().sessionOrderByAccount).toEqual(manualOrder)
+  })
+
+  it('keeps the five recent conversations independent of tree filters, pins and manual positions', () => {
+    const summaries = [
+      ...['one', 'two', 'three', 'four', 'five', 'six'].map((id, index) => summary(id, index + 1)),
+      summary('archived', 100), summary('blank', 200, { blank: true }),
+      summary('worker', 300, { origin: 'subagent' }),
+    ]
+    const b = mount({
+      useSessions: hook(sessionState(summaries, { main: sid('blank') })),
+      useWorkspaces: hook(workspaceState([
+        workspace('alpha', summaries.map(session => session.id)),
+      ], [sid('archived')], [sid('one')])),
+    })
+    const view = render(<RecentSessions {...b.props} />)
+    const names = () => within(view.container).getAllByRole('button').map(button => button.textContent)
+    expect(names()).toEqual(['six', 'five', 'four', 'three', 'two'])
+    act(() => {
+      b.store.actions.setGroupBy('flat')
+      b.store.actions.setSessionOrder(FLAT_SESSION_ORDER_KEY, ['one', 'two', 'three', 'four', 'five', 'six'], {})
+      b.store.actions.setArchivedFilter('only')
+    })
+    expect(names()).toEqual(['six', 'five', 'four', 'three', 'two'])
+    act(() => { b.store.actions.recordOpened(sid('one'), 20) })
+    expect(names()).toEqual(['one', 'six', 'five', 'four', 'three'])
+    view.rerender(<RecentSessions {...b.props} useSessions={hook(sessionState(
+      summaries.map(session => session.id === sid('two') ? { ...session, updatedAt: 30 } : session),
+      { main: sid('blank') },
+    ))} />)
+    expect(names()).toEqual(['two', 'one', 'six', 'five', 'four'])
+  })
+
+  it('drags a recent conversation as a composer reference with its complete title', () => {
+    const b = mount({ useSessions: hook(sessionState([summary('s1', 1, { title: 'Design ] review' })])) })
+    const view = render(<RecentSessions {...b.props} />)
+    const recent = within(view.container).getByRole('button', { name: 'Design ] review' })
+    const transfer = dragData()
+    const manualOrder = b.store.getSnapshot().sessionOrderByAccount
+    fireEvent.dragStart(recent, { dataTransfer: transfer })
+    expect(recent.draggable).toBe(true)
+    expect(transfer.effectAllowed).toBe('copy')
+    expect(transfer.setData).toHaveBeenCalledExactlyOnceWith('application/x-dsh-session-reference', JSON.stringify({
+      sessionId: 's1', label: 'Design ] review', mention: '@[Design \\] review](dsh-session:InMxIg)',
+    }))
+    fireEvent.dragEnd(recent, { dataTransfer: transfer })
+    expect(b.props.open).not.toHaveBeenCalled()
+    expect(b.store.getSnapshot().sessionOrderByAccount).toEqual(manualOrder)
+  })
+
   it.each(['workspace', 'flat', 'ungrouped'] as const)('starts Manual from the current %s order and forgets discarded layouts', (mode) => {
     localStorage.clear()
     const preferences = createWorkspaceViewStore().create()
@@ -272,8 +344,9 @@ describe('WorkspaceBrowser', () => {
     const add = screen.getByRole('button', { name: '添加工作区' })
     add.focus()
     fireEvent.click(add)
-    expect(document.activeElement).toBe(add)
-    expect(screen.getByTestId('directory-flow')).toBeTruthy()
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: '关闭' }))
+    expect(screen.getByRole('dialog', { name: '添加工作区' })).toBeTruthy()
+    expect(screen.queryByTestId('directory-flow')).toBeNull()
     expect(panelInfo.activePanelId).toBe('panel-a')
     expect(b.props.open).not.toHaveBeenCalled()
     expect(b.props.startSession).not.toHaveBeenCalled()
@@ -713,6 +786,18 @@ describe('WorkspaceBrowser', () => {
       expect.stringContaining('three'),
       expect.stringContaining('one'),
     ])
+  })
+
+  it('keeps activity visible on a folded Workspace while its Session is running', () => {
+    const b = mount({
+      useSessions: hook(sessionState([summary('running', 1, { running: true })])),
+      useWorkspaces: hook(workspaceState([workspace('active', ['running'])])),
+    })
+    const folder = screen.getByRole('treeitem')
+    expect(folder.getAttribute('aria-expanded')).toBe('false')
+    expect(within(folder).getByRole('img', { name: '进行中' })).toBeTruthy()
+    rerender(b, { useSessions: hook(sessionState([summary('running', 1)])) })
+    expect(within(folder).queryByRole('img', { name: '进行中' })).toBeNull()
   })
 
   it('expands a group on click and opens a session row', () => {
@@ -1916,6 +2001,9 @@ describe('WorkspaceBrowser', () => {
     // one-row popover, and existing workspaces stay in the tree below.
     expect(screen.queryByRole('menu')).toBeNull()
     expect(screen.queryByRole('menuitem', { name: 'alpha' })).toBeNull()
+    expect(screen.getByRole('dialog', { name: '添加工作区' })).toBeTruthy()
+    expect(screen.queryByTestId('directory-flow')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: '选择文件夹' }))
     expect(screen.getByTestId('directory-flow')).toBeTruthy()
   })
 
@@ -1957,12 +2045,14 @@ describe('WorkspaceBrowser', () => {
     expect(insertWorkspaceBefore).toHaveBeenCalledWith(wid('tail'), wid('beta'))
   })
 
-  it('draws the first Workspace insertion boundary on the scroll container', () => {
+  it('shows the first Workspace insertion marker and commits a drop before the first row', () => {
+    const insertWorkspaceBefore = vi.fn(async () => {})
     mount({
       useWorkspaces: hook(workspaceState([
         workspace('alpha', []),
         workspace('beta', []),
       ])),
+      insertWorkspaceBefore,
     })
     const source = screen.getByText('beta').closest('[role="treeitem"]') as HTMLElement
     let firstSection = screen.getByText('alpha').closest('[role="treeitem"]')?.parentElement as HTMLElement
@@ -1977,6 +2067,9 @@ describe('WorkspaceBrowser', () => {
     expect(firstSection.parentElement?.className).toContain('listTopDropActive')
     const marker = firstSection.parentElement?.previousElementSibling
     expect(marker?.className).toContain('listTopDropIndicator')
+    fireDrag(firstSection, 'drop', 105)
+    fireEvent.dragEnd(source)
+    expect(insertWorkspaceBefore).toHaveBeenCalledExactlyOnceWith(wid('beta'), wid('alpha'))
   })
 
   it('accepts a document-level drop and commits the last Workspace marker on drag end', () => {
@@ -2283,7 +2376,7 @@ describe('WorkspaceBrowser', () => {
     expect(b.store.getSnapshot().sessionOrderByAccount.alpha).toEqual(['two', 'one'])
   })
 
-  it('accepts a document-level drop and commits the last Session marker on drag end', () => {
+  it('clears a Session insertion marker when the drop occurs outside the list', () => {
     const b = mount({
       useSessions: hook(sessionState([summary('one', 2), summary('two', 1)])),
       useWorkspaces: hook(workspaceState([workspace('alpha', ['one', 'two'])])),
@@ -2300,7 +2393,42 @@ describe('WorkspaceBrowser', () => {
     fireEvent(document.body, outsideDrop)
     expect(outsideDrop.defaultPrevented).toBe(true)
     fireEvent.dragEnd(one)
-    expect(b.store.getSnapshot().sessionOrderByAccount.alpha).toEqual(['two', 'one'])
+    expect(b.store.getSnapshot().sessionOrderByAccount.alpha).toBeUndefined()
+  })
+
+  it('adds a source directory and saves its primary position without opening another Session', async () => {
+    const renameWorkspace = vi.fn(async () => {})
+    const renderSlot: WorkspaceBrowserProps['renderSlot'] = (name: string, owner: object) => {
+      if (name !== 'sidebar.workspaces.directoryFlow') return null
+      const flow = owner as DirectoryFlowOwnerProps
+      return flow.open ? <button onClick={() => { flow.onPicked('/sources/secondary') }}>Pick secondary source</button> : null
+    }
+    const project = workspace('alpha', ['current'], 'Alpha')
+    const b = mount({
+      useSessions: hook(sessionState([summary('current', 1)], { main: sid('current') })),
+      useWorkspaces: hook(workspaceState([project])), renameWorkspace, renderSlot,
+    })
+    fireEvent.click(screen.getByRole('button', { name: '工作区“Alpha”的操作' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: '重命名' }))
+    const editor = within(screen.getByRole('dialog', { name: t('workspace.edit') }))
+    expect(editor.getByTitle('/projects/alpha')).toBeTruthy()
+    expect(editor.queryByRole('button', { name: t('workspace.sources.remove') })).toBeNull()
+    expect(editor.getByRole<HTMLButtonElement>('button', { name: '保存' }).disabled).toBe(true)
+    fireEvent.click(editor.getByRole('button', { name: t('workspace.sources.add') }))
+    fireEvent.click(screen.getByRole('button', { name: 'Pick secondary source' }))
+    expect(editor.getByTitle('/sources/secondary')).toBeTruthy()
+    fireEvent.click(editor.getByRole('button', { name: t('workspace.sources.makePrimary') }))
+    expect(renameWorkspace).not.toHaveBeenCalled()
+    fireEvent.click(editor.getByRole('button', { name: '保存' }))
+    await waitFor(() => { expect(renameWorkspace).toHaveBeenCalledExactlyOnceWith(
+      wid('alpha'), 'Alpha', ['/sources/secondary', '/projects/alpha'],
+    ) })
+    await waitFor(() => { expect(screen.queryByRole('dialog', { name: t('workspace.edit') })).toBeNull() })
+    expect(b.props.startSession).not.toHaveBeenCalled()
+    expect(b.props.open).not.toHaveBeenCalled()
+    expect(within(b.view.container).getByText('current')).toBeTruthy()
+    expect(project.path).toBe('/projects/alpha')
+    expect(project.sessionIds).toEqual([sid('current')])
   })
 
   it('labels an unrenamed default Workspace in the reader’s language and every other title verbatim', () => {
@@ -2321,7 +2449,7 @@ describe('WorkspaceBrowser', () => {
     fireEvent.click(screen.getByRole('menuitem', { name: '重命名' }))
     expect(screen.getByLabelText<HTMLInputElement>('工作区名称').value).toBe('默认工作区')
     expect(screen.queryByRole('alert')).toBeNull()
-    const confirm = screen.getByRole<HTMLButtonElement>('button', { name: '重命名' })
+    const confirm = screen.getByRole<HTMLButtonElement>('button', { name: '保存' })
     expect(confirm.disabled).toBe(false)
     fireEvent.click(confirm)
     expect(renameWorkspace).toHaveBeenCalledWith(wid('alpha'), '默认工作区')
@@ -2339,15 +2467,15 @@ describe('WorkspaceBrowser', () => {
     const input = screen.getByLabelText<HTMLInputElement>('工作区名称')
     expect(input.value).toBe('Alpha')
     // Unchanged and blank names stay blocked.
-    expect(screen.getByRole<HTMLButtonElement>('button', { name: '重命名' }).disabled).toBe(true)
+    expect(screen.getByRole<HTMLButtonElement>('button', { name: '保存' }).disabled).toBe(true)
     fireEvent.change(input, { target: { value: '   ' } })
-    expect(screen.getByRole<HTMLButtonElement>('button', { name: '重命名' }).disabled).toBe(true)
+    expect(screen.getByRole<HTMLButtonElement>('button', { name: '保存' }).disabled).toBe(true)
     // A duplicate of another workspace's title shows the inline conflict.
     fireEvent.change(input, { target: { value: ' Beta ' } })
     expect(screen.getByRole('alert').textContent).toBe('已存在名为“Beta”的工作区。')
-    expect(screen.getByRole<HTMLButtonElement>('button', { name: '重命名' }).disabled).toBe(true)
+    expect(screen.getByRole<HTMLButtonElement>('button', { name: '保存' }).disabled).toBe(true)
     fireEvent.change(input, { target: { value: 'Gamma' } })
-    fireEvent.click(screen.getByRole('button', { name: '重命名' }))
+    fireEvent.click(screen.getByRole('button', { name: '保存' }))
     expect(renameWorkspace).toHaveBeenCalledWith(wid('alpha'), 'Gamma')
     // While renaming: input disabled, close blocked, Enter ignored.
     expect(input.disabled).toBe(true)
@@ -2390,7 +2518,7 @@ describe('WorkspaceBrowser', () => {
     fireEvent.click(screen.getByRole('button', { name: '工作区“Alpha”的操作' }))
     fireEvent.click(screen.getByRole('menuitem', { name: '重命名' }))
     fireEvent.change(screen.getByLabelText('工作区名称'), { target: { value: 'Other' } })
-    fireEvent.click(screen.getByRole('button', { name: '重命名' }))
+    fireEvent.click(screen.getByRole('button', { name: '保存' }))
     await waitFor(() => { expect(screen.getByRole('alert').textContent).toBe('denied') })
   })
 
@@ -2497,6 +2625,7 @@ describe('Workspace tree grouping', () => {
         ? <button onClick={() => { owner.onPicked('/projects') }}>Pick directory</button> : null) as WorkspaceBrowserProps['renderSlot'],
     })
     fireEvent.click(screen.getByRole('button', { name: '添加工作区' }))
+    fireEvent.click(screen.getByRole('button', { name: '选择文件夹' }))
     fireEvent.click(screen.getByRole('button', { name: 'Pick directory' }))
     await waitFor(() => { expect(b.props.startSession).toHaveBeenCalledWith(wid('root'), { clearPreviousDraft: false }) })
     expect(b.props.createWorkspace).toHaveBeenCalledWith({ path: '/projects' })

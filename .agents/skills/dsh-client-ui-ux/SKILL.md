@@ -1,6 +1,6 @@
 ---
 name: dsh-client-ui-ux
-description: Design and review DeepSeek Harness client UI changes — visual token discipline, reuse-before-adding, feedback surfaces (toast vs in-place notice vs empty state), overlay and menu safety, platform window adaptation, loading states, and error copy placement. Use when adding or changing product-user-visible GUI behavior in packages/client, or when reviewing such a PR.
+description: Design and review DeepSeek Harness client UI changes — visual tokens, reusable components, drag feedback, native desktop notifications, overlay and menu safety, platform window adaptation, loading states, and error placement. Use when adding or changing product-user-visible GUI behavior in packages/client, or when reviewing such a PR.
 ---
 
 # DeepSeek Harness Client UI/UX
@@ -38,11 +38,29 @@ Apply [dsh-error-handling](../dsh-error-handling/SKILL.md#localized-actionable-v
 - **In-place notices are for states tied to the surface itself**: a query failure with its Retry action, field validation on the form that owns the field. A populated panel keeps a compact notice beside its retained content; only an empty panel centers a full error state.
 - **Error copy is plain language, and short.** No internal jargon or technical nouns unless an error code must be exposed for debugging. Prefer one clear sentence; anything explainable in two sentences must not grow into paragraphs. A Chinese notice of at most two sentences omits the trailing 句号（。）. The notice must not break the existing layout — reserve its space or overlay it; never shift neighbouring elements.
 
+## Native desktop notifications
+
+Use the Desktop preload IPC for system notifications, with the main process checking the product origin, owning window, and main frame. A request for desktop system notifications uses the OS notification area; do not also show the Web client's in-app reminder card or substitute that card when native delivery fails. Report a delivery failure while keeping the question answerable. An in-app card does not verify notification delivery outside the app. Clicking a reminder restores the window, opens its Session, and reveals the still-answerable question; receiving a reminder does not move focus.
+
+On Windows, the [Electron `close` event](https://www.electronjs.org/docs/latest/api/notification#event-close) can mean that the banner timed out while its notification-center entry remains actionable. Keep its click handler until the question resolves, the preference disables notifications, or the owning document ends. Test timeout followed by activation, replacement, resolution, document navigation, and disposal racing submission. Unit tests of Electron calls establish bridge behavior; verify actual Windows display and activation in an isolated desktop profile before claiming OS delivery. Report unsupported delivery and native failure without making the question unavailable.
+
+For Windows delivery diagnosis, distinguish `Notification.show()` submission, its native `show` event, an entry in Windows notification history, and visible banner/activation evidence. Record explicit `Notification.close()` calls separately from OS `close` events. `SHQueryUserNotificationState` reports `QUNS_BUSY` (2) for fullscreen or presentation conditions and `QUNS_ACCEPTS_NOTIFICATIONS` (5) when these conditions are absent; it does not replace checking Windows do-not-disturb behavior. Do not change the user's notification preferences to force a banner. The user can confirm a visible banner and click while the isolated app records its native activation event.
+
+Windows PowerShell 5.1 can inspect only the test application's notification history through `[Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType=WindowsRuntime]`, then `::History.GetHistory(appId)` and `::CreateToastNotifier(appId).Setting`. Invoke its explicit executable when the default shell is PowerShell 7, which may reject that WinRT type. Do not enumerate other applications' notifications. In Electron 44.7.0, the automatic Start Menu shortcut name and fallback identity use the executable's PE product name; `app.setName()` alone does not brand the Windows notification sender. Verify development executable branding separately from packaged identity.
+
 ## Loading states
 
 - Lists use their skeleton; every other page-level load centers a bare spinner. Never place a spinner in a corner of the page.
 - One loading treatment per page/component — concurrent regions must not each flash their own style.
 - No loading text unless the context needs it (narrow sidebars almost never do).
+
+## Composer editor focus
+
+For the repository's patched Lexical 0.49.0, editable listeners run while the editor queues updates. Restore a recalled draft's focus and selection in a `queueMicrotask` after that callback returns; an editor update inside the callback can remain pending until the next keystroke. Capture the initiating root, then recheck editability, disposal, root identity, and whether another control owns focus before applying the deferred change. The shell owns and cancels pending editable/root listener registrations on disposal, including when the root remains attached and never re-enables; a disposed guard inside a future callback does not release those registrations. A root-listener disposer also invokes its listener with `null`, so cleanup must tolerate reentry.
+
+Verify the native caret and type through `page.keyboard.type()` without refocusing in [queue-recall-focus.e2e.ts](../../../apps/web/tests/queue-recall-focus.e2e.ts). jsdom editor-command tests alone cannot establish DOM caret placement. Recheck this ordering against the installed Lexical implementation when its version changes.
+
+A queue recall retains its original Session while the Host reply is pending. If that Session's view unmounts, keep the initiating draft writer available to the operation and save the recalled draft before acknowledging recovery and releasing the Session. Verify switching away during the request, returning, and reloading; the other Session's draft and the remaining queue must stay intact.
 
 ## Overlays and menus
 
@@ -53,6 +71,12 @@ Every menu, popover, and tooltip must be verified for all three before merge:
 - **Unclipped**: it escapes `overflow` ancestors and containing blocks (portal to body where needed) and is never covered by neighbouring elements.
 
 Scrollbars stay inside their container: use the shared scrollbar styles rather than component-specific selectors, and verify the bar neither overflows the container nor gets clipped by its rounded corners or edges — keep a small inset instead of letting it sit flush against the container edge.
+
+## Conversation drag feedback
+
+Sidebar conversation references use the main content and right panel as the receiving area, with a visible blue overlay and localized release hint; requiring a drop directly on the input card is too narrow. Insert into the current draft while preserving its selection, text, chips, attachments, and queued messages. Returning to the sidebar preserves its own reorder behavior, and a reference drop elsewhere does not commit a hovered reorder position. Clear feedback when the pointer leaves the receiving area, the drag ends or is cancelled, the window loses focus, or the receiving composer unmounts. Keep ordinary file intake separate.
+
+Verify the invitation while a native browser drag is still held, then release on blank conversation space and on the right panel. Assert the resulting chip, retained draft and focus, sidebar order, and overlay removal. A unit `drop` event alone cannot verify the receiving area's size or visible guidance.
 
 ## Responsive layouts
 

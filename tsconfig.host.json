@@ -8,6 +8,10 @@
     "rewriteRelativeImportExtensions": false
   },
   "include": [
+    "apps/web/tests/workspace-sources.e2e.ts",
+    "apps/web/tests/queue-recall-focus.e2e.ts",
+    "apps/web/tests/message-edit.e2e.ts",
+    "apps/web/tests/message-edit-files.e2e.ts",
     "apps/web/tests/creation-recommendations.e2e.ts",
     "apps/web/tests/plugin-recommendations.e2e.ts",
     "apps/web/tests/japanese-plugin-metadata.e2e.ts",
@@ -414,7 +418,7 @@
     { "path": "./packages/context/file-reference" },
     { "path": "./packages/context/file-reference-local" },
     { "path": "./packages/context/tmux-context" },
-    { "path": "./packages/context/session-reference" },
+    { "path": "./packages/context/session-reference/tsconfig.host.json" },
     { "path": "./packages/context/harness-dev-context" },
     { "path": "./packages/interaction/user-questions" },
     { "path": "./packages/interaction/user-approval" },

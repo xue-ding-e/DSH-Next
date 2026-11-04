@@ -36,13 +36,21 @@ async function bench() {
   const directoryPicker = {}
   const { remote } = runtime
   remote.provideNamespaces({ directoryPicker })
+  runtime.ctx.provide('remote.session', {
+    canOpenWorkspacePath: async () => ({ ok: true as const, value: false }),
+    openWorkspacePath: async () => ({ ok: true as const, value: { opened: true as const } }),
+  } as never)
   const locale = new LocaleRuntime(runtime.ctx)
   runtime.ctx.provide('locale', locale)
   runtime.slots.installLocale(locale)
+  const blank = await runtime.sessions.add({
+    id: 'home-blank', summary: { blank: true, cwd: '/home/u/Documents/project' },
+  })
+  runtime.sessions.stubCreate(async () => blank)
   await runtime.workspaces.update((draft) => {
     draft.items = [{
       workspaceId: 'w1' as WorkspaceId, title: 'Project', path: '/home/u/Documents/project',
-      sessionIds: [], createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z',
+      sessionIds: [blank], createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z',
     }] as never
   })
   await runtime.root.declare(
@@ -55,14 +63,14 @@ async function bench() {
 
 /** Open the Workspace row's hover card, which is where the home abbreviation shows. */
 function openHoverCard(): void {
-  const row = screen.getByRole('treeitem').parentElement as HTMLElement
+  const row = screen.getByRole('treeitem', { name: /^Project/ }).parentElement as HTMLElement
   fireEvent.pointerEnter(row)
   act(() => { vi.advanceTimersByTime(800) })
 }
 
 /** Close it again, so the next hover rebuilds the card from current props. */
 function closeHoverCard(): void {
-  const row = screen.getByRole('treeitem').parentElement as HTMLElement
+  const row = screen.getByRole('treeitem', { name: /^Project/ }).parentElement as HTMLElement
   fireEvent.pointerLeave(row)
   act(() => { vi.advanceTimersByTime(800) })
 }

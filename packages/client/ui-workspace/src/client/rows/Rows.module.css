@@ -12,6 +12,42 @@
   color: var(--dsw-alias-label-primary);
 }
 
+button.sessionRow {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  text-align: start;
+  font: inherit;
+}
+
+.hoverEdit {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 0 0;
+  margin-top: 4px;
+  border: 0;
+  border-top: 0.5px solid var(--dsw-alias-border-l4);
+  background: transparent;
+  color: #FFFFFF;
+  font: inherit;
+  cursor: pointer;
+}
+
+.hoverDetails {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #FFFFFF;
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+
 @media (hover: hover) {
   .projectRow:hover {
     background: var(--dsw-alias-interactive-bg-hover);
@@ -145,6 +181,15 @@
 
 .folderActive {
   color: var(--dsw-alias-state-business-primary);
+}
+
+.activity {
+  flex: none;
+  width: 16px;
+  height: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 

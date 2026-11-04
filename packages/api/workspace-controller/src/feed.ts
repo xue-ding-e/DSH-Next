@@ -27,6 +27,7 @@ export function workspaceView(workspace: Workspace): WorkspaceView {
   return {
     workspaceId: workspace.id,
     path: workspace.path,
+    ...sourcePathFields(workspace.path, workspace.sourcePaths),
     title: workspace.title,
     sessionIds: [...workspace.sessionIds],
     createdAt: workspace.createdAt,
@@ -39,11 +40,18 @@ function changedWorkspaceView(workspaceId: string, value: unknown): WorkspaceVie
   return {
     workspaceId: WorkspaceId(workspaceId),
     path: record.path,
+    ...sourcePathFields(record.path, record.sourcePaths),
     title: record.title,
     sessionIds: [...record.sessionIds],
     createdAt: record.createdAt,
     updatedAt: record.updatedAt,
   }
+}
+
+/** Keep the legacy one-directory value identical in unary, baseline, and increment projections. */
+function sourcePathFields(path: string, sourcePaths: readonly string[] | undefined): Pick<WorkspaceView, 'sourcePaths'> {
+  if (sourcePaths === undefined || (sourcePaths.length === 1 && sourcePaths[0] === path)) return {}
+  return { sourcePaths: [...sourcePaths] }
 }
 
 /** Owns Workspace domain observation and all active follow generations. */

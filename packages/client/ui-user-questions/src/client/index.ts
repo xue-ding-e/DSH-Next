@@ -16,6 +16,9 @@ import type {} from '@deepseek-ai/dsh-api-remotes/client'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type {} from '@deepseek-ai/dsh-client-ui-chat/client'
 import type { ComposerChainProps } from '@deepseek-ai/dsh-client-ui-conversation/client'
+import type {} from '@deepseek-ai/dsh-client-ui-layout/client'
+import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
+import type {} from '@deepseek-ai/dsh-client-ui-workspace/client'
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import type { PendingInteractionPublisher } from '@deepseek-ai/dsh-client-ui-session/client'
 import type { TypertClientEventListener } from '@deepseek-ai/dsh-typert-protocol'
@@ -24,12 +27,17 @@ import type { AskUserQuestionItem, PendingUserQuestion, UserQuestionProjectionVi
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type { UserQuestionPanels, UserQuestionRecord } from '@deepseek-ai/dsh-client-ui-tool/client'
 import type { ToolCallId } from '@deepseek-ai/dsh-llm'
+import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
 import { brandString } from '@deepseek-ai/dsh-brand'
 import { createWaterfallRequest, PendingQuestion, type QuestionRpcChannel } from './contract/slots.ts'
 import { createQuestionDraftStore } from './draft-store.ts'
 import { QuestionComposer } from './QuestionComposer.tsx'
 import { answeredQuestionDefinition, questionReplyDefinition } from './question-reply.ts'
 import { QuestionReplyView } from './QuestionReplyView.tsx'
+import { QuestionNotification, type QuestionNotificationErrorState } from './QuestionNotification.tsx'
+import { QuestionNotificationSetting } from './QuestionNotificationSetting.tsx'
+import { NativeQuestionNotifications } from './native-notifications.ts'
+import type { DesktopQuestionNotifications } from '../desktop-notifications.ts'
 import { en, ja, es, fr, de, ru, pt, zh, type QuestionKey } from './locales.ts'
 
 export type {
@@ -46,6 +54,40 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
 
 /** Dictionary namespace owned by this plugin. */
 const NS = 'question'
+const QUESTION_NOTIFICATION_STORAGE_KEY = 'dsh.ui-user-questions.notifications'
+
+function readQuestionNotificationsEnabled(failed: () => void): boolean {
+  if (!('localStorage' in globalThis)) return true
+  try {
+    return globalThis.localStorage.getItem(QUESTION_NOTIFICATION_STORAGE_KEY) !== 'disabled'
+  } catch (_error: unknown) {
+    // Private browsing and restricted desktop profiles may deny local storage; the default stays enabled.
+    failed()
+    return true
+  }
+}
+
+function writeQuestionNotificationsEnabled(enabled: boolean): boolean {
+  try {
+    globalThis.localStorage.setItem(QUESTION_NOTIFICATION_STORAGE_KEY, enabled ? 'enabled' : 'disabled')
+    return true
+  } catch (_error: unknown) {
+    // A volatile preference is still useful when the host denies persistent browser storage.
+    return false
+  }
+}
+
+/** Device preferences and delivery errors are owned only by the Desktop document. */
+function createDesktopNotificationState() {
+  const preferenceError = createSnapshotStore(false)
+  const enabled = createSnapshotStore(readQuestionNotificationsEnabled(() => { preferenceError.set(true) }))
+  const error = createSnapshotStore<QuestionNotificationErrorState | null>(null)
+  let seq = 0
+  return {
+    preferenceError, enabled, error,
+    report: (kind: QuestionNotificationErrorState['kind']): void => { error.set({ kind, seq: ++seq }) },
+  }
+}
 
 type QuestionListener = TypertClientEventListener<'user-questions/request'>
 type ClientQuestionRequest = Parameters<QuestionListener>[0]
@@ -53,7 +95,7 @@ type ClientQuestionNext = Parameters<QuestionListener>[1]
 type ClientQuestionAnswer = Awaited<ReturnType<QuestionListener>>
 
 /** Required services: Agent scopes, Remote Events, Session UI, Slot registry, conversation nodes, and copy. */
-export const inject = ['sessions', 'remote', 'remote.userQuestions', 'uiSession', 'slots', 'locale', 'uiConversation']
+export const inject = ['sessions', 'remote', 'remote.userQuestions', 'uiSession', 'slots', 'locale', 'uiConversation', 'uiWorkspace']
 
 /** One card and the composer seat it moves in and out of. */
 interface QuestionCard {
@@ -82,7 +124,11 @@ interface QuestionCard {
 class QuestionCards {
   readonly #cards = new Map<string, QuestionCard>()
 
-  constructor(private readonly publish: PendingInteractionPublisher<PendingQuestion>) {}
+  constructor(
+    private readonly publish: PendingInteractionPublisher<PendingQuestion>,
+    private readonly notify: (pending: PendingQuestion) => void,
+    private readonly clearNotification: (key: string) => void,
+  ) {}
 
   byCallId(sessionId: SessionId, callId: string): QuestionCard | undefined {
     return this.#cards.get(PendingQuestion.keyOf(sessionId, callId))
@@ -111,11 +157,11 @@ class QuestionCards {
       const existing = this.byCallId(sessionId, callId)
       if (existing !== undefined) return existing
     }
-    return this.#create(new PendingQuestion(sessionId, questions, callId, () => this.keysFor(sessionId)))
+    return this.#create(new PendingQuestion(sessionId, questions, callId, () => this.keysFor(sessionId)), true)
   }
 
   /** Publish one carrier into the composer seat and register the card that owns it. */
-  #create(pending: PendingQuestion): QuestionCard {
+  #create(pending: PendingQuestion, announce: boolean): QuestionCard {
     const requests = new Set<Promise<void>>()
     const delegate = async (): Promise<void> => {
       pending.delegate()
@@ -138,6 +184,7 @@ class QuestionCards {
         /* v8 ignore next -- a card leaves the registry once; no caller holds a card the registry already replaced. */
         if (this.#cards.get(pending.key) !== card) return
         this.#cards.delete(pending.key)
+        this.clearNotification(pending.key)
         pending.close()
         unpublish?.()
         unpublish = undefined
@@ -152,7 +199,16 @@ class QuestionCards {
     // the tool call row builds another one from the same transcript record.
     pending.attachSeat({ hide: pending.review === undefined ? card.hide : card.remove })
     this.#cards.set(pending.key, card)
+    if (announce) this.notify(pending)
     return card
+  }
+
+  /** Reveal a pending question from the frame-wide notification. */
+  revealKey(key: string): boolean {
+    const card = this.#cards.get(key)
+    if (card === undefined) return false
+    card.reveal()
+    return true
   }
 
   /**
@@ -186,7 +242,7 @@ class QuestionCards {
       brandString<ToolCallId>(callId),
       () => this.keysFor(sessionId),
       record.answers,
-    ))
+    ), false)
     card.reveal()
     return true
   }
@@ -367,12 +423,45 @@ function publishContinuedQuestions(ctx: ClientContext, cards: QuestionCards): ()
  */
 export function apply(ctx: ClientContext): void {
   ctx.effect(() => ctx.locale.register(NS, { zh, en, ja, es, fr, de, ru, pt }), 'ui-user-questions: dictionaries')
+  const t = ctx.locale.bind(NS)
+  const desktop = typeof window === 'undefined' ? undefined
+    : (window as Window & { dshDesktop?: { questionNotifications?: DesktopQuestionNotifications } }).dshDesktop
+  const notifications = desktop === undefined ? undefined : createDesktopNotificationState()
+  let native: NativeQuestionNotifications | undefined
+  const announceQuestion = (pending: PendingQuestion): void => {
+    if (notifications === undefined || !notifications.enabled.getSnapshot()) return
+    const first = pending.questions[0]
+    if (native === undefined) notifications.report('native')
+    else native.show(pending.key, first?.header ?? t('notification.title'), first?.question ?? t('notification.body'))
+  }
   const questionDraftStore = createQuestionDraftStore()
   const registerPendingInteraction = ctx.uiSession.registerPendingInteraction<PendingQuestion>(
     pending => pending.kind === 'plan-review' ? 2 : 1,
   )
-  const cards = new QuestionCards(registerPendingInteraction)
-  ctx.effect(() => () => { cards.dispose() }, 'ui-user-questions: cards')
+  const cards = new QuestionCards(
+    registerPendingInteraction,
+    announceQuestion,
+    (key) => { native?.close(key) },
+  )
+  const openQuestion = (key: string): void => {
+    const pending = cards.source(key)
+    if (pending === undefined) return
+    try {
+      ctx.uiWorkspace.openSession(pending.sessionId)
+      cards.revealKey(key)
+      native?.close(key)
+    } catch (error) {
+      console.error('Question notification navigation failed', error)
+      notifications?.report('open')
+    }
+  }
+  ctx.effect(() => {
+    if (desktop !== undefined && notifications !== undefined) {
+      if (desktop.questionNotifications === undefined) notifications.report('native')
+      else native = new NativeQuestionNotifications(desktop.questionNotifications, openQuestion, notifications.report)
+    }
+    return async () => { cards.dispose(); await native?.dispose() }
+  }, 'ui-user-questions: cards and native notifications')
   const disposePanels = ctx.reflect.provide('userQuestionPanels', {
     reveal: (sessionId, callId) => cards.reveal(sessionId, callId),
     review: (sessionId, callId, record) => cards.review(sessionId, callId, record),
@@ -398,6 +487,26 @@ export function apply(ctx: ClientContext): void {
     key: 'question-reply',
     locale: NS,
   }, QuestionReplyView))
+  if (notifications !== undefined) {
+    ctx.slots.inject('shell.overlay', () => ctx.slots.register({
+      name: 'shell.overlay', id: 'question-notification', locale: NS,
+      inject: () => ({
+        hooks: { notificationError: notifications.error },
+        dismissError: () => { notifications.error.set(null) },
+      }),
+    }, QuestionNotification))
+    ctx.slots.inject('settings.general.item', () => ctx.slots.register({
+      name: 'settings.general.item', id: 'question-notifications', order: 55, locale: NS,
+      inject: () => ({
+        hooks: { enabled: notifications.enabled, preferenceError: notifications.preferenceError },
+        setEnabled: (enabled: boolean): void => {
+          notifications.enabled.set(enabled)
+          notifications.preferenceError.set(!writeQuestionNotificationsEnabled(enabled))
+          if (!enabled) native?.clear()
+        },
+      }),
+    }, QuestionNotificationSetting))
+  }
   ctx.remote.$on('user-questions/request', function (request, next) {
     return answerQuestion(ctx, this, request, next, cards)
   })

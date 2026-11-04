@@ -26,6 +26,30 @@ export class WorkspaceMoveInvalidError extends Error {
   }
 }
 
+/** A source directory list failed validation before the Workspace was changed. */
+export class WorkspaceSourcesInvalidError extends Error {
+  /**
+   * @param message - Invalid source.
+   * @param options - Original filesystem failure, when any.
+   */
+  constructor(message: string, options?: ErrorOptions) {
+    super(message, options)
+    this.name = 'WorkspaceSourcesInvalidError'
+  }
+}
+
+/** An attach request named a Session already accounted to another Workspace. */
+export class WorkspaceSessionOwnedError extends Error {
+  /**
+   * @param sessionId - Session whose existing owner prevents attachment.
+   * @param workspaceId - Workspace retaining the Session's account.
+   */
+  constructor(readonly sessionId: SessionId, readonly workspaceId: WorkspaceId) {
+    super(`cannot attach session '${sessionId}': workspace '${workspaceId}' already accounts it`)
+    this.name = 'WorkspaceSessionOwnedError'
+  }
+}
+
 /**
  * The registry-owned machinery an entity mutates through. Entities never see
  * the registry itself — only the open table, the canonical session-path
@@ -91,6 +115,14 @@ export class WorkspaceEntity implements Workspace {
     return this.record.title
   }
 
+  get sourcePaths(): readonly string[] {
+    return this.record.sourcePaths ?? [this.record.path]
+  }
+
+  get primaryPath(): string {
+    return this.record.sourcePaths?.[0] ?? this.record.path
+  }
+
   get createdAt(): string {
     return this.record.createdAt
   }
@@ -100,17 +132,43 @@ export class WorkspaceEntity implements Workspace {
   }
 
   get sessionIds(): readonly SessionId[] {
-    return this.record.sessionIds.filter(id => this.host.candidateMatches(id, this.record.path))
+    const paths = [this.path, ...this.sourcePaths, ...(this.record.retainedSourcePaths ?? [])]
+    return this.record.sessionIds.filter(id => paths.some(path => this.host.candidateMatches(id, path)))
   }
 
   async setTitle(title: string): Promise<void> {
     await this.mutate(record => ({ ...record, title }))
   }
 
+  async configure(title: string, sourcePaths?: readonly string[]): Promise<void> {
+    if (sourcePaths === undefined) return this.setTitle(title)
+    if (sourcePaths.length === 0) throw new WorkspaceSourcesInvalidError('a Workspace requires at least one source directory')
+    const canonical: string[] = []
+    for (const path of sourcePaths) {
+      let resolved: string
+      try {
+        resolved = this.sourcePaths.includes(path) ? path : await realpathNormalize(path)
+        if (!this.sourcePaths.includes(resolved) && !(await stat(resolved)).isDirectory()) {
+          throw new Error('not a directory')
+        }
+      } catch (error) {
+        throw new WorkspaceSourcesInvalidError(`Workspace source '${path}' is not an accessible directory`, { cause: error })
+      }
+      if (canonical.includes(resolved)) throw new WorkspaceSourcesInvalidError(`Workspace source '${path}' is duplicated`)
+      canonical.push(resolved)
+    }
+    await this.mutate((record) => {
+      const priorPaths = new Set([...(record.sourcePaths ?? []), ...(record.retainedSourcePaths ?? [])])
+      const retainedSourcePaths = [...priorPaths].filter(path => path !== record.path && !canonical.includes(path)
+        && record.sessionIds.some(id => this.host.candidateMatches(id, path)))
+      return { ...record, title, sourcePaths: canonical, retainedSourcePaths }
+    })
+  }
+
   async attachSession(sessionId: SessionId): Promise<void> {
     // Validation is skipped when the settled snapshot already accounts the
-    // id: the cwd fact was checked when it first attached and both inputs
-    // (stored header cwd, workspace path) are immutable. Membership itself is
+    // id: its immutable header cwd was checked when it first attached, and
+    // removed sources retain that existing ownership. Membership itself is
     // decided on the write chain inside `mutate`, never on this snapshot.
     if (!this.record.sessionIds.includes(sessionId)) {
       const header = await this.host.readSessionHeader(sessionId)
@@ -136,7 +194,7 @@ export class WorkspaceEntity implements Workspace {
           + `its cwd '${header.cwd}' is not a directory`,
         )
       }
-      if (cwd !== this.record.path) {
+      if (cwd !== this.record.path && !this.sourcePaths.includes(cwd)) {
         throw new Error(
           `cannot attach session '${sessionId}' to workspace '${this.record.path}': `
           + `its cwd resolves to '${cwd}'`,
@@ -144,9 +202,18 @@ export class WorkspaceEntity implements Workspace {
       }
       this.host.rememberSessionPath(sessionId, cwd)
     }
-    await this.mutate(record => record.sessionIds.includes(sessionId)
-      ? record
-      : { ...record, sessionIds: [sessionId, ...record.sessionIds] })
+    await this.mutate((record) => {
+      if (record.sessionIds.includes(sessionId)) return record
+      for (const [id, candidate] of this.host.table().entries()) {
+        if (id !== this.id && candidate.sessionIds.includes(sessionId)) {
+          throw new WorkspaceSessionOwnedError(sessionId, id)
+        }
+      }
+      if (![record.path, ...(record.sourcePaths ?? [])].some(path => this.host.candidateMatches(sessionId, path))) {
+        throw new WorkspaceSourcesInvalidError(`cannot attach session '${sessionId}': its directory is no longer a Workspace source`)
+      }
+      return { ...record, sessionIds: [sessionId, ...record.sessionIds] }
+    })
   }
 
   async insertSessionBefore(sessionId: SessionId, beforeSessionId?: SessionId): Promise<void> {
@@ -205,8 +272,9 @@ export class WorkspaceEntity implements Workspace {
     try {
       next = await this.host.table().update(this.id, (current) => {
         const changed = fn(current)
+        const paths = [changed.path, ...(changed.sourcePaths ?? []), ...(changed.retainedSourcePaths ?? [])]
         const sessionIds = changed.sessionIds.filter(
-          id => this.host.candidateMatches(id, changed.path),
+          id => paths.some(path => this.host.candidateMatches(id, path)),
         )
         if (changed === current && sessionIds.length === current.sessionIds.length) {
           throw unchangedSentinel

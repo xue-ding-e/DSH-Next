@@ -9,6 +9,9 @@
   ],
   "references": [
     {
+      "path": "../../packages/client/ui-user-questions"
+    },
+    {
       "path": "../../packages/boot/app-boot"
     },
     {

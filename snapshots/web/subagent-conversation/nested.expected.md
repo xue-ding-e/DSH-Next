@@ -13,6 +13,7 @@
   - button "More conversation views"
 - text: Give one concrete event sourcing example. {{clock}}
 - button "Copy"
+- button "Edit and resend"
 - status: Completed
 - button "Completed in {{duration}}" [disabled]
 - status:

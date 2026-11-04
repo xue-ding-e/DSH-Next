@@ -175,6 +175,21 @@ interface RequestImageAttachment {
 
 `saveImage()` prepares and atomically commits a provider-independent normalized attachment before returning its `ImageAttachmentRef`. `saveImages()` prepares every validated attachment once before publishing the batch, so validation rejection leaves no partial objects and publication does not repeat decoding or quality selection. `admitPromptContent()` accepts the complete ordered Host prompt after upload receipt resolution, replaces base64 image uploads with durable references, passes durable file references and already stored images unchanged, and counts every image toward the per-message image count and aggregate byte limits, a stored image by the bytes of its upload. `admitEncodedImages()` supports other wire entries and delegates count, aggregate-byte, and ordered batch admission to `saveImages()`. `admitEncodedFile()` gives encoded protocol adapters the same service-owned canonical-base64 admission, and `isAttachmentError()` lets those adapters recognize stable attachment failures without importing implementation helpers. `readImage()` verifies a normalized attachment from an authorized session path. `imageHostPath()` exposes only the provider-owned host object location; it does not decide whether the current tool execution world can read it. `readImageRequest()` derives and caches one deterministic request version at an exact route-chosen target size and encoded-byte target. That version contains encoded bytes and metadata but no execution-world path. New entries are fully decoded before publication, while cache hits use a bounded metadata probe. Callers use `Promise.all` over the singular method when they need an ordered batch. The local implementation lazily encodes preferred candidates, singleflights equal request identities, lets each waiter cancel independently, stops shared work when no waiter remains, and bounds all transforms with its instance-level limiter, which defaults to two simultaneous transformations. The service is retention-neutral: resumed and forked sessions may share objects, so reference-aware garbage collection is deferred rather than tied to one session's deletion.
 
+## Historical file reuse
+
+`fileUploads.stageHistory()` authorizes both the source and receiving Session, selects the exact durable human message and file position, and returns a fresh receipt owned by the receiver. It does not rewrite the source log. A missing or mismatched file is rejected; reading pending files retains its separate queue authorization.
+
+```ts type-equiv
+/** Exact durable human-message file to restage for a receiving Agent. */
+interface HistoryFileUploadRequest {
+  readonly sourceSessionId: SessionId
+  readonly messageId: MessageId
+  /** Zero-based content position distinguishes repeated bytes with different stored names. */
+  readonly contentIndex: number
+  readonly attachmentId: AttachmentId
+}
+```
+
 <!-- BEGIN GENERATED cordis-surface (gen-cordis-catalog.ts) — do not edit between markers -->
 
 <a id="cordis-surface"></a>
@@ -337,6 +352,17 @@ registerRecallResolver(resolve: QueueRecallResolver): () => void
  * @returns the staged receipt and durable file reference.
  */
 @Remote('upload') async upload(agent: Agent, request: EncodedFileUploadRequest, signal: AbortSignal): Promise<FileUploadValue>
+
+/**
+ * Restage a file referenced by one exact durable human message, without changing its source.
+ * The receiving Agent owns the fresh receipt; caller-supplied file metadata grants no authority.
+ * Cancellation or target disposal before staging grants no receipt. Observation failures reject the call.
+ * @param agent - ordinary receiving Agent resolved by the Remote Agent lookup.
+ * @param request - source Session, durable human message, content position, and file attachment identity.
+ * @param signal - cancellation while observing the source and before staging.
+ * @returns a fresh target-owned receipt and the authoritative stored file reference.
+ */
+@Remote({ resources: { session: (targetId, request) => [targetId, request.sourceSessionId] } }) async stageHistory(agent: Agent, request: HistoryFileUploadRequest, signal: AbortSignal): Promise<FileUploadValue>
 
 /**
  * Persist raw chunks for one Session without aggregating the upload.

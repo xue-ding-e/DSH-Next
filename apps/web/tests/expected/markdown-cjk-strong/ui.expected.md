@@ -8,6 +8,7 @@
   - button "More conversation views"
 - text: Render adjacent CJK strong emphasis. {{clock}}
 - button "Copy"
+- button "Edit and resend"
 - status: Completed
 - button "Completed in {{duration}}" [disabled]
 - heading "CJK strong emphasis" [level=2]

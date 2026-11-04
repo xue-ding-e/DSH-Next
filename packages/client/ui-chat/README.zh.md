@@ -43,7 +43,9 @@ kind: "package-reference"
 
 Session 作用域的 `conversation.chat.user.content` Factory 只渲染用户内容区域：文本、额外内容块、按输入顺序排列的图片／文件附件及引用摘要。[`UserContentInput`](src/client/contract/slots.ts) 携带预处理的 `content`、变换 `facts`、显示 props 和显式 `loadImage`；引用动作由节点自己的 Injection 提供。正文调用共享 `conversation.user.text` Factory，图片调用自身拥有的图片 Slot。直接调用需要 Session 绑定，行包装层由调用方提供。
 
-`UserStyleBubble` 和[各来源包装层](<src/client/chat/MessageItem.tsx#L157-L309>) 保留用户行、key、pending／echo 标记、时间、复制控件及其他消息操作。内容 Factory 不读取来源专属模型或私有 Context，也不是全局用户内容替换入口。
+`UserStyleBubble` 和[各来源包装层](src/client/chat/MessageItem.tsx) 保留用户行、key、pending／echo 标记、时间、复制控件及其他消息操作。内容 Factory 不读取来源专属模型或私有 Context，也不是全局用户内容替换入口。
+
+已记录的人工消息在原内容下方提供「编辑并重新发送」。取消只丢弃本地修改；保存并发送才会在原消息之前分支，并在子 Session 中发送替换消息。图片、普通文件及编辑文本中的序列化引用仍随提示词发送，附件保持原顺序。普通文件只在子 Session 创建后取得[按历史授权的凭证](../file-upload/README.zh.md#understand-the-implementation)。原日志与原对话的输入框草稿保持不变。失败时保留行内草稿，可重试或取消；发送回复丢失时锁定文本，并使用同一请求和凭证重试；分支结果未确认时须先查看最近对话再重新操作。离开编辑器会取消尚未执行的导航。
 
 独立的 Markdown 图片以内嵌预览显示，点击打开共享图片浮层；本地路径在消息落定后基于当前查看的工作区解析。图片文件链接保持点击打开侧栏，鼠标停留或键盘聚焦时显示缩略图，Esc 关闭缩略图。图片加载失败时保留本地化状态与图片说明；不执行重复图片过滤。
 
@@ -192,6 +194,8 @@ Chat view 在标记了 `data-text-interaction-source` 的业务节点上检测�
 ## 已知限制与暂缓事项
 
 <a id="known-limitations-and-deferred-work"></a>
+
+- **消息编辑** — 对于不支持的内容块、没有持久消息身份的合成行和非人工输入，Chat 隐藏编辑操作，以免重新发送时丢失内容。
 
 - **运行图标分辨率**——动态鲸鱼使用 28×28 图片，默认 CSS 尺寸为 14×14。较大的正文字号或大于 2 的设备像素比可能使位图描边变模糊；静态回退图标仍为矢量图。浏览器图片缓存管理动画时钟，因此重新挂载不保证从第一帧重新播放。
 

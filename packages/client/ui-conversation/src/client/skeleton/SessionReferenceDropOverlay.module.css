@@ -1,0 +1,22 @@
+.mask {
+  position: fixed;
+  z-index: 1000;
+  display: grid;
+  place-items: center;
+  box-sizing: border-box;
+  pointer-events: none;
+  border: 1px solid color-mix(in srgb, var(--dsw-static-blue-500) 45%, transparent);
+  border-radius: var(--dsw-radius-xl);
+  background: color-mix(in srgb, var(--dsw-static-blue-600) 32%, transparent);
+}
+
+.hint {
+  max-width: calc(100% - 32px);
+  padding: 8px 12px;
+  border-radius: var(--dsw-radius-lg);
+  background: var(--dsw-static-blue-900);
+  color: var(--dsw-static-neutral-bluish-00);
+  box-shadow: var(--dsw-elevation-panel);
+  font: var(--dsw-font-s-14);
+  text-align: center;
+}

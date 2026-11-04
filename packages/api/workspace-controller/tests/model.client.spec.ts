@@ -171,6 +171,23 @@ function baseline(
 }
 
 describe('ClientWorkspaceModel', () => {
+  it('forwards ordered source directories and retains the authoritative rename projection', async () => {
+    const remote = new FakeWorkspaceRemote()
+    const model = modelFor(remote)
+    const original = workspace('sources')
+    const sourcePaths = ['/primary', original.path]
+    const accepted = { ...original, sourcePaths, title: 'Multiple sources' }
+    remote.onRename = async () => remoteOk({ workspace: accepted })
+    baseline(model, [original])
+
+    await expect(model.rename(original.workspaceId, 'Multiple sources', sourcePaths))
+      .resolves.toEqual(remoteOk({ workspace: accepted }))
+    expect(remote.calls).toEqual([{
+      method: 'rename', request: { workspaceId: original.workspaceId, title: 'Multiple sources', sourcePaths },
+    }])
+    expect(model.getSnapshot().items).toEqual([accepted])
+  })
+
   it('publishes the prepared Workspace and leaves the list unchanged on refusal', async () => {
     const remote = new FakeWorkspaceRemote()
     const model = modelFor(remote)

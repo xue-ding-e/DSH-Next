@@ -1,3 +1,4 @@
+import { EOL } from 'node:os'
 import type { Locator, Page } from 'playwright'
 import { expect } from 'vitest'
 
@@ -127,7 +128,7 @@ export async function expectWrappedCommandText(
     }
     await expect.poll(() => page.evaluate(() => document.getSelection()?.toString())).toBe(expected)
     await page.context().grantPermissions(['clipboard-read', 'clipboard-write'], { origin: new URL(page.url()).origin })
-    const sentinel = `${expected}\nclipboard-before-copy`
+    const sentinel = `${expected}${EOL}clipboard-before-copy`
     await page.evaluate(value => navigator.clipboard.writeText(value), sentinel)
     await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe(sentinel)
     await page.keyboard.press('ControlOrMeta+C')

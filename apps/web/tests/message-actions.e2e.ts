@@ -231,7 +231,7 @@ describe('web e2e: message IconActions and clocks on settled history', () => {
     }
   })
 
-  it.skipIf(MODE === 'record')('enables branch only on the completed transcript tail', async () => {
+  it.skipIf(MODE === 'record')('offers user-message editing and enables branch only on completed transcript tails', async () => {
     onTestFailed(() => saveFailureShot(page, 'screenshots/non-migrating-session-reads/web-e2e-message-actions'))
     const groupRow = page.locator('[role="treeitem"]').first()
     await groupRow.waitFor({ timeout: 15_000 })
@@ -262,7 +262,10 @@ describe('web e2e: message IconActions and clocks on settled history', () => {
     await page.keyboard.press('Tab')
     await expect.poll(() => page.getByRole('tooltip').allTextContents(), { timeout: 5_000 })
       .toEqual(['Available only on the last message of a completed turn'])
-    await expect.poll(() => page.getByRole('button', { name: 'Edit' }).count(), { timeout: 5_000 }).toBe(0)
+    const editButtons = page.getByRole('button', { name: 'Edit and resend', exact: true })
+    await expect.poll(() => editButtons.count(), { timeout: 5_000 }).toBe(3)
+    expect(await editButtons.evaluateAll(buttons => buttons.map(button =>
+      button.closest<HTMLElement>('[data-chat-flow-kind]')?.dataset.chatFlowKind))).toEqual(['user', 'user', 'user'])
   }, 60_000)
 
   it.skipIf(MODE === 'record')('keeps an action tooltip above the sticky composer', async () => {

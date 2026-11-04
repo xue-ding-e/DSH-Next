@@ -27,9 +27,12 @@ kind: "package-reference"
 
 当宿主应允许用户提及另一个会话并把其上下文交给模型时，启用此服务。由于它消费后端无关的 compact 检查点标记，任何 session-query 后端都可配合使用。
 
+<a id="mention-syntax"></a>
 ### mention 语法
 
 规范 mention 是 Markdown 形式的 `@[label](dsh-session:<base64url 编码的 id>)`，或裸 `dsh-session:` URI；每个 JavaScript 字符串会话 id 都能精确往返。服务会把 mention 改写为消息中可读的 `@label` 文本，并返回结构化引用。显式 Markdown mention 会拒绝格式错误的 URI；空或只含标点符号的 scheme mention 仍是普通讨论文本。
+
+纯子路径 `@deepseek-ai/dsh-session-reference/uri` 在浏览器和 Node 中提供 `encodeSessionReferenceUri`、`decodeSessionReferenceUri`、`formatSessionReferenceMention` 与 `parseSessionReferenceText`。它使用标准 UTF-8 和 base64 API，不加载 Host 插件。宿主与浏览器拖拽源共用同一套规范 JSON 字符串编码；接收方可根据会话 id 和 label 重新生成 mention，拒绝字段不匹配的载荷。
 
 ### agent（智能体）能得到什么
 

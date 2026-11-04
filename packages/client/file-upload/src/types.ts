@@ -1,7 +1,9 @@
 /** Browser-safe request and receipt types for staged file uploads. */
 
-import type { FileAttachmentRef, ImageAttachmentRef } from '@deepseek-ai/dsh-attachment/types'
+import type { AttachmentId, FileAttachmentRef, ImageAttachmentRef } from '@deepseek-ai/dsh-attachment/types'
 import type { Branded } from '@deepseek-ai/dsh-brand'
+import type { MessageId } from '@deepseek-ai/dsh-llm/brand'
+import type { SessionId } from '@deepseek-ai/dsh-session/types'
 
 /** Canonical encoded upload accepted by the Remote fallback. */
 export interface EncodedFileUploadRequest {
@@ -9,6 +11,15 @@ export interface EncodedFileUploadRequest {
   readonly data: string
   /** Optional display name; the Host sanitizes it into the stored leaf name. */
   readonly name?: string
+}
+
+/** Exact durable human-message file to restage for a receiving Agent. */
+export interface HistoryFileUploadRequest {
+  readonly sourceSessionId: SessionId
+  readonly messageId: MessageId
+  /** Zero-based content position distinguishes repeated bytes with different stored names. */
+  readonly contentIndex: number
+  readonly attachmentId: AttachmentId
 }
 
 /** Durable receipt for one staged file upload. */

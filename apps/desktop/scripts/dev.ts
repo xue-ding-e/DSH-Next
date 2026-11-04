@@ -10,6 +10,7 @@ import type { DesktopRelease } from '../src/release.ts'
 import { developmentRuntimeDirectory, resolveDesktopBuildTarget } from './desktop-build-paths.mjs'
 import { prepareDevelopmentProject } from './development-project.ts'
 import { prepareDevelopmentApp } from './development-app.ts'
+import { prepareDevelopmentWindowsApp } from './development-windows-app.ts'
 import { preparePrimaryRuntime } from './prepare-primary-runtime.ts'
 import { repositoryVersion } from '../../../scripts/client-build-environment.ts'
 
@@ -83,7 +84,10 @@ async function launchElectron(): Promise<void> {
     await run(executable, [], APP_ROOT, environment)
     return
   }
-  await run(electron, [
+  const executable = process.platform === 'win32'
+    ? prepareDevelopmentWindowsApp({ electron, directory: DEVELOPMENT_ROOT, icon: join(APP_ROOT, 'resources', 'tray-windows.ico') })
+    : electron
+  await run(executable, [
     `--inspect=127.0.0.1:${String(mainPort)}`,
     `--remote-debugging-port=${String(rendererPort)}`,
     `--user-data-dir=${userData}`,

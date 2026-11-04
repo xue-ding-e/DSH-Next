@@ -49,6 +49,7 @@ import { PerformanceUsagePolicy } from './performance-usage.ts'
 import { useTurnDataValue } from './chat/use-turn-data.ts'
 import { bindDisclosure } from './chat/use-disclosure.ts'
 import { useFlowHidden, useMotionHidden } from './chat/flow-motion.ts'
+import { createUserMessageEdit } from './chat/user-message-edit.ts'
 
 /** Bind group and header visibility to the viewport of one flow render. */
 export const CHAT_FLOW_INJECT: ChatFlowInjected = {
@@ -76,7 +77,7 @@ export const CHAT_NODE_INJECT: ChatNodeInjected = {
 /** Services required by the Chat target and its presentation registrations. */
 export const inject = [
   'slots', 'sessions', 'uiWorkspace', 'uiSession', 'uiConversation', 'locale',
-  'configForms', 'connection', 'remote', 'remote.session', 'sidebarRight', 'fileDrag',
+  'configForms', 'connection', 'remote', 'remote.session', 'remote.fileUploads', 'sidebarRight', 'fileDrag',
 ]
 
 /**
@@ -307,6 +308,26 @@ export function apply(ctx: Context): void {
                 // Fork or child-title failure leaves the source view unchanged.
               })
           },
+          editUserMessage: message => createUserMessageEdit({
+            source: binding,
+            sessions: ctx.sessions,
+            readImage: async (attachment, signal) => {
+              signal.throwIfAborted()
+              const result = await ctx.remote.session.attachment({ sessionId, attachmentId: attachment.attachmentId })
+              signal.throwIfAborted()
+              if (!result.ok) throw result.error
+              return {
+                type: 'image', mediaType: result.value.attachment.mediaType, data: result.value.data,
+                ...attachment.name === undefined ? {} : { name: attachment.name },
+              }
+            },
+            stageFile: async (targetId, request, signal) => {
+              const result = await ctx.remote.fileUploads.stageHistory(targetId, request, signal)
+              if (!result.ok) throw result.error
+              return result.value
+            },
+            openSession: (childId) => { ctx.uiWorkspace.openSession(childId) },
+          }, message),
         }
       },
     }, ChatView)

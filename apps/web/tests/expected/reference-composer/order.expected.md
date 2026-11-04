@@ -8,6 +8,7 @@
   - button "More conversation views"
 - text: Research notes what changed? Referenced session · Research notes {{clock}}
 - button "Copy"
+- button "Edit and resend"
 - status: Completed
 - button "Completed in {{duration}}" [disabled]
 - textbox "Message or run a task, / commands, @ files or sessions"

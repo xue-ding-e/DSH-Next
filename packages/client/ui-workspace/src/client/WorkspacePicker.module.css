@@ -15,6 +15,42 @@
   color: var(--dsw-alias-state-error-primary);
 }
 
+.dropZone {
+  display: flex;
+  min-height: 180px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  flex-direction: column;
+  border: 0.5px dashed var(--dsw-alias-border-l2);
+  border-radius: var(--dsw-radius-lg);
+  padding: 24px;
+  color: var(--dsw-alias-label-secondary);
+  text-align: center;
+}
+
+.selectionDialog {
+  width: min(640px, calc(100vw - 48px));
+}
+
+.dropZone strong {
+  color: var(--dsw-alias-label-primary);
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: 500;
+}
+
+.dropZone[data-drag-over] {
+  border-color: var(--dsw-alias-label-primary);
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.dropZone > span {
+  max-width: 300px;
+  font-size: 12px;
+  line-height: 18px;
+}
+
 .menuStatus,
 .pathSuffix {
   color: var(--dsw-alias-label-secondary);

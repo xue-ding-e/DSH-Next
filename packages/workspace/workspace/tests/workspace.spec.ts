@@ -18,6 +18,7 @@ import WorkspaceRegistry, {
   type workspaceDomainState,
   WorkspaceMoveInvalidError,
   WorkspaceOrderInvalidError,
+  WorkspaceSourcesInvalidError,
 } from '../src/index.ts'
 import type { WorkspaceDomainState, WorkspaceRecord } from '../src/index.ts'
 import { defaultWorkspaceTitle, fullyQualifiedWorkspacePath } from '../src/paths.ts'
@@ -1023,6 +1024,165 @@ describe('header-validated membership projection', () => {
       },
     )
     await expect(harness({ pool: corruptPending })).rejects.toThrow(/still present in registry order/)
+  })
+})
+
+describe('Workspace source directories', () => {
+  it('restores canonical ordered sources and the primary directory without changing its anchor', async () => {
+    const anchor = await makeDir('sources-anchor')
+    const secondary = await makeDir('sources-secondary')
+    const alias = join(base, 'sources-alias')
+    await symlink(secondary, alias, 'junction')
+    const initial = await harness()
+    onTestFinished(() => initial.ctx.fiber.dispose())
+    const workspace = await initial.registry.create(anchor)
+    expect(workspace.sourcePaths).toEqual([anchor])
+    expect(workspace.primaryPath).toBe(anchor)
+    expect(storedRecord(initial.pool, workspace.id).sourcePaths).toBeUndefined()
+
+    await workspace.configure('Multiple sources', [join(alias, '.'), anchor])
+    expect(workspace.path).toBe(anchor)
+    expect(workspace.sourcePaths).toEqual([secondary, anchor])
+    expect(workspace.primaryPath).toBe(secondary)
+    await workspace.configure('Title only')
+    expect(workspace.sourcePaths).toEqual([secondary, anchor])
+    await initial.ctx.fiber.dispose()
+
+    const restarted = await harness({ pool: initial.pool })
+    onTestFinished(() => restarted.ctx.fiber.dispose())
+    const restored = restarted.registry.get(workspace.id)!
+    expect(restored.title).toBe('Title only')
+    expect(restored.path).toBe(anchor)
+    expect(restored.sourcePaths).toEqual([secondary, anchor])
+    expect(restored.primaryPath).toBe(secondary)
+    expect(restarted.pool.versions.get('workspace')).toBe(DOMAIN_VERSION)
+  })
+
+  it('leaves title, sources, members, and durable events unchanged when any source is invalid', async () => {
+    const anchor = await makeDir('invalid-sources-anchor')
+    const secondary = await makeDir('invalid-sources-secondary')
+    const alias = join(base, 'invalid-sources-alias')
+    await symlink(secondary, alias, 'junction')
+    const file = join(base, 'source-file')
+    await writeFile(file, 'file')
+    const initial = await harness()
+    onTestFinished(() => initial.ctx.fiber.dispose())
+    initial.setSessions([header('owned', anchor)])
+    const workspace = await initial.registry.create(anchor)
+    await workspace.attachSession(SessionId('owned'))
+    await workspace.configure('Saved', [secondary, anchor])
+    const saved = structuredClone(storedRecord(initial.pool, workspace.id))
+    const written = initial.changes.length
+    const invalidSources = [
+      [], [anchor, anchor], [secondary, alias], [anchor, join(base, 'missing-source')],
+      [anchor, file], [anchor, '.'],
+    ]
+
+    for (const sources of invalidSources) {
+      await expect(workspace.configure('Must not save', sources)).rejects.toBeInstanceOf(WorkspaceSourcesInvalidError)
+      expect(workspace.title).toBe('Saved')
+      expect(workspace.sourcePaths).toEqual([secondary, anchor])
+      expect(workspace.sessionIds).toEqual(['owned'])
+      expect(storedRecord(initial.pool, workspace.id)).toEqual(saved)
+      expect(initial.changes).toHaveLength(written)
+    }
+  })
+
+  it('keeps both title and sources unchanged when their durable write fails', async () => {
+    const anchor = await makeDir('failed-source-write-anchor')
+    const secondary = await makeDir('failed-source-write-secondary')
+    const initial = await harness()
+    onTestFinished(() => initial.ctx.fiber.dispose())
+    const workspace = await initial.registry.create(anchor)
+    const saved = structuredClone(storedRecord(initial.pool, workspace.id))
+    const written = initial.changes.length
+    initial.pool.failNextWrites = 1
+
+    await expect(workspace.configure('Lost', [secondary])).rejects.toThrow(/injected/)
+    expect(workspace.title).toBe(saved.title)
+    expect(workspace.sourcePaths).toEqual([anchor])
+    expect(storedRecord(initial.pool, workspace.id)).toEqual(saved)
+    expect(initial.changes).toHaveLength(written)
+  })
+})
+
+describe('Workspace source membership', () => {
+  it('keeps one Session owner when Workspaces share a source and attach concurrently', async () => {
+    const firstAnchor = await makeDir('shared-source-first')
+    const secondAnchor = await makeDir('shared-source-second')
+    const shared = await makeDir('shared-source')
+    const initial = await harness()
+    onTestFinished(() => initial.ctx.fiber.dispose())
+    initial.setSessions([header('shared-session', shared)])
+    const first = await initial.registry.create(firstAnchor)
+    const second = await initial.registry.create(secondAnchor)
+    await first.configure('First', [firstAnchor, shared])
+    await second.configure('Second', [secondAnchor, shared])
+
+    const attached = await Promise.allSettled([
+      first.attachSession(SessionId('shared-session')),
+      second.attachSession(SessionId('shared-session')),
+    ])
+    expect(attached.map(result => result.status).sort()).toEqual(['fulfilled', 'rejected'])
+    expect(attached.find(result => result.status === 'rejected')).toMatchObject({
+      reason: { name: 'WorkspaceSessionOwnedError', sessionId: 'shared-session' },
+    })
+    expect([...first.sessionIds, ...second.sessionIds]).toEqual(['shared-session'])
+    await initial.ctx.fiber.dispose()
+
+    const restarted = await harness({ pool: initial.pool, sessions: [header('shared-session', shared)] })
+    onTestFinished(() => restarted.ctx.fiber.dispose())
+    expect(restarted.registry.list().flatMap(workspace => workspace.sessionIds)).toEqual(['shared-session'])
+  })
+
+  it('retains secondary-source history and order after removing the source and restarting', async () => {
+    const anchor = await makeDir('retained-source-anchor')
+    const secondary = await makeDir('retained-source-secondary')
+    const sessions = [header('anchor-session', anchor), header('secondary-session', secondary), header('unowned', secondary)]
+    const initial = await harness()
+    onTestFinished(() => initial.ctx.fiber.dispose())
+    initial.setSessions(sessions)
+    const workspace = await initial.registry.create(anchor)
+    await workspace.configure('Sources', [anchor, secondary])
+    await workspace.attachSession(SessionId('anchor-session'))
+    await workspace.attachSession(SessionId('secondary-session'))
+    expect(workspace.sessionIds).toEqual(['secondary-session', 'anchor-session'])
+    await workspace.configure('Anchor only', [anchor])
+    expect(workspace.sourcePaths).toEqual([anchor])
+    expect(workspace.sessionIds).toEqual(['secondary-session', 'anchor-session'])
+    await expect(workspace.attachSession(SessionId('unowned'))).rejects.toThrow(/resolves to/)
+    await workspace.setTitle('History retained')
+    expect(storedRecord(initial.pool, workspace.id).sessionIds).toEqual(['secondary-session', 'anchor-session'])
+    await initial.ctx.fiber.dispose()
+
+    const restarted = await harness({ pool: initial.pool, sessions })
+    onTestFinished(() => restarted.ctx.fiber.dispose())
+    const restored = restarted.registry.get(workspace.id)!
+    expect(restored.sourcePaths).toEqual([anchor])
+    expect(restored.sessionIds).toEqual(['secondary-session', 'anchor-session'])
+    await restored.insertSessionBefore(SessionId('anchor-session'), SessionId('secondary-session'))
+    await restored.configure('Same sources', [anchor])
+    expect(restored.sessionIds).toEqual(['anchor-session', 'secondary-session'])
+    await restored.detachSession(SessionId('secondary-session'))
+    await expect(restored.attachSession(SessionId('secondary-session'))).rejects.toThrow(/resolves to/)
+    expect(restored.sessionIds).toEqual(['anchor-session'])
+  })
+
+  it('retains configured missing directories while requiring a newly added directory to exist', async () => {
+    const anchor = await makeDir('missing-source-anchor')
+    const secondary = await makeDir('missing-source-secondary')
+    const initial = await harness()
+    onTestFinished(() => initial.ctx.fiber.dispose())
+    const workspace = await initial.registry.create(anchor)
+    await workspace.configure('Two sources', [anchor, secondary])
+    await rm(secondary, { recursive: true })
+    await workspace.configure('Missing primary retained', [secondary, anchor])
+    expect(workspace.primaryPath).toBe(secondary)
+    await workspace.configure('Removed', [anchor])
+    await expect(workspace.configure('Re-add missing source', [secondary, anchor]))
+      .rejects.toBeInstanceOf(WorkspaceSourcesInvalidError)
+    expect(workspace.title).toBe('Removed')
+    expect(workspace.sourcePaths).toEqual([anchor])
   })
 })
 

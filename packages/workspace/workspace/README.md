@@ -59,6 +59,12 @@ await project.setTitle('Renamed')
 ctx.workspaceRegistry.list() // shows the project, newest first
 ```
 
+### Source directories
+
+`configure(title, sourcePaths?)` saves the title and ordered source directories together. New directories must be fully qualified, exist, and resolve to distinct canonical paths; an empty list or invalid directory rejects the entire edit. Omit `sourcePaths` to keep the current list. A configured directory can remain in the list while it is missing.
+
+`path` remains the original canonical registration directory. `sourcePaths` defaults to that directory, and its first entry is `primaryPath`, which the Session controller uses for a new Session's initial cwd. Editing sources never changes an existing Session's recorded cwd. `status()` checks the original registration directory, independently of the primary source.
+
 <a id="first-use-workspace"></a>
 ### First-use Workspace
 
@@ -70,7 +76,7 @@ The first successful registration records its identity durably. Repeated calls r
 
 ### Grouping sessions under a project
 
-A session joins the project of the directory it runs in: create a session in a project's directory and it appears under that project, newest first. A session can only belong to one project. A new session must have a recorded directory that resolves to the project's directory. Already-accounted sessions keep their project and order when their fully qualified recorded path is missing, including a dangling symlink; renaming or reordering the project does not remove that ownership. Missing headers, invalid recorded paths, existing mismatched directories, and filesystem failures other than ENOENT remain excluded. Keeping ownership does not recreate the directory or relax new-session attachment, so a fork can still fail to attach while the directory is missing.
+A new Session can attach when its recorded cwd resolves to the original registration directory or a configured source. Each Session can belong to only one project, including when projects share a source. Removing a secondary source preserves its existing Sessions and manual order across restarts, while rejecting new attachments there. Already-accounted Sessions also retain ownership when their fully qualified recorded path is missing, including a dangling symlink. Missing headers, invalid recorded paths, directories outside the original, configured, or retained sources, and filesystem failures other than ENOENT remain excluded. Retaining ownership never recreates a directory or relaxes new attachments, so a fork can fail to attach in a removed or missing source.
 
 ### Hiding and restoring sessions, and removing projects
 

@@ -7,6 +7,7 @@
   - button "More conversation views"
 - text: Show the local preview URL. {{clock}}
 - button "Copy"
+- button "Edit and resend"
 - status: Completed
 - button "Completed in {{duration}}" [disabled]
 - heading "Inline code links" [level=2]

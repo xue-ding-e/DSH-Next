@@ -60,11 +60,11 @@ export interface SessionActivity {
 }
 
 /**
- * One workspace: a stable id over an existing directory, a display title, and
- * an ordered candidate account of sessions. Membership validates header cwd
- * against the workspace path, but preserves an existing account when its
- * fully qualified cwd is missing. Consumers only see this interface; the
- * implementation stays private.
+ * One workspace: a stable id over its original directory, ordered source
+ * directories, a display title, and an ordered Session account. Membership
+ * validates header cwd against its original, configured, or retained sources;
+ * an existing account survives a missing fully qualified cwd. Consumers only
+ * see this interface; the implementation stays private.
  */
 export interface Workspace {
   /** Stable record id (generated uuid). */
@@ -76,6 +76,12 @@ export interface Workspace {
    * afterwards, even when the directory disappears (see {@link status}).
    */
   readonly path: string
+
+  /** Ordered canonical source directories; the first is the primary directory for new Sessions. */
+  readonly sourcePaths: readonly string[]
+
+  /** Primary source directory used when creating a Session. */
+  readonly primaryPath: string
 
   /** Display title. Defaults to the final path segment, or a filesystem root's own spelling; duplicates are allowed. */
   readonly title: string
@@ -91,7 +97,9 @@ export interface Workspace {
    * prepended at attach, explicit reordering goes through
    * `insertSessionBefore`, and activity never reorders. The durable candidate
    * account is filtered synchronously: missing headers, invalid cwd values,
-   * and canonical cwd mismatches are never returned. A fully qualified cwd
+   * and cwd values outside the original, configured, or retained sources are
+   * never returned. Removing a configured source preserves existing membership
+   * and manual order. A fully qualified cwd
    * whose realpath or directory stat fails with ENOENT preserves an existing
    * candidate, including a dangling symlink; other filesystem failures do not.
    * A subsequent mutation prunes filtered candidates, not missing-directory
@@ -107,13 +115,25 @@ export interface Workspace {
   setTitle(title: string): Promise<void>
 
   /**
+   * Save a title and source directories atomically. Existing missing directories may be retained;
+   * newly added directories must exist. The first directory becomes primary for new Sessions.
+   * Removing a secondary source preserves its accounted Sessions without admitting new ones there.
+   * Neither the original path nor any existing Session's cwd changes.
+   * @param title - display title.
+   * @param sourcePaths - nonempty source list, or omission to preserve it.
+   * @returns resolution after durability; validation or storage failure leaves the record unchanged.
+   */
+  configure(title: string, sourcePaths?: readonly string[]): Promise<void>
+
+  /**
    * Prepend a session to this workspace's candidate account. An already
    * accounted id resolves without writing, aside from the durable
    * filtered-candidate prune every accepted mutation performs. A new id's
    * live or persisted
-   * header cwd must resolve to an existing directory equal to {@link path};
-   * unknown ids, missing or invalid cwd values, and mismatches reject without
-   * writing.
+   * header cwd must resolve to the original {@link path} or a current source
+   * directory. Removed secondary sources admit no new ids. Unknown ids, missing
+   * or invalid cwd values, mismatches, and a Session already accounted to another
+   * Workspace reject without writing.
    * @param sessionId - The session to record.
    * @returns resolution after durability.
    */

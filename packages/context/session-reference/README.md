@@ -27,9 +27,12 @@ English | [中文](README.zh.md)
 
 Enable this service when hosts should let a user mention another session and give the model its context. It works with any session-query backend because it consumes the backend-independent compact checkpoint marker.
 
+<a id="mention-syntax"></a>
 ### Mention syntax
 
 A canonical mention is `@[label](dsh-session:<base64url-encoded-id>)` in Markdown, or the bare `dsh-session:` URI; every JavaScript string session id round-trips exactly. The service rewrites mentions into readable `@label` text in the message and returns the structured references. Explicit Markdown mentions reject malformed URIs; empty or punctuation-only scheme mentions stay ordinary discussion text.
+
+The pure `@deepseek-ai/dsh-session-reference/uri` subpath exposes `encodeSessionReferenceUri`, `decodeSessionReferenceUri`, `formatSessionReferenceMention`, and `parseSessionReferenceText` in browsers and Node. It uses standard UTF-8 and base64 APIs without loading the Host plugin. Hosts and browser drag sources share the same canonical JSON-string encoding; a receiver can regenerate a mention from its session id and label to reject mismatched payloads.
 
 ### What the agent gets
 

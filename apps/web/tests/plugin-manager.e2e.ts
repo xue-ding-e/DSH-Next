@@ -760,7 +760,8 @@ describe('web e2e: plugin manager', () => {
       .toMatchObject({ enabled: true, installed: false, removable: true, error: { code: 'operation-error' }, rows: [] })
     await compareOrRefreshGolden(join(SNAPSHOT_DIR, 'missing-bundle.expected.md'),
       await captureStableAria(page, '[data-plugin-panel]', scaffold.workspaceCwd, {
-        replacements: [[scaffold.harnessHome, '{{home}}']],
+        // The status is YAML-quoted, including escaped Windows path separators.
+        replacements: [[JSON.stringify(join(scaffold.harnessHome, 'profiles', 'scaffold')).slice(1, -1), '{{home}}/profiles/scaffold']],
       }), MODE)
     await toggle.click()
     await expect.poll(async () => (JSON.parse(await homeFile('profiles', 'scaffold', 'package.json')) as {
@@ -1070,7 +1071,7 @@ describe('web e2e: plugin manager', () => {
     await readmeHeading.waitFor()
     expect([...scaffold.ctx.loader.entries()].some(entry => entry.options.name.startsWith('@fixture/bundle'))).toBe(false)
     await compareOrRefreshGolden(EXPORTS_EXPECTED, await captureStableAria(page, '[data-plugin-panel]', scaffold.workspaceCwd, {
-      replacements: [[FIXTURE_PLUGINS, '{{fixtures}}']],
+      replacements: [[join(FIXTURE_PLUGINS, 'fixture-bundle'), '{{fixtures}}/fixture-bundle']],
     }), MODE)
     try {
       await setLanguage('en')
@@ -1080,7 +1081,7 @@ describe('web e2e: plugin manager', () => {
       expect(await review.getByText('审查工作区中的改动。', { exact: true }).count()).toBe(0)
       await readmeHeading.waitFor()
       await compareOrRefreshGolden(EXPORTS_EN_EXPECTED, await captureStableAria(page, '[data-plugin-panel]', scaffold.workspaceCwd, {
-        replacements: [[FIXTURE_PLUGINS, '{{fixtures}}']],
+        replacements: [[join(FIXTURE_PLUGINS, 'fixture-bundle'), '{{fixtures}}/fixture-bundle']],
       }), MODE)
       expect(await panel.locator('[data-plugin-name]').textContent()).toBe('@fixture/bundle')
     } finally {

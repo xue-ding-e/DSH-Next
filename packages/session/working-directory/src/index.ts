@@ -13,6 +13,7 @@ import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import type { Session } from '@deepseek-ai/dsh-session'
 import type { ProjectionHandle } from '@deepseek-ai/dsh-session-projection'
 import type {} from '@deepseek-ai/dsh-system-prompt'
+import type {} from '@deepseek-ai/dsh-workspace'
 
 declare module '@deepseek-ai/cordis' {
   interface Context {
@@ -93,6 +94,21 @@ export class WorkingDirectoryService extends Service {
       required: true,
       interpolate: false,
       text: context => context.agent === undefined ? '' : this.contextText(context.agent.session),
+    })
+    ctx.inject(['workspaceRegistry'], (scope) => {
+      scope.systemPrompt.context({
+        name: 'workspace:sources',
+        order: scope.systemPrompt.getContextOrder('WORKING_DIRECTORY'),
+        required: true,
+        interpolate: false,
+        text: (context) => {
+          if (context.agent === undefined) return ''
+          const sessionId = context.agent.session.id
+          const workspace = scope.workspaceRegistry.list().find(item => item.sessionIds.includes(sessionId))
+          if (workspace === undefined || (workspace.sourcePaths.length === 1 && workspace.primaryPath === workspace.path)) return ''
+          return `Workspace source directories: ${JSON.stringify(workspace.sourcePaths)}. The first directory is the primary source; the current working directory is reported separately. Directory access follows the current file policy.`
+        },
+      })
     })
     ctx.on('system-prompt/assemble', async (_assembly, context, next) => {
       if (context.agent === undefined) return next()

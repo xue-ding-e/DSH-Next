@@ -7,6 +7,7 @@ import {
   WorkspaceArchivedSessionPinError,
   WorkspaceId,
   WorkspaceMoveInvalidError,
+  WorkspaceSourcesInvalidError,
   WorkspaceOrderInvalidError,
   WorkspaceUnknownSessionError,
 } from '@deepseek-ai/dsh-workspace'
@@ -64,8 +65,9 @@ export class WorkspaceCommands {
   }
 
   /**
-   * Rename one Workspace after serializing title ownership checks.
-   * @param request - Workspace identity and proposed title.
+   * Save one Workspace title and optional sources after serializing title ownership checks.
+   * Invalid sources reject without changing the title, sources, or Session membership.
+   * @param request - Workspace identity, proposed title, and optional source directories.
    * @returns the updated Workspace projection.
    */
   rename(request: WorkspaceRenameRequest): Promise<WorkspaceValue> {
@@ -84,7 +86,14 @@ export class WorkspaceCommands {
             { name: title },
           )
         }
-        await workspace.setTitle(title)
+      }
+      if (title !== workspace.title || request.sourcePaths !== undefined) {
+        try {
+          await workspace.configure(title, request.sourcePaths)
+        } catch (error) {
+          if (!(error instanceof WorkspaceSourcesInvalidError)) throw error
+          throw new RemoteError('gateway/bad-request', `cannot save Workspace: ${errorMessage(error)}`, {}, { cause: error })
+        }
       }
       return { workspace: workspaceView(workspace) }
     })

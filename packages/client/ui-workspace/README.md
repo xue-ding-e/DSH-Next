@@ -31,6 +31,10 @@ Use the sidebar to browse Workspaces and their Sessions, reorder them, and start
 
 History rows without a stored title use the localized unnamed label (未命名 / Untitled), rather than a directory name. The current blank row remains New Session; other blank rows remain hidden. Rename drafts use the stored title, or start empty when unnamed; unnamed rows do not offer title copying.
 
+The independent **Recent** section shows five nonblank, unarchived conversations ordered by the later of their last update and this device's last navigation time. Pins and Workspace view options do not reorder these shortcuts. Drag a conversation from either recent shortcuts or a Workspace into the composer to add a conversation reference; dropping outside a Session row leaves its manual position unchanged.
+
+Workspace hover cards list source folders and conversation activity. **Edit workspace** saves the name and ordered source folders together; **Make primary** chooses the directory for new conversations. Existing conversations keep their working directory. **Open folder** opens the primary source. **Add workspace** opens a folder drop area first; **Choose folder** opens the configured directory picker. Desktop drops require the native path bridge; a browser without that bridge explains the restriction and keeps manual selection available.
+
 ### Reordering and view options
 
 Pinned Sessions lead ordinary Sessions in both grouped and flat views. **Last updated** sorts each partition strictly by the latest user prompt or steer time, newest first; pin time does not affect it. **Manual** uses the relative positions in one complete Session sequence, including hidden archives. Returning to Last updated discards the manual layout, and entering Manual again freezes the then-current chronological order. The browser defaults to Last updated and remembers the selected mode across reloads.
@@ -236,8 +240,7 @@ These limits cover search, navigation, archival, and folder selection.
 
 - **No fuzzy content search or event deep links** — the content backend uses literal token/phrase matching, and selecting a result opens the Session rather than the matching event.
 - **No Session deletion** — sessions can be archived but never deleted; archived rows stay recoverable in place through the archived view filter and the search results' unarchive action, and Workspace registration deletion does not delete Sessions.
-- **Pending user interaction is not aggregated into collapsed groups** — a waiting row inside a collapsed group lights no group-header indicator and becomes visible only after that group is expanded.
-- **Tree keyboard navigation is incomplete** — Workspace and search-result rows do not accept Tab focus, and the browser tree does not implement arrow-key navigation.
+- **Tree keyboard navigation is incomplete** — Workspace rows accept Tab and expand with Enter or Space; search-result rows do not accept Tab focus, and the browser tree does not implement arrow-key traversal.
 - **Native folder selection depends on the local Host carrier** — under the `-native` composition, in-process or remote browser deployments cannot open a local operating-system dialog; remote-capable picking is the `-browse` composition's in-app flow.
 
 <a id="dev-note"></a>

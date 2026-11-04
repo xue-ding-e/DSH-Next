@@ -43,7 +43,9 @@ Native message images use separate user and output positions. The `conversation.
 
 The session-scoped `conversation.chat.user.content` Factory renders only the user content stack: text, extra blocks, image/file attachments in input order, and reference summaries. Its [`UserContentInput`](src/client/contract/slots.ts) carries prepared `content`, transform `facts`, display props, and explicit `loadImage`; node-owned injections provide reference actions. It calls the shared `conversation.user.text` Factory for text and its own image Slot for images. Direct callers need a Session binding and supply their own row wrapper.
 
-`UserStyleBubble` and the [source-specific wrappers](<src/client/chat/MessageItem.tsx#L157-L309>) retain the user row, keys, pending/echo markers, timestamps, copy controls, and other message actions. The content Factory reads neither source-specific models nor private Context, and is not a global user-content override entry point.
+`UserStyleBubble` and the [source-specific wrappers](src/client/chat/MessageItem.tsx) retain the user row, keys, pending/echo markers, timestamps, copy controls, and other message actions. The content Factory reads neither source-specific models nor private Context, and is not a global user-content override entry point.
+
+Recorded human messages offer Edit and resend below the original content. Cancel discards the local edit; Save and send forks immediately before the original message and sends its replacement in the child. Images, generic files, and the edited text's serialized references remain in the prompt, with attachments in their original order. Generic files receive [history-authorized receipts](../file-upload/README.md#understand-the-implementation) only after the child exists. The source log and its composer draft stay intact. Failures keep the inline draft for retry or cancellation. A lost send reply freezes the text and retries the same request and receipts; an unconfirmed fork requires checking recent conversations before another attempt. Leaving the editor cancels pending navigation.
 
 Standalone Markdown images show contained previews and open the shared image lightbox; local paths resolve against the viewed workspace after settlement. Image file links keep their sidebar activation and show a thumbnail after hover dwell or keyboard focus. Escape dismisses the thumbnail. Failed images retain a localized status and their description; no duplicate-image filtering is applied.
 
@@ -192,6 +194,8 @@ None; Chat presentation does not assemble or mutate provider requests.
 ## Known Limitations and Deferred Work
 
 <a id="known-limitations-and-deferred-work"></a>
+
+- **Message editing** — Chat hides Edit for unsupported content blocks, synthetic rows without a durable message identity, and non-human inputs rather than losing content during resend.
 
 - **Running-icon resolution** — the animated whale uses a 28×28 image at a default 14×14 CSS size. Larger content fonts or device pixel ratios above 2 can soften the raster stroke; the static fallback remains vector-based. Browser image caching owns the animation clock, so remounting does not guarantee playback restarts at the first frame.
 

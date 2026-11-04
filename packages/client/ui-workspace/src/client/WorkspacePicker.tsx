@@ -8,10 +8,10 @@
  * exactly one route — pick a host directory, new or existing — because the
  * occupant's own create-folder affordance already covers creating one.
  */
-import type { ReactNode, RefObject } from 'react'
+import type { DragEvent, ReactNode, RefObject } from 'react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
-  Button, IconFolderCloseRegular, IconPlusOutlineRegular, Menu, Modal, type MenuEntry,
+  Button, IconFolderCloseRegular, IconFolderOpenRegular, IconPlusOutlineRegular, Menu, Modal, type MenuEntry,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type {
   WorkspaceId, WorkspaceSnapshot, WorkspaceView,
@@ -21,8 +21,18 @@ import type { SnapshotSelectorHook } from '@deepseek-ai/dsh-client-ui-slots'
 import type { DirectoryFlowOwnerProps, WorkspacePickerProps } from './contract/slots.ts'
 import { distinguishingPathSuffixes } from './path-suffix.ts'
 import css from './WorkspacePicker.module.css'
+import clsx from 'clsx'
 
 const ADD_WORKSPACE = '::add-workspace'
+
+interface HostPathBridge {
+  pathFor: (file: File) => string
+}
+
+function hostPathBridge(): HostPathBridge | undefined {
+  const bridge = (globalThis as typeof globalThis & { __DSH_HOST_PATHS__?: HostPathBridge }).__DSH_HOST_PATHS__
+  return bridge?.pathFor === undefined ? undefined : bridge
+}
 
 /** Core flow props: the owner supplies popover control and pick semantics. */
 export interface WorkspacePickFlowProps {
@@ -83,12 +93,14 @@ export function WorkspacePickFlow({
   const [errorOpen, setErrorOpen] = useState(false)
   const [modalError, setModalError] = useState<string | null>(null)
   const [flowOpen, setFlowOpen] = useState(false)
+  const [selectionOpen, setSelectionOpen] = useState(false)
+  const [dragOver, setDragOver] = useState(false)
   const [pickingFolder, setPickingFolder] = useState(false)
   // One picking interaction at a time: while the flow is open (native chooser
   // pending, browse dialog up) or its pick is being adopted, every other
   // menu action stays disabled — a late outcome must not race a concurrent
   // selection or adoption.
-  const flowBusy = flowOpen || pickingFolder
+  const flowBusy = flowOpen || selectionOpen || pickingFolder
   useEffect(() => { onBusyChange?.(flowBusy) }, [flowBusy, onBusyChange])
 
   // The occupied hole gates the picking affordance: with no composed flow the
@@ -155,10 +167,12 @@ export function WorkspacePickFlow({
   const adoptDirectory = (path: string): Promise<void> =>
     createWorkspace({ path }).then((workspace) => {
       setFlowOpen(false)
+      setSelectionOpen(false)
       onPick(workspace.workspaceId)
     }).catch((reason: unknown) => {
       setModalError(reason instanceof Error ? reason.message : String(reason))
       setFlowOpen(false)
+      setSelectionOpen(false)
       setErrorOpen(true)
     })
 
@@ -166,8 +180,47 @@ export function WorkspacePickFlow({
     onClose()
     setErrorOpen(false)
     setModalError(null)
-    setFlowOpen(true)
+    setSelectionOpen(true)
+    setFlowOpen(false)
   }, [onClose])
+
+  const closeSelection = (): void => {
+    if (pickingFolder) return
+    setSelectionOpen(false)
+    setDragOver(false)
+    setModalError(null)
+  }
+
+  const openManualPicker = (): void => {
+    if (pickingFolder || flowOpen) return
+    setSelectionOpen(false)
+    setFlowOpen(true)
+  }
+
+  const onDropDirectory = (event: DragEvent<HTMLDivElement>): void => {
+    event.preventDefault()
+    event.stopPropagation()
+    setDragOver(false)
+    if (pickingFolder) return
+    const items = [...event.dataTransfer.items]
+    const item = items.find(candidate => candidate.kind === 'file')
+    if (item === undefined) return
+    const entry = typeof item.webkitGetAsEntry === 'function'
+      ? item.webkitGetAsEntry()
+      : null
+    if (entry?.isDirectory !== true) {
+      setModalError(t('workspace.add.dropFolderOnly'))
+      return
+    }
+    const file = event.dataTransfer.files.item(0)
+    const path = file === null ? '' : hostPathBridge()?.pathFor(file) ?? ''
+    if (path === '') {
+      setModalError(t('workspace.add.pathUnavailable'))
+      return
+    }
+    setPickingFolder(true)
+    void adoptDirectory(path).finally(() => { setPickingFolder(false) })
+  }
 
   // A menu exists to disambiguate between targets. With no workspaces listed
   // and the add action the only entry left, the anchor gesture IS that action:
@@ -225,6 +278,49 @@ export function WorkspacePickFlow({
       />
       {open && !addIsTheOnlyEntry && !menuIsEmpty && workspaceSnapshot.phase === 'pending' && <div className={css.menuStatus} role="status">{t('picker.loading')}</div>}
       {renderDirectoryFlow(flowOwner)}
+      <Modal
+        open={selectionOpen}
+        className={clsx(css.selectionDialog)}
+        onClose={closeSelection}
+        closeLabel={t('close')}
+        title={t('workspace.add.title')}
+        footer={(
+          <Button variant="outline" disabled={pickingFolder} onClick={closeSelection}>{t('cancel')}</Button>
+        )}
+      >
+        <div
+          className={css.dropZone}
+          role="group"
+          aria-label={t('workspace.add.dropTitle')}
+          data-drag-over={dragOver || undefined}
+          onDragEnter={(event) => {
+            if (!Array.from(event.dataTransfer.types).includes('Files')) return
+            event.preventDefault()
+            event.stopPropagation()
+            setDragOver(true)
+          }}
+          onDragLeave={(event) => {
+            if (event.relatedTarget instanceof Node && event.currentTarget.contains(event.relatedTarget)) return
+            setDragOver(false)
+          }}
+          onDragOver={(event) => {
+            if (Array.from(event.dataTransfer.types).includes('Files')) {
+              event.preventDefault()
+              event.stopPropagation()
+              event.dataTransfer.dropEffect = 'copy'
+            }
+          }}
+          onDrop={onDropDirectory}
+        >
+          <IconFolderOpenRegular size={28} />
+          <strong>{t('workspace.add.dropTitle')}</strong>
+          <span>{t('workspace.add.dropDescription')}</span>
+          <Button variant="outline" disabled={pickingFolder} onClick={openManualPicker}>
+            {pickingFolder ? t('workspace.add.adding') : t('workspace.add.chooseFolder')}
+          </Button>
+          {modalError !== null && <div className={css.modalError} role="alert">{modalError}</div>}
+        </div>
+      </Modal>
       <Modal
         open={errorOpen}
         onClose={closeModal}

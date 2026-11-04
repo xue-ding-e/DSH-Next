@@ -1,0 +1,11 @@
+version: 1
+scenario: workspace-sources
+profile: headless
+composition: default
+recording: authored
+# Directory context records native paths; the shared golden uses POSIX spelling.
+platform: posix
+permission: read-only
+header:
+  class: workspace-sources
+  pin: true

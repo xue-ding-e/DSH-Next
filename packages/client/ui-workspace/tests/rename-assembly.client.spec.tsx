@@ -36,6 +36,7 @@ beforeEach(() => { localStorage.clear() })
 
 /** Runtime with the locale face installed (the browser entry declares `locale:` — zh default backs the t seat). */
 async function createRuntime(): Promise<SlotTestRuntime> {
+  localStorage.setItem('dsh.sessions.current', JSON.stringify({ sessionId: SID }))
   const runtime = await SlotTestRuntime.create()
   runtime.ctx.provide('shortcuts', { register: () => () => {}, catalog: createSnapshotStore([]) })
   runtime.ctx.provide('layout', { selectPanel: vi.fn(), beginNavigation: () => new AbortController().signal })
@@ -44,6 +45,10 @@ async function createRuntime(): Promise<SlotTestRuntime> {
   // for ui-workspace's inject to settle.
   const directoryPicker = {}
   runtime.remote.provideNamespaces({ directoryPicker })
+  runtime.ctx.provide('remote.session', {
+    canOpenWorkspacePath: async () => ({ ok: true as const, value: false }),
+    openWorkspacePath: async () => ({ ok: true as const, value: { opened: true as const } }),
+  } as never)
   const locale = new LocaleRuntime(runtime.ctx)
   runtime.ctx.provide('locale', locale)
   runtime.slots.installLocale(locale)

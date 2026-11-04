@@ -122,6 +122,8 @@ function mount(
 
 function chooseAdd(): void {
   fireEvent.click(screen.getByRole('menuitem', { name: '添加工作区…' }))
+  expect(screen.queryByTestId('directory-flow')).toBeNull()
+  fireEvent.click(screen.getByRole('button', { name: '选择文件夹' }))
 }
 
 describe('WorkspacePicker', () => {
@@ -155,13 +157,16 @@ describe('WorkspacePicker', () => {
     expect(screen.queryByTestId('directory-flow')).toBeNull()
   })
 
-  it('raises the flow straight from the anchor gesture when adding is the only entry', () => {
+  it('opens the drop surface first and waits for a manual folder choice', () => {
     // Nothing to list and one action left: a one-row menu would offer no
     // choice, so the owner's open request lands in the flow itself.
     const b = mount([])
     expect(screen.queryByRole('menu')).toBeNull()
     expect(screen.queryByRole('menuitem', { name: '添加工作区…' })).toBeNull()
     expect(b.onClose).toHaveBeenCalled()
+    expect(screen.getByRole('dialog', { name: '添加工作区' })).toBeTruthy()
+    expect(screen.queryByTestId('directory-flow')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: '选择文件夹' }))
     expect(screen.getByTestId('directory-flow')).toBeTruthy()
   })
 
@@ -175,6 +180,40 @@ describe('WorkspacePicker', () => {
     expect(screen.queryByRole('dialog')).toBeNull()
   })
 
+  it('adopts a dropped desktop folder and contains the drop inside the workspace dialog', async () => {
+    const created = workspace('dropped')
+    const b = mount([], vi.fn(async () => created))
+    const file = new File([], 'project')
+    const attachmentDrop = vi.fn()
+    document.addEventListener('drop', attachmentDrop)
+    vi.stubGlobal('__DSH_HOST_PATHS__', { pathFor: (candidate: File) => candidate === file ? '/host/project' : '' })
+    try {
+      const zone = screen.getByRole('group', { name: '将文件夹拖到这里' })
+      fireEvent.drop(zone, { dataTransfer: {
+        items: [{ kind: 'file', webkitGetAsEntry: () => ({ isDirectory: true }) }],
+        files: { item: () => file },
+      } })
+      await waitFor(() => { expect(b.onPick).toHaveBeenCalledWith(created.workspaceId) })
+      expect(b.createWorkspace).toHaveBeenCalledExactlyOnceWith({ path: '/host/project' })
+      expect(attachmentDrop).not.toHaveBeenCalled()
+    } finally {
+      document.removeEventListener('drop', attachmentDrop)
+      vi.unstubAllGlobals()
+    }
+  })
+
+  it('keeps manual selection available when the browser cannot resolve a dropped host path', () => {
+    const b = mount([])
+    fireEvent.drop(screen.getByRole('group', { name: '将文件夹拖到这里' }), { dataTransfer: {
+      items: [{ kind: 'file', webkitGetAsEntry: () => ({ isDirectory: true }) }],
+      files: { item: () => new File([], 'project') },
+    } })
+    expect(screen.getByRole('alert').textContent).toBe(zh['workspace.add.pathUnavailable'])
+    expect(b.createWorkspace).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: '选择文件夹' }))
+    expect(screen.getByTestId('directory-flow')).toBeTruthy()
+  })
+
   it('reports a non-Error adoption failure in the folder-error surface', async () => {
     const b = mount([workspace('alpha', 'Alpha')], vi.fn(async () => { throw 'permission denied' }))
     chooseAdd()
@@ -185,6 +224,7 @@ describe('WorkspacePicker', () => {
     expect(screen.getByRole('alert').textContent).toBe('permission denied')
     expect(b.probe.owner!.open).toBe(false)
     fireEvent.click(screen.getByRole('button', { name: '重新选择' }))
+    fireEvent.click(screen.getByRole('button', { name: '选择文件夹' }))
     expect(b.probe.owner!.open).toBe(true)
     expect(b.onPick).not.toHaveBeenCalled()
   })

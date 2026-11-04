@@ -51,6 +51,15 @@
       "path": "../ui-session"
     },
     {
+      "path": "../ui-layout"
+    },
+    {
+      "path": "../ui-settings/tsconfig.client.json"
+    },
+    {
+      "path": "../ui-workspace"
+    },
+    {
       "path": "../ui-tool"
     },
     {
@@ -58,6 +67,9 @@
     },
     {
       "path": "../../util/brand"
+    },
+    {
+      "path": "../../util/crypto"
     },
     {
       "path": "../../core/tool-executor-ptc"

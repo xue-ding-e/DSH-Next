@@ -406,9 +406,9 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         returns: 'the created or idempotently resolved Workspace.',
       },
       {
-        signature: 'rename(workspaceId: WorkspaceId, title: string): Promise<WorkspaceView>',
-        description: 'Rename a Workspace.',
-        parameters: [{ name: 'workspaceId', description: 'target Workspace.' }, { name: 'title', description: 'new display title.' }],
+        signature: 'rename(workspaceId: WorkspaceId, title: string, sourcePaths?: readonly string[]): Promise<WorkspaceView>',
+        description: 'Save a Workspace title and optional source directories atomically.',
+        parameters: [{ name: 'workspaceId', description: 'target Workspace.' }, { name: 'title', description: 'new display title.' }, { name: 'sourcePaths', description: 'ordered source directories, first primary; omission preserves existing sources.' }],
         returns: 'the renamed Workspace.',
       },
       {
@@ -1109,7 +1109,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'WorkspaceView',
-    declaration: 'export interface WorkspaceView {\n    readonly workspaceId: WorkspaceId;\n    readonly path: string;\n    readonly title: string;\n    readonly sessionIds: readonly SessionId[];\n    readonly createdAt: string;\n    readonly updatedAt: string;\n}',
+    declaration: 'export interface WorkspaceView {\n    readonly workspaceId: WorkspaceId;\n    readonly path: string;\n    readonly sourcePaths?: readonly string[];\n    readonly title: string;\n    readonly sessionIds: readonly SessionId[];\n    readonly createdAt: string;\n    readonly updatedAt: string;\n}',
   },
 ]
 

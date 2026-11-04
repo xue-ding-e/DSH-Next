@@ -28,9 +28,15 @@ const FIXTURE = join(SNAPSHOT_DIR, 'session.v3.jsonl')
 const MID_EXPECTED = join(SNAPSHOT_DIR, 'mid-steer.expected.md')
 const SETTLED_EXPECTED = join(SNAPSHOT_DIR, 'settled.expected.md')
 const SETTLED_EXPANDED_EXPECTED = join(SNAPSHOT_DIR, 'settled-expanded.expected.md')
-const TRAJECTORY_EXPECTED = join(SNAPSHOT_DIR, 'trajectory.expected.md')
-const RETAINED_TRAJECTORY_EXPECTED = fileURLToPath(new URL('./expected/retained-steering/trajectory.expected.md', import.meta.url))
+// Windows includes its sandbox-diagnosis skill in the model-visible context.
+const TRAJECTORY_EXPECTED = join(SNAPSHOT_DIR, process.platform === 'win32' ? 'trajectory.win32.expected.md' : 'trajectory.expected.md')
+const RETAINED_TRAJECTORY_EXPECTED = fileURLToPath(new URL(
+  process.platform === 'win32' ? './expected/retained-steering/trajectory.win32.expected.md' : './expected/retained-steering/trajectory.expected.md',
+  import.meta.url,
+))
 const MODE = webSnapshotMode()
+// The native separator before the workspace child takes one extra JSON escape on Windows.
+const WORKSPACE_PATH_LENGTH = process.platform === 'win32' ? 111 : 112
 // The question composer replaces the textarea, so fill → Queue row → Steer
 // starts only after request/context and must finish before the first replay
 // chunk. The compact canonical call plus 500 ms pacing gives loaded CI enough
@@ -69,6 +75,16 @@ function claimedMessages(events: readonly SessionEvent[], text: string): Session
     event.type === 'user/message' && JSON.stringify(event.data.content).includes(text))
 }
 
+/** Tokenize the native cwd after both JSON and ARIA quote their backslashes. */
+function trajectoryPathReplacements(workspaceCwd: string): readonly (readonly [string, string])[] {
+  const sessionCwd = join(workspaceCwd, 'workspace')
+  return [
+    [JSON.stringify(JSON.stringify(sessionCwd)).slice(1, -1), '\\"{{cwd}}/workspace\\"'],
+    [JSON.stringify(sessionCwd).slice(1, -1), '{{cwd}}/workspace'],
+    [sessionCwd, '{{cwd}}/workspace'],
+  ]
+}
+
 describe('web e2e: mid-turn steering lands durably and visibly', () => {
   let scaffold: WebScaffold
   let browser: Browser
@@ -84,8 +100,8 @@ describe('web e2e: mid-turn steering lands durably and visibly', () => {
     hostClock = pinHostClock()
     // Trajectory previews truncate before path normalization; pin the input length across hosts.
     scaffold = await launchWebScaffold({
-      workspacePathLength: 112,
-      ...(MODE === 'record' ? {} : { replayFixture: FIXTURE, paceMs: REPLAY_PACE_MS, compareReplaySession: true }),
+      workspacePathLength: WORKSPACE_PATH_LENGTH,
+      ...(MODE === 'record' ? {} : { replayFixture: FIXTURE, paceMs: REPLAY_PACE_MS, compareReplaySession: 'read-only' as const }),
     })
     scaffold.ctx.on('session/event', (_session, event) => { sessionEvents.push(event) })
     browser = await chromium.launch()
@@ -201,7 +217,9 @@ describe('web e2e: mid-turn steering lands durably and visibly', () => {
     await page.locator('[data-trajectory-row-key]').filter({ hasText: STEER }).waitFor({ timeout: 10_000 })
     await compareOrRefreshGolden(
       TRAJECTORY_EXPECTED,
-      await captureStableAria(page, '[class*="centerCol"]', scaffold.workspaceCwd),
+      await captureStableAria(page, '[class*="centerCol"]', scaffold.workspaceCwd, {
+        replacements: trajectoryPathReplacements(scaffold.workspaceCwd),
+      }),
       MODE,
     )
     expect(tripwire.pageErrors).toEqual([])
@@ -211,7 +229,7 @@ describe('web e2e: mid-turn steering lands durably and visibly', () => {
   it.skipIf(MODE === 'record')('keeps the fixture inventory closed', async () => {
     await assertFixtureInventory(SNAPSHOT_DIR, [
       'session.v3.jsonl', 'mid-steer.expected.md', 'settled.expected.md', 'settled-expanded.expected.md',
-      'trajectory.expected.md',
+      'trajectory.expected.md', 'trajectory.win32.expected.md',
     ])
   })
 })
@@ -233,7 +251,8 @@ describe.skipIf(MODE === 'record')('web e2e: retained steering and a post-stop m
   beforeAll(async () => {
     hostClock = pinHostClock()
     scaffold = await launchWebScaffold({
-      replayFixture: FIXTURE, compareReplaySession: false, workspacePathLength: 112,
+      replayFixture: FIXTURE, compareReplaySession: false,
+      workspacePathLength: WORKSPACE_PATH_LENGTH,
     })
     scaffold.ctx.on('session/event', (_session, event) => { sessionEvents.push(event) })
     scaffold.ctx.on('llm/stream', async function* (options, next) {
@@ -331,7 +350,9 @@ describe.skipIf(MODE === 'record')('web e2e: retained steering and a post-stop m
     await expectOrder('[data-trajectory-scroll]', true)
     await compareOrRefreshGolden(
       RETAINED_TRAJECTORY_EXPECTED,
-      await captureStableAria(page, '[data-trajectory-scroll]', scaffold.workspaceCwd),
+      await captureStableAria(page, '[data-trajectory-scroll]', scaffold.workspaceCwd, {
+        replacements: trajectoryPathReplacements(scaffold.workspaceCwd),
+      }),
       MODE,
     )
     const warningStart = tripwire.warnings.length

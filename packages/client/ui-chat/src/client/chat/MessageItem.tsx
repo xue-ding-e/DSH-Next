@@ -1,16 +1,18 @@
-import { memo, useEffect, useMemo, useState } from 'react'
+import { memo, useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import type { PendingSubmission } from '@deepseek-ai/dsh-api-session-controller/client'
 import type { PropsRenderFactories } from '@deepseek-ai/dsh-client-ui-slots'
 import type { UserTextFacts } from '@deepseek-ai/dsh-client-ui-conversation/client'
-import { JsonBlock, StateDot, TextShimmer } from '@deepseek-ai/dsh-client-ui-primitives'
+import { Button, InlineEditor, JsonBlock, StateDot, TextShimmer } from '@deepseek-ai/dsh-client-ui-primitives'
 import type {
   ChatNodeOwnerProps, ChatNodeViewProps, ChatViewSlotProps, UserContentAttachment, UserContentData, UserContentInput,
+  UserMessageEdit, UserMessageEditResult,
 } from '../contract/slots.ts'
 import type { ModelRetryNode, TurnErrorNode, UserMessageNode } from '../contract/snapshot.ts'
 import { CompactionItem } from './CompactionItem.tsx'
 import { ContextInjectionRow } from './ContextInjectionRow.tsx'
 import { MessageIconActions } from './MessageIconActions.tsx'
+import { canEditUserMessage } from './user-message-edit.ts'
 import css from './MessageItem.module.css'
 
 const EMPTY_TEXT_FACTS: Readonly<Partial<UserTextFacts>> = {}
@@ -162,13 +164,13 @@ function TurnMaxTokensItem({ t }: {
 
 /** Right-aligned bubble shared by user and steering rows. */
 function UserStyleBubble({
-  content, loadImage, renderFactorySlot, actions, pending = false, echo = false, batchStart = false,
-  referenceLabels, skillNames, previewAttachments, facts: inputFacts = EMPTY_TEXT_FACTS, interactive = false,
+  content, loadImage, renderFactorySlot, time, pending = false, echo = false, batchStart = false,
+  referenceLabels, skillNames, previewAttachments, facts: inputFacts = EMPTY_TEXT_FACTS, interactive = false, onEdit, t,
 }: {
   content: readonly unknown[]
   renderFactorySlot: PropsRenderFactories['renderFactorySlot']
-  /** Optional IconActions (or similar) below the bubble; receives the joined text. */
-  actions?: (text: string) => ReactNode
+  /** Durable or locally captured timestamp, absent for pending steering. */
+  time?: number | undefined
   /** Whether this is the Host-authoritative pre-admission steering projection. */
   pending?: boolean
   /** Whether this is a local submission echo (invisible marker; the echo renders exactly like its durable replacement). */
@@ -183,6 +185,10 @@ function UserStyleBubble({
   previewAttachments?: readonly UserContentAttachment[]
   /** Inputs used by text transforms, separate from row and rendering props. */
   facts?: Readonly<Partial<UserTextFacts>>
+  /** Open a local editor for an eligible durable message. */
+  onEdit?: (() => void) | undefined
+  /** Chat locale seat for message actions. */
+  t: ChatViewSlotProps['t']
 } & Pick<ChatNodeOwnerProps, 'loadImage'> & Pick<UserContentInput, 'interactive'>): ReactNode {
   const parts = useMemo(() => contentParts(content), [content])
   const prepared = useMemo<UserContentData>(() => ({
@@ -209,7 +215,7 @@ function UserStyleBubble({
         facts,
         interactive,
       })}
-      {actions?.(prepared.text)}
+      <MessageIconActions text={prepared.text} time={time} clock="start" className={css.actions} onEdit={onEdit} t={t} />
     </div>
   )
 }
@@ -230,15 +236,8 @@ export function PendingSteeringBubble({ content, loadImage, renderFactorySlot, t
       content={content}
       renderFactorySlot={renderFactorySlot}
       loadImage={loadImage}
+      t={t}
       pending
-      actions={text => (
-        <MessageIconActions
-          text={text}
-          clock="start"
-          className={css.actions}
-          t={t}
-        />
-      )}
     />
   )
 }
@@ -282,45 +281,109 @@ export function PendingSubmissionBubble({ submission, loadImage, renderFactorySl
       previewAttachments={previewAttachments}
       renderFactorySlot={renderFactorySlot}
       loadImage={loadImage}
+      t={t}
+      time={submission.time}
       pending={submission.placement === 'steering'}
       echo
-      actions={text => (
-        <MessageIconActions
-          text={text}
-          time={submission.time}
-          clock="start"
-          className={css.actions}
-          t={t}
-        />
-      )}
     />
+  )
+}
+
+/** One mounted edit owns its draft and cancels late navigation when it leaves Chat. */
+function UserMessageEditor({ initialText, operation, onCancel, hasAttachments, t }: {
+  readonly initialText: string
+  readonly operation: UserMessageEdit
+  readonly onCancel: () => void
+  readonly hasAttachments: boolean
+  readonly t: ChatViewSlotProps['t']
+}) {
+  const [draft, setDraft] = useState(initialText)
+  const [busy, setBusy] = useState(false)
+  const [failure, setFailure] = useState<Extract<UserMessageEditResult, { kind: 'failed' }> | null>(null)
+  const pending = useRef<AbortController | null>(null)
+  useEffect(() => () => { pending.current?.abort() }, [])
+
+  const cancel = (): void => {
+    pending.current?.abort()
+    onCancel()
+  }
+  const submit = async (): Promise<void> => {
+    if (pending.current !== null || (!hasAttachments && draft.trim() === '') || failure?.reason === 'uncertain-fork') return
+    const attempt = new AbortController()
+    pending.current = attempt
+    setBusy(true)
+    try {
+      const result = await operation.submit(draft, attempt.signal)
+      if (attempt.signal.aborted) return
+      if (result.kind === 'sent') onCancel()
+      else setFailure(result)
+    } catch (_error: unknown) {
+      // The transaction reports expected failures; an unexpected rejection must keep the draft too.
+      if (!attempt.signal.aborted) setFailure({ kind: 'failed', reason: 'uncertain-send' })
+    } finally {
+      if (!attempt.signal.aborted) {
+        pending.current = null
+        setBusy(false)
+      }
+    }
+  }
+  const locked = failure !== null && failure.reason !== 'retry'
+  return (
+    <form className={css.messageEditor} aria-label={t('message.edit')} aria-busy={busy}
+      onSubmit={(event) => { event.preventDefault(); void submit() }}>
+      <fieldset className={css.editField} disabled={busy || locked}>
+        <InlineEditor value={draft} label={t('message.editText')} onChange={setDraft}
+          onSave={() => { void submit() }} onCancel={cancel} />
+      </fieldset>
+      <div className={css.editFeedback} role={failure === null ? undefined : 'alert'}>
+        {failure === null ? null : t(failure.reason === 'uncertain-fork' ? 'message.editForkUncertain'
+          : failure.reason === 'uncertain-send' ? 'message.editSendUncertain' : 'message.editFailed')}
+      </div>
+      <div className={css.editButtons}>
+        <Button size="sm" onClick={cancel}>{t('cancel')}</Button>
+        <Button size="sm" variant="primary" type="submit"
+          disabled={busy || failure?.reason === 'uncertain-fork' || (!hasAttachments && draft.trim() === '')}>
+          {t(busy ? 'message.editSending' : failure === null ? 'message.editSend' : 'retry')}
+        </Button>
+      </div>
+    </form>
   )
 }
 
 /** User and admitted-steering keyed Chat renderer. */
 export const UserMessageNodeView = memo(function UserMessageNodeView({
-  node, renderFactorySlot, loadImage, t,
+  node, renderFactorySlot, loadImage, editUserMessage, t,
 }: ChatNodeViewProps<'user' | 'steering'>) {
   const data = node.data
+  const row = useRef<HTMLDivElement>(null)
+  const [edit, setEdit] = useState<UserMessageEdit | null>(null)
+  const editable = node.kind === 'user' && editUserMessage !== undefined && canEditUserMessage(data)
+  const cancelEdit = (): void => {
+    setEdit(null)
+    row.current?.querySelector<HTMLButtonElement>('[data-message-edit]')?.focus()
+  }
   return (
-    <UserStyleBubble
-      content={data.content}
-      interactive
-      renderFactorySlot={renderFactorySlot}
-      loadImage={loadImage}
-      batchStart={node.kind === 'steering' && node.data.batchStart === true}
-      {...data.referenceLabels === undefined ? {} : { referenceLabels: data.referenceLabels }}
-      {...data.skillNames === undefined ? {} : { skillNames: data.skillNames }}
-      actions={text => (
-        <MessageIconActions
-          text={text}
-          time={data.time}
-          clock="start"
-          className={css.actions}
-          t={t}
-        />
-      )}
-    />
+    <div ref={row} className={css.userMessage}>
+      <UserStyleBubble
+        content={data.content}
+        interactive
+        renderFactorySlot={renderFactorySlot}
+        loadImage={loadImage}
+        t={t}
+        time={data.time}
+        batchStart={node.kind === 'steering' && node.data.batchStart === true}
+        {...data.referenceLabels === undefined ? {} : { referenceLabels: data.referenceLabels }}
+        {...data.skillNames === undefined ? {} : { skillNames: data.skillNames }}
+        onEdit={editable
+          ? () => {
+            if (edit !== null) row.current?.querySelector<HTMLTextAreaElement>('textarea')?.focus()
+            else setEdit(editUserMessage(node.data))
+          }
+          : undefined}
+      />
+      {edit !== null && <UserMessageEditor initialText={contentParts(data.content).text}
+        operation={edit} onCancel={cancelEdit} hasAttachments={data.content.some(part => part.type !== 'text')} t={t} />}
+    </div>
   )
 })
 

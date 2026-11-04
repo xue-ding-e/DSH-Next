@@ -19,6 +19,9 @@ export interface ReferenceInsert {
   readonly clipboardText: string
 }
 
+/** Custom drag payload used when a Session row is dropped into the composer. */
+export const SESSION_REFERENCE_DRAG_TYPE = 'application/x-dsh-session-reference'
+
 /** Persisted reference data without the current editor's occurrence identity. */
 export type DraftReference = Omit<Occurrence, 'occurrenceId'>
 
@@ -87,6 +90,8 @@ export interface ComposerKeyboard {
   recallQueue(): boolean
   /** Insert pasted plain text over the current editor selection (reference-placeholder-sanitized). */
   paste(text: string): void
+  /** Insert a structured reference after the current selection, preserving existing text and chips. */
+  insertReferenceAtCaret(reference: ReferenceInsert): boolean
   /**
    * The live selection as a detect-coordinate span (menu-launcher synthetic
    * hits replace it on pick); an absent selection answers a collapsed span at

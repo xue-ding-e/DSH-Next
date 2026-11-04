@@ -28,6 +28,8 @@ type WorkspaceViewState = {
   sessionOrderByAccount: Record<string, string[]>
   /** Archived-row visibility; omitted in pre-filter v5 snapshots and read as 'default'. */
   archivedFilter?: ArchivedFilter
+  /** Latest navigation time per Session, retained across reloads on this device. */
+  openedAt?: Record<string, number>
 }
 
 type SessionOrderSource = {
@@ -66,6 +68,7 @@ type WorkspaceViewActions = {
     source: SessionOrderSource,
   ) => void
   setArchivedFilter: (draft: WorkspaceViewState, filter: ArchivedFilter) => void
+  recordOpened: (draft: WorkspaceViewState, sessionId: SessionId, time: number) => void
 }
 
 /** Copy read-only projections into the persisted mutable store representation. */
@@ -125,6 +128,7 @@ export function createWorkspaceViewStore(): EngineStoreHandle<WorkspaceViewState
         }))
       },
       setArchivedFilter: (d, filter: ArchivedFilter) => { d.archivedFilter = filter },
+      recordOpened: (d, sessionId, time) => { (d.openedAt ??= {})[sessionId] = time },
     },
   })
 }

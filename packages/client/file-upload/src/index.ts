@@ -8,13 +8,14 @@ import type { AttachmentId, FileAttachmentRef, ImageAttachmentRef } from '@deeps
 import type {} from '@deepseek-ai/dsh-client-connection'
 import type { CommandFileReceiptResolver } from '@deepseek-ai/dsh-commands'
 import type { Session, SessionEvent, SessionId, UserMessage } from '@deepseek-ai/dsh-session'
+import type {} from '@deepseek-ai/dsh-session-query'
 import { Remote, RemoteError, remoteErrorOf, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
 import { handleQueuedFileHttp } from './queued-file-route.ts'
 import type { MessageId } from '@deepseek-ai/dsh-llm/brand'
 import { handleFileUploadHttp } from './http-route.ts'
 import { FILE_UPLOAD_PATH, QUEUED_FILE_PATH } from './protocol.ts'
 import type {
-  EncodedFileUploadRequest, FileUploadReceiptId, FileUploadValue, ImageUploadValue, StagedAttachment,
+  EncodedFileUploadRequest, FileUploadReceiptId, FileUploadValue, HistoryFileUploadRequest, ImageUploadValue, StagedAttachment,
 } from './types.ts'
 
 export type * from './types.ts'
@@ -67,7 +68,7 @@ class PromptFileBindingGuard implements PromptFileBinding {
 
 /** Host service owning upload storage and receipts keyed by each receiving Agent's exact Session. */
 export class FileUploads extends TypertRemoteService {
-  static inject = ['agents', 'attachments', 'commands', 'connection']
+  static inject = ['agents', 'attachments', 'commands', 'connection', 'sessionQuery']
 
   private readonly stagedFiles = new WeakMap<Session, Map<FileUploadReceiptId, StagedFileUpload>>()
   // Inside a method called through `ctx.fileUploads`, Cordis returns a new proxy
@@ -152,6 +153,31 @@ export class FileUploads extends TypertRemoteService {
       ...(request.name === undefined ? {} : { name: request.name }),
     }))
     return { receiptId: this.stage(agent, { type: 'file', attachment: file }), file }
+  }
+
+  /**
+   * Restage a file referenced by one exact durable human message, without changing its source.
+   * The receiving Agent owns the fresh receipt; caller-supplied file metadata grants no authority.
+   * Cancellation or target disposal before staging grants no receipt. Observation failures reject the call.
+   * @param agent - ordinary receiving Agent resolved by the Remote Agent lookup.
+   * @param request - source Session, durable human message, content position, and file attachment identity.
+   * @param signal - cancellation while observing the source and before staging.
+   * @returns a fresh target-owned receipt and the authoritative stored file reference.
+   */
+  @Remote({ resources: { session: (targetId, request) => [targetId, request.sourceSessionId] } })
+  async stageHistory(agent: Agent, request: HistoryFileUploadRequest, signal: AbortSignal): Promise<FileUploadValue> {
+    signal.throwIfAborted()
+    this.assertOrdinaryAgent(agent)
+    using source = await this.ctx.sessionQuery.observeSession(request.sourceSessionId, { projectionMode: 'none', signal })
+    signal.throwIfAborted()
+    const event = source.events.find(candidate => candidate.type === 'user/message' && candidate.data.id === request.messageId)
+    const part = event?.type === 'user/message' && event.data.source.kind === 'user'
+      ? event.data.content[request.contentIndex]
+      : undefined
+    if (part?.type !== 'file' || part.attachment.attachmentId !== request.attachmentId) {
+      throw new RemoteError('gateway/bad-request', 'file is not referenced by this durable human message', {})
+    }
+    return { receiptId: this.stage(agent, { type: 'file', attachment: part.attachment }), file: part.attachment }
   }
 
   /**
@@ -329,8 +355,8 @@ export class FileUploads extends TypertRemoteService {
       for (const attachment of attachments) receiptIds.push(this.stage(agent, attachment))
       return {
         receiptIds,
-        commit: () => guard.commit(),
-        [Symbol.dispose]: () => guard[Symbol.dispose](),
+        commit: () => { guard.commit() },
+        [Symbol.dispose]: () => { guard[Symbol.dispose]() },
       }
     } catch (error) {
       guard[Symbol.dispose]()

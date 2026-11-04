@@ -136,6 +136,7 @@ describe('MarkdownBody', () => {
       '---', '', '# Body',
     ].join('\n')
     const view = render(<MarkdownBody {...props(content([text], true))} />)
+    await act(async () => { await import('../src/client/markdown/frontmatter-fields.tsx') })
     const fields = await vi.waitUntil(() => view.container.querySelector('[data-document-frontmatter] dl'))
     expect([...fields.querySelectorAll('dt')].map(node => node.textContent))
       .toEqual(['name', 'description', 'metadata', 'anchor', 'copy', 'license', 'version', 'beta', '1', 'orphan'])

@@ -14,6 +14,7 @@ import {
   createSnapshotStore, type ObservableSnapshot, type SnapshotStore,
 } from '@deepseek-ai/dsh-client-store'
 import type { LexicalEditor } from 'lexical'
+import { $getRoot } from 'lexical'
 import type {
   CommandClaim, ConsumeTokenRequest, DraftAttachmentId, DraftInitializationOptions, DraftInitializationResult,
   InputActions, InputEffect, InputNotice, InputState, InputTriggerController, PickOutcome,
@@ -59,7 +60,9 @@ export interface SessionInputDeps {
   steerQueue?: (() => void) | undefined
   /** Session-owned recall, including a retained request identity after uncertain transport failures. */
   canRecallQueue?: () => boolean
-  recallQueue?: (stillAccepts: () => boolean, signal: AbortSignal) => Promise<{ readonly text: string; readonly attachmentIds: readonly DraftAttachmentId[]; commit(): void } | undefined>
+  recallQueue?: (
+    stillAccepts: () => boolean, signal: AbortSignal,
+  ) => Promise<{ readonly text: string; readonly attachmentIds: readonly DraftAttachmentId[]; commit(): void } | undefined>
   recallFailed?: () => string
   retainRecall?: () => (() => void)
   /** The plain-message sink (send choreography / materialize fork — the hub owns it). */
@@ -165,6 +168,7 @@ export class SessionInputShell implements SessionInput {
   private attachmentIds: readonly DraftAttachmentId[] = []
   private disposed = false
   private recall: AbortController | undefined
+  private cancelRecallFocus: (() => void) | undefined
   /** Conversation store writer for the current semantic document. */
   private persistDraft: ((draft: DraftSnapshot) => void) | undefined
   /** A restored draft's command token waiting for the trigger pipeline, with the revision its restore produced. */
@@ -419,6 +423,19 @@ export class SessionInputShell implements SessionInput {
   }
 
   /**
+   * Insert a structured reference after the current selection and restore composer focus.
+   * @param reference - validated reference payload supplied by a composer drag source.
+   * @returns whether the current selection accepted the reference.
+   */
+  insertReferenceAtCaret(reference: ReferenceInsert): boolean {
+    if (this.disposed) return false
+    const selection = this.caretSpan()
+    const applied = this.insertReference(reference, { start: selection.end, end: selection.end, draftRev: this.rev })
+    if (applied) this.focus()
+    return applied
+  }
+
+  /**
    * Enter adjudication + submit transaction + default sink. Effects fan out
    * from the machine; this method only feeds the event. Lock entry
    * (adjudicating/submitting) force-closes the transient layers: the popup
@@ -505,7 +522,11 @@ export class SessionInputShell implements SessionInput {
       || this.deps.canRecallQueue?.() !== true || this.deps.recallQueue === undefined) return false
     const recall = this.deps.recallQueue
     const release = this.deps.retainRecall?.()
+    const persistSourceDraft = this.persistDraft
     const controller = new AbortController()
+    const root = this.editor.getRootElement()
+    const restoreFocus = root !== null && root.ownerDocument.activeElement === root
+    let restored = false
     this.recall = controller
     void Promise.resolve().then(async () => {
       this.publish()
@@ -518,8 +539,12 @@ export class SessionInputShell implements SessionInput {
         // Keep the lock through editor notifications: reentrant input cannot
         // overwrite this draft or start another recall before commit.
         this.importDraft(draft.text)
+        // The initiating view can unmount while its retained Session owns the
+        // handoff. Persist before acknowledging recovery or releasing that Session.
+        if (this.persistDraft === undefined) persistSourceDraft?.(this.draftSnapshot)
         this.publish()
         draft.commit()
+        restored = true
       } catch (error) {
         this.attachmentIds = attachments
         try {
@@ -539,6 +564,7 @@ export class SessionInputShell implements SessionInput {
         this.recall = undefined
         if (!this.disposed) {
           this.publish()
+          if (restored && restoreFocus) this.focusRecalledDraft(root)
         }
       } finally { release?.() }
     }).catch((_error: unknown) => {
@@ -547,6 +573,46 @@ export class SessionInputShell implements SessionInput {
       console.error('Queue recall notification failed')
     })
     return true
+  }
+
+  /** Restore the initiating composer's focus after editing is enabled; shell disposal cancels both listeners. */
+  private focusRecalledDraft(root: HTMLElement): void {
+    this.cancelRecallFocus?.()
+    if (this.disposed || this.editor.getRootElement() !== root || !root.isConnected) return
+    const focus = (): void => {
+      const active = root.ownerDocument.activeElement
+      if (this.disposed || this.recall !== undefined || !this.editor.isEditable()
+        || this.editor.getRootElement() !== root || !root.isConnected
+        || (active !== null && active !== root && active !== root.ownerDocument.body)) return
+      root.focus({ preventScroll: true })
+      this.editor.update(() => { $getRoot().selectEnd().dirty = true }, { discrete: true })
+    }
+    if (this.editor.isEditable()) {
+      focus()
+      return
+    }
+    // The view owns setEditable; Session switches detach this root and cancel
+    // the pending focus before another editor can borrow the resident element.
+    let pending = true
+    const stop = (): void => {
+      if (!pending) return
+      pending = false
+      if (this.cancelRecallFocus === stop) this.cancelRecallFocus = undefined
+      stopEditable()
+      stopRoot()
+    }
+    const stopEditable = this.editor.registerEditableListener((editable) => {
+      if (!editable) return
+      stop()
+      // Lexical runs editable listeners in a read-only update; edits queued
+      // there do not commit until a later editor transaction.
+      queueMicrotask(focus)
+    })
+    const stopRoot = this.editor.registerRootListener((current) => {
+      if (current === root) return
+      stop()
+    })
+    this.cancelRecallFocus = stop
   }
 
   /**
@@ -712,6 +778,7 @@ export class SessionInputShell implements SessionInput {
       flight.controller.abort()
     }
     this.disposed = true
+    this.cancelRecallFocus?.()
     this.recall?.abort()
     this.cancelCommandRestore()
     this.dispatchRun(({ type: 'release' }))

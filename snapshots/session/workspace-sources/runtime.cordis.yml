@@ -1,0 +1,8 @@
+- id: tool-bash
+  disabled: true
+- id: tool-pwsh
+  disabled: true
+
+- insert:
+    - id: workspace-sources-snapshot
+      name: './setup.ts'

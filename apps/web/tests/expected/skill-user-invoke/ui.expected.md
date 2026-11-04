@@ -11,6 +11,7 @@
 - button "meeting notes-this-is-a-very-long-filename-for-testing-user-message-file-references-and-preview-layout.md"
 - text: and confirm the fixture wiring {{clock}}
 - button "Copy"
+- button "Edit and resend"
 - status: Completed
 - button "Completed in {{duration}}" [disabled]
 - paragraph: USER_INVOKE_REPLY acknowledged; following the injected skill.

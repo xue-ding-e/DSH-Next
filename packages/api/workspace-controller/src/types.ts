@@ -17,8 +17,10 @@ export type { DirectoryEntry, DirectoryListing } from '@deepseek-ai/dsh-host-dir
 /** One durable Workspace projected for browser consumers. */
 export interface WorkspaceView {
   readonly workspaceId: WorkspaceId
-  /** Canonical host directory path. */
+  /** Immutable canonical Host directory used when the Workspace was registered. */
   readonly path: string
+  /** Ordered canonical source directories; omission means the original path only. The first is primary. */
+  readonly sourcePaths?: readonly string[]
   /** User-visible title. */
   readonly title: string
   /** Sessions accounted to this Workspace in manual order. */
@@ -76,6 +78,8 @@ export interface WorkspaceCreateValue {
 export interface WorkspaceRenameRequest {
   readonly workspaceId: WorkspaceId
   readonly title: string
+  /** Save source directories with the title; omission preserves the existing list. */
+  readonly sourcePaths?: readonly string[]
 }
 
 /** Workspace mutation returning the complete changed row. */

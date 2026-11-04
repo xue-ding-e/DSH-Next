@@ -1,0 +1,14 @@
+{
+  "extends": "../../../tsconfig.base.client.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "lib/types",
+    "tsBuildInfoFile": "lib/tsconfig.client.tsbuildinfo"
+  },
+  "files": ["src/uri.ts", "src/config.ts", "src/types.ts"],
+  "references": [
+    { "path": "../../util/brand" },
+    { "path": "../../core/session" },
+    { "path": "../../llm/llm" }
+  ]
+}

@@ -1,6 +1,6 @@
 /** Scoped Remote Event wiring and projection publishing for the browser question consumer. */
 import { Context } from '@deepseek-ai/cordis'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { SlotRegistry } from '@deepseek-ai/dsh-client-ui-renderer/client'
 import { LocaleRuntime } from '@deepseek-ai/dsh-client-locale/client'
 import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
@@ -13,6 +13,11 @@ import { PendingQuestion } from '../src/client/contract/slots.ts'
 import { createQuestionDraftStore } from '../src/client/draft-store.ts'
 import { apply, inject } from '../src/client/index.ts'
 import { TimedQuestionWait } from '../../../interaction/user-questions/src/timed-wait.ts'
+import type { DesktopQuestionNotifications, DesktopQuestionNotificationEvent } from '../src/desktop-notifications.ts'
+import type { QuestionNotificationInjected } from '../src/client/QuestionNotification.tsx'
+import type { QuestionNotificationSettingInjected } from '../src/client/QuestionNotificationSetting.tsx'
+
+afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks() })
 
 const SESSION_ID = 'session-question' as SessionId
 const SESSION_SCOPE = Symbol('question-session-scope')
@@ -68,6 +73,8 @@ async function bench(
         children: {
           'conversation.composer': { kind: 'chain', scope: 'session' },
           'conversation.chat.node': { kind: 'keyed', scope: 'session' },
+          'shell.overlay': { kind: 'list', scope: 'root' },
+          'settings.general.item': { kind: 'list', scope: 'root' },
         },
       } as never,
       () => null,
@@ -105,6 +112,8 @@ async function bench(
   ctx.provide('uiSession', { registerPendingInteraction } as never)
   const registerNode = vi.fn((_definition: { kind: string }) => () => {})
   ctx.provide('uiConversation', { events: { register: registerNode } } as never)
+  const openSession = vi.fn<(id: SessionId) => void>()
+  ctx.provide('uiWorkspace', { openSession } as never)
   let listener: QuestionListener | undefined
   const on = vi.fn((event: string, value: QuestionListener) => {
     expect(event).toBe('user-questions/request')
@@ -158,6 +167,7 @@ async function bench(
     panels: () => ctx.get('userQuestionPanels'),
     registerPendingInteraction,
     registerNode,
+    openSession,
     on,
     fiber,
     list,
@@ -177,6 +187,189 @@ async function bench(
 const timed = (): QuestionRequest => ({
   questions: QUESTIONS,
   wait: { callId: CALL, timed: true },
+})
+
+function nativeNotifications() {
+  const listeners = new Set<(event: DesktopQuestionNotificationEvent) => void>()
+  const api = {
+    show: vi.fn<DesktopQuestionNotifications['show']>().mockResolvedValue('submitted'),
+    close: vi.fn<DesktopQuestionNotifications['close']>().mockResolvedValue(undefined),
+    subscribe: vi.fn<DesktopQuestionNotifications['subscribe']>((listener) => {
+      listeners.add(listener)
+      return () => { listeners.delete(listener) }
+    }),
+  }
+  vi.stubGlobal('window', { dshDesktop: { questionNotifications: api } })
+  return { api, listeners, emit: (event: DesktopQuestionNotificationEvent) => { for (const listener of listeners) listener(event) } }
+}
+
+/** Slot inspection erases the inject return type; each caller knows its own registration's face. */
+function injectedFace(slots: SlotRegistry, key: 'shell.overlay' | 'settings.general.item', id: string): object {
+  const entry = slots.entries(key).find(candidate => candidate.options.id === id)
+  if (entry?.inject === undefined) throw new Error(`Missing question notification fixture entry: ${id}`)
+  return entry.inject()
+}
+
+function notificationFace(slots: SlotRegistry): QuestionNotificationInjected {
+  return injectedFace(slots, 'shell.overlay', 'question-notification') as QuestionNotificationInjected
+}
+
+function notificationSetting(slots: SlotRegistry): QuestionNotificationSettingInjected {
+  return injectedFace(slots, 'settings.general.item', 'question-notifications') as QuestionNotificationSettingInjected
+}
+
+describe('question notification routing', () => {
+  it('leaves Web questions answerable without notification UI or preference access', async () => {
+    vi.stubGlobal('window', {})
+    const storage = { getItem: vi.fn(() => 'disabled'), setItem: vi.fn() }
+    vi.stubGlobal('localStorage', storage)
+    const b = await bench()
+    try {
+      const result = b.invoke(b.agent, { questions: QUESTIONS }, async () => ANSWER)
+      const card = b.pending.getSnapshot()[0]!
+      expect(card.questions).toEqual(QUESTIONS)
+      expect(b.slots.entries('shell.overlay')).toEqual([])
+      expect(b.slots.entries('settings.general.item')).toEqual([])
+      expect(storage.getItem).not.toHaveBeenCalled()
+      expect(storage.setItem).not.toHaveBeenCalled()
+      await card.answer(ANSWER)
+      await expect(result).resolves.toBe(ANSWER)
+    } finally { await b.fiber.dispose() }
+    expect(storage.getItem).not.toHaveBeenCalled()
+    expect(storage.setItem).not.toHaveBeenCalled()
+  })
+
+  it('keeps the device preference across reload and withdraws notifications when disabled', async () => {
+    const n = nativeNotifications()
+    const storage = new Map([['dsh.ui-user-questions.notifications', 'disabled']])
+    vi.stubGlobal('localStorage', {
+      getItem: (key: string) => storage.get(key) ?? null,
+      setItem: (key: string, value: string) => { storage.set(key, value) },
+    })
+    const b = await bench(true, [CONTINUED])
+    try {
+      const setting = notificationSetting(b.slots)
+      expect(setting.hooks.enabled.getSnapshot()).toBe(false)
+      expect(n.api.show).not.toHaveBeenCalled()
+      setting.setEnabled(true)
+      expect(storage.get('dsh.ui-user-questions.notifications')).toBe('enabled')
+      b.projection.set(view([CONTINUED, { ...CONTINUED, callId: ToolCallId('another-question') }]))
+      expect(n.api.show).toHaveBeenCalledOnce()
+      setting.setEnabled(false)
+      expect(storage.get('dsh.ui-user-questions.notifications')).toBe('disabled')
+      await vi.waitFor(() => { expect(n.api.close).toHaveBeenCalledOnce() })
+    } finally { await b.fiber.dispose() }
+    const reloaded = await bench()
+    try { expect(notificationSetting(reloaded.slots).hooks.enabled.getSnapshot()).toBe(false) }
+    finally { await reloaded.fiber.dispose() }
+  })
+
+  it('keeps native notifications enabled and reports a denied preference read', async () => {
+    const n = nativeNotifications()
+    vi.stubGlobal('localStorage', { getItem: () => { throw new Error('denied') }, setItem: vi.fn() })
+    const b = await bench(true, [CONTINUED])
+    try {
+      const setting = notificationSetting(b.slots)
+      expect(setting.hooks.enabled.getSnapshot()).toBe(true)
+      expect(setting.hooks.preferenceError.getSnapshot()).toBe(true)
+      expect(n.api.show).toHaveBeenCalledOnce()
+      expect(b.pending.getSnapshot()).toHaveLength(1)
+    } finally { await b.fiber.dispose() }
+  })
+
+  it('reports a denied preference write and keeps the volatile disabled setting effective', async () => {
+    const n = nativeNotifications()
+    vi.stubGlobal('localStorage', { getItem: () => null, setItem: () => { throw new Error('denied') } })
+    const b = await bench()
+    try {
+      const setting = notificationSetting(b.slots)
+      setting.setEnabled(false)
+      expect(setting.hooks.preferenceError.getSnapshot()).toBe(true)
+      expect(setting.hooks.enabled.getSnapshot()).toBe(false)
+      b.projection.set(view([CONTINUED]))
+      expect(n.api.show).not.toHaveBeenCalled()
+    } finally { await b.fiber.dispose() }
+  })
+
+  it('reports native callbacks and navigation failures without removing the question', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    const n = nativeNotifications()
+    const b = await bench(true, [CONTINUED])
+    try {
+      n.emit({ type: 'failed', id: n.api.show.mock.calls[0]![0].id })
+      const face = notificationFace(b.slots)
+      expect(face.hooks.notificationError.getSnapshot()?.kind).toBe('native')
+      face.dismissError()
+      expect(face.hooks.notificationError.getSnapshot()).toBeNull()
+      b.openSession.mockImplementationOnce(() => { throw new Error('navigation refused') })
+      b.projection.set(view([CONTINUED, { ...CONTINUED, callId: ToolCallId('another-question') }]))
+      n.emit({ type: 'activated', id: n.api.show.mock.calls[1]![0].id })
+      expect(face.hooks.notificationError.getSnapshot()?.kind).toBe('open')
+      expect(b.pending.getSnapshot()).toHaveLength(2)
+    } finally { await b.fiber.dispose() }
+  })
+
+  it('notifies by default and opens the Session and exact question belonging to the clicked reminder', async () => {
+    const n = nativeNotifications()
+    const b = await bench()
+    try {
+      const firstResult = b.invoke(b.agent, { questions: QUESTIONS }, async () => ANSWER)
+      const first = b.pending.getSnapshot()[0]!
+      const other = 'another-session' as SessionId
+      const secondResult = b.invoke(b.ctx.extend({ [SESSION_SCOPE]: other }), { questions: QUESTIONS }, async () => ANSWER)
+      const second = b.pending.getSnapshot().find(card => card.sessionId === other)!
+      expect(n.api.show).toHaveBeenCalledTimes(2)
+      const id = n.api.show.mock.calls[1]![0].id
+      n.emit({ type: 'activated', id })
+      expect(b.openSession).toHaveBeenCalledExactlyOnceWith(other)
+      expect(b.pending.getSnapshot().at(-1)).toBe(second)
+      await second.answer(ANSWER)
+      await secondResult
+      n.emit({ type: 'activated', id })
+      expect(b.openSession).toHaveBeenCalledOnce()
+      await first.answer(ANSWER)
+      await firstResult
+    } finally { await b.fiber.dispose() }
+    expect(n.listeners.size).toBe(0)
+    expect(n.api.close).toHaveBeenCalledTimes(2)
+    expect(b.slots.entries('shell.overlay')).toEqual([])
+    expect(b.slots.entries('settings.general.item')).toEqual([])
+  })
+
+  it('withdraws resolved and hidden pending questions on resolution and unload', async () => {
+    const n = nativeNotifications()
+    const b = await bench(true, [CONTINUED])
+    const card = b.pending.getSnapshot()[0]!
+    await card.dismiss()
+    expect(b.pending.getSnapshot()).toEqual([])
+    const id = n.api.show.mock.calls[0]![0].id
+    b.projection.set(view([]))
+    await b.fiber.dispose()
+    n.emit({ type: 'activated', id })
+    expect(n.api.close).toHaveBeenCalledExactlyOnceWith(id)
+    expect(b.openSession).not.toHaveBeenCalled()
+  })
+
+  it.each(['unsupported', 'failed'] as const)('reports %s visibly while retaining the answerable question', async (outcome) => {
+    const n = nativeNotifications()
+    n.api.show.mockResolvedValue(outcome)
+    const b = await bench(true, [CONTINUED])
+    try {
+      const face = notificationFace(b.slots)
+      await vi.waitFor(() => { expect(face.hooks.notificationError.getSnapshot()?.kind).toBe('native') })
+      expect(b.pending.getSnapshot()).toHaveLength(1)
+    } finally { await b.fiber.dispose() }
+  })
+
+  it('reports a missing desktop bridge while retaining the question without an in-app reminder', async () => {
+    vi.stubGlobal('window', { dshDesktop: { protocolVersion: 1 } })
+    const b = await bench(true, [CONTINUED])
+    try {
+      const face = notificationFace(b.slots)
+      expect(face.hooks.notificationError.getSnapshot()?.kind).toBe('native')
+      expect(b.pending.getSnapshot()).toHaveLength(1)
+    } finally { await b.fiber.dispose() }
+  })
 })
 
 describe('apply', () => {
@@ -318,7 +511,7 @@ describe('apply', () => {
   })
 
   it('declares the services it binds', () => {
-    expect(inject).toEqual(['sessions', 'remote', 'remote.userQuestions', 'uiSession', 'slots', 'locale', 'uiConversation'])
+    expect(inject).toEqual(['sessions', 'remote', 'remote.userQuestions', 'uiSession', 'slots', 'locale', 'uiConversation', 'uiWorkspace'])
   })
 
   it('installs the Remote Event listener and delegates an unscoped request', async () => {

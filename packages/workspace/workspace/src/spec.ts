@@ -23,6 +23,10 @@ const sessionId = z.string().transform(value => brandString<SessionId>(value))
  */
 export const workspaceRecord = z.object({
   path: z.string(),
+  /** Ordered source directories; the first is used for new Sessions. Omission denotes the original path. */
+  sourcePaths: z.array(z.string()).min(1).optional(),
+  /** Removed source directories retained only to validate already-accounted Sessions. */
+  retainedSourcePaths: z.array(z.string()).optional(),
   title: z.string(),
   sessionIds: z.array(sessionId),
   createdAt: z.string(),

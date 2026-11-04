@@ -31,6 +31,8 @@ kind: "package-reference"
 - name: '@deepseek-ai/dsh-working-directory'
 ```
 
+挂载可选的 Workspace 注册表后，已归属的 Session 也会收到配置的来源目录。存在多个来源，或唯一来源不同于 Workspace 原始登记目录时，上下文会说明首项是主要来源，并单独报告当前 cwd。编辑来源不会移动现有 Session。在 `workspace-write` 下，[沙箱策略](../../sandbox/sandbox-policy/README.zh.md#use-this-package)会在下一次操作时授予所属 Workspace 当前来源的写权限；移除来源会撤销其额外授权，同时保留 Session 的原始根目录。`read-only` 仍不可写。
+
 -----
 
 <a id="understand-the-implementation"></a>
@@ -63,7 +65,7 @@ Session 投影拥有当前目录，并通过 Session observation 暴露它，因
 
 #### 模型可见内容
 
-当前值为 `Current working directory: <JSON-quoted absolute path>.` 每次已提交变更（包括自动恢复）都会尝试通过普通 Agent 收件箱排入用户上下文通知。取消或销毁可能丢弃尚未进入请求的通知；持久化目录仍可供下一次请求使用。目录上下文不进入系统提示词，即使可选运行时上下文被禁用，也仍然保留。
+当前值为 `Current working directory: <JSON-quoted absolute path>.` 每次已提交变更（包括自动恢复）都会尝试通过普通 Agent 收件箱排入用户上下文通知。取消或销毁可能丢弃尚未进入请求的通知；持久化目录仍可供下一次请求使用。目录上下文不进入系统提示词，即使可选运行时上下文被禁用，也仍然保留。Workspace 来源会增加 `Workspace source directories: <JSON directory array>. The first directory is the primary source; the current working directory is reported separately. Directory access follows the current file policy.` 这项必需的 `workspace:sources` 上下文按 Session 归属选择，并跟随已保存的来源编辑。Agent 循环在模型接收前将它记入既有的 `runtime-context` 用户消息快照，无需单独新增 Session 事件。卸载任一拥有方都会移除该上下文。
 
 #### Token 影响
 

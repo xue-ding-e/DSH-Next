@@ -73,14 +73,20 @@ export interface GroupNode {
   /** Backing Workspace id; absent only for the ungrouped bucket. */
   workspaceId: WorkspaceId | undefined
   cwd: string | undefined
+  /** Project source directories shown in its hover card. */
+  sourcePaths?: readonly string[]
   /** Workspace creation time (epoch ms); absent only for the ungrouped bucket. */
   createdAt: number | undefined
   label: string
-  /** Total visible sessions in the group. */
+  /** Visible conversations in the group, excluding the blank placeholder. */
   sessionCount: number
   expanded: boolean
   /** The group contains the selected session (active folder tint; supplied here so the renderer never scans). */
   containsCurrent: boolean
+  /** Whether any Session in the group is running or waiting for user input. */
+  active?: boolean
+  /** Sessions with their own activity, running children, or a pending interaction. */
+  activeSessionCount?: number
   /** Visible session rows (empty while the group is folded). */
   sessions: readonly SessionNode[]
 }
@@ -156,6 +162,35 @@ export function orderByRecency(
       return a.id < b.id ? -1 : 1
     })
     .map(member => member.id)
+}
+
+/**
+ * Select sidebar shortcuts by latest navigation or Session update, independently of pin order.
+ * @param list - loaded Session catalog.
+ * @param archivedSessionIds - Sessions excluded from shortcuts.
+ * @param limit - maximum number of shortcuts.
+ * @param openedAt - device-local navigation timestamps.
+ * @returns nonblank ordinary Session ids, most recently used first.
+ */
+export function recentSessionIds(
+  list: SessionListState,
+  archivedSessionIds: readonly SessionId[],
+  limit: number,
+  openedAt: Readonly<Record<string, number>> = {},
+): SessionId[] {
+  const archived = new Set(archivedSessionIds)
+  const current = mainSessionId(list)
+  return [...new Set(list.ids)]
+    .filter((id) => {
+      const session = list.byId[id]
+      return session !== undefined && !session.blank && !archived.has(id)
+        && sessionVisible(session, current, archived, 'default')
+    })
+    .sort((a, b) => {
+      const rank = (id: SessionId): number => Math.max(openedAt[id] ?? 0, list.byId[id]?.updatedAt ?? 0)
+      return rank(b) - rank(a) || a.localeCompare(b)
+    })
+    .slice(0, limit)
 }
 
 /**
@@ -440,17 +475,27 @@ export function deriveGroups(
     ? undefined
     : owningGroupKey(workspaces, current)
   const groups: GroupNode[] = []
+  const sourcePathsById = new Map(workspaces.map(workspace => [workspace.workspaceId, workspace.sourcePaths ?? [workspace.path]]))
   for (const g of groupByWorkspace(list, workspaces, archived, rowState.archivedFilter, view.ungroupedOrder)) {
     const expanded = expandedGroups.has(g.key)
+    const sourcePaths = g.workspaceId === undefined ? undefined : sourcePathsById.get(g.workspaceId)
+    const activeSessionCount = g.sessions.filter((session) => {
+      const status = statuses.get(session.id)
+      return (status?.running ?? session.running) || status?.pendingInteraction !== undefined
+        || runningChildCount(list, session.id, statuses) > 0
+    }).length
     groups.push({
       key: g.key,
       workspaceId: g.workspaceId,
       cwd: g.cwd,
+      ...(sourcePaths === undefined ? {} : { sourcePaths }),
       createdAt: g.createdAt,
       label: g.label,
-      sessionCount: g.sessions.length,
+      sessionCount: g.sessions.filter(session => !session.blank).length,
       expanded,
       containsCurrent: g.key === currentGroup,
+      active: activeSessionCount > 0,
+      activeSessionCount,
       sessions: expanded
         ? sectionMembers(g.sessions, pinned, archived)
           .map(session => sessionNode(session, list, statuses, pinned, archived))

@@ -126,7 +126,7 @@ export class SessionCommandController {
         })
       }
     }
-    const cwd = workspace?.path ?? request.cwd ?? this.defaultCwd
+    const cwd = workspace?.primaryPath ?? request.cwd ?? this.defaultCwd
     let created: ApiSessionCreated
     try {
       created = await this.agents.createSession({

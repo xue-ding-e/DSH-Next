@@ -26,6 +26,7 @@ import {
   seedSession,
   readPersistedEvents,
   watchConsole,
+  acknowledgeReloadConnectionLoss,
   webSnapshotMode,
   type WebScaffold,
 } from './scaffold.ts'
@@ -174,6 +175,78 @@ describe.skipIf(MODE === 'record')('web e2e: file and session references through
     await scaffold?.close()
   })
 
+  it.each([
+    ['recent', 'content', 1680], ['workspace', 'content', 1680],
+    ['recent', 'rightbar', 1680], ['workspace', 'rightbar', 1680], ['recent', 'content', 390],
+  ] as const)('drags a %s conversation onto %s at %ipx without losing its draft or reordering the sidebar', async (origin, destinationArea, width) => {
+    onTestFailed(() => saveFailureShot(page, 'web-e2e-reference-drag'))
+    await page.setViewportSize({ width, height: 1000 })
+    await page.emulateMedia({ colorScheme: origin === 'workspace' ? 'dark' : 'light' })
+    const input = page.locator('[data-composer-input]').first()
+    if (width === 390) {
+      await writeComposerDraft(page, input, 'Keep this draft. ')
+      await page.getByRole('button', { name: 'Open sidebar', exact: true }).click()
+    }
+    if (origin === 'workspace') {
+      const group = page.getByRole('treeitem', { name: /Ungrouped/ })
+      if (await group.getAttribute('aria-expanded') !== 'true') await group.click()
+    }
+    const source = origin === 'recent'
+      ? page.getByRole('region', { name: 'Recent', exact: true }).locator(`[data-row-key="recent-session:${SOURCE_SESSION_ID}"]`)
+      : page.locator(`[data-row-key="session:${SOURCE_SESSION_ID}"]`)
+    await source.waitFor()
+    if (width !== 390) await writeComposerDraft(page, input, 'Keep this draft. ')
+    if (destinationArea === 'rightbar') await page.getByRole('button', { name: 'Open right sidebar', exact: true }).click()
+    const destinationRegion = page.locator(destinationArea === 'rightbar' ? '[data-rightbar-col]' : '[data-conversation-content]').first()
+    await expect.poll(async () => (await destinationRegion.boundingBox())?.width ?? 0).toBeGreaterThan(0)
+    const order = await page.evaluate(() => localStorage.getItem('dsh.workspace.view.v5'))
+    const from = await source.boundingBox()
+    const destination = await destinationRegion.boundingBox()
+    if (from === null || destination === null) throw new Error('Conversation drag targets are not visible')
+    await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2)
+    await page.mouse.down()
+    await page.mouse.move(from.x + from.width / 2 + 10, from.y + from.height / 2, { steps: 3 })
+    if (origin === 'workspace') {
+      const hovered = await page.locator(`[data-row-key="session:${TARGET_SESSION_ID}"]`).boundingBox()
+      if (hovered === null) throw new Error('Sidebar reorder row is not visible')
+      await page.mouse.move(hovered.x + hovered.width / 2, hovered.y + hovered.height / 2, { steps: 10 })
+    }
+    await page.mouse.move(destination.x + destination.width / 2, destination.y + destination.height / 3, { steps: 10 })
+    const invitation = page.locator('[data-session-reference-drop]')
+    await invitation.waitFor({ state: 'visible' })
+    expect(await invitation.textContent()).toBe('Release to reference chat')
+    const main = await page.locator('[data-main-column]').boundingBox()
+    const mask = await invitation.boundingBox()
+    if (main === null || mask === null) throw new Error('Drop invitation bounds are unavailable')
+    expect(mask.x).toBeCloseTo(main.x, 0)
+    expect(mask.width).toBeGreaterThanOrEqual(main.width)
+    const hint = await invitation.locator('span').boundingBox()
+    if (hint === null) throw new Error('Drop invitation text is unavailable')
+    expect(hint.x).toBeGreaterThanOrEqual(mask.x)
+    expect(hint.x + hint.width).toBeLessThanOrEqual(mask.x + mask.width)
+    await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2, { steps: 10 })
+    await invitation.waitFor({ state: 'hidden' })
+    await page.mouse.move(destination.x + destination.width / 2, destination.y + destination.height / 3, { steps: 10 })
+    await invitation.waitFor({ state: 'visible' })
+    await page.screenshot({ path: join(SNAPSHOT_DIR, '..', '..', '..', '..', '..', '.playwright-mcp', `conversation-drop-${origin}-${destinationArea}-${width}.png`) })
+    await page.mouse.up()
+    await invitation.waitFor({ state: 'hidden' })
+    const chip = input.locator('[data-composer-chip]')
+    await expect.poll(() => chip.count()).toBe(1)
+    expect(await chip.textContent()).toBe('Untitled')
+    expect(await input.textContent()).toContain('Keep this draft.')
+    await page.keyboard.insertText('Continue typing')
+    expect(await input.textContent()).toContain('Continue typing')
+    expect(await page.evaluate(() => localStorage.getItem('dsh.workspace.view.v5'))).toBe(order)
+    if (width === 390) await page.getByRole('button', { name: 'Collapse sidebar', exact: true }).click()
+    await writeComposerDraft(page, input, '')
+    if (destinationArea === 'rightbar') await page.getByRole('button', { name: 'Collapse right sidebar', exact: true }).click()
+    await page.emulateMedia({ colorScheme: 'light' })
+    await page.setViewportSize({ width: 1680, height: 1000 })
+    expect(tripwire.warnings).toEqual([])
+    expect(tripwire.pageErrors).toEqual([])
+  })
+
   it('groups both sources and projects files and sessions as structured inline icon labels', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-reference-composer'))
     const input = page.locator('[data-composer-input]').first()
@@ -186,7 +259,10 @@ describe.skipIf(MODE === 'record')('web e2e: file and session references through
     const snapshot = await captureStableAria(
       page, '[role="listbox"]', scaffold.workspaceCwd, {
         normalizeAge: true,
-        replacements: [[abbreviateHomePath(scaffold.workspaceCwd, homedir()), '{{cwd}}']],
+        replacements: [
+          [abbreviateHomePath(scaffold.workspaceCwd, homedir()), '{{cwd}}'],
+          [scaffold.workspaceCwd.replaceAll('\\', '\\\\'), '{{cwd}}'],
+        ],
       },
     )
     await compareOrRefreshGolden(MENU_EXPECTED, snapshot, MODE)
@@ -420,5 +496,31 @@ describe.skipIf(MODE === 'record')('web e2e: file and session references through
     expect(tripwire.pageErrors).toEqual([])
     expect(tripwire.warnings).toEqual([])
     await assertFixtureInventory(SNAPSHOT_DIR, ['menu.expected.md', 'order.expected.md'])
+  })
+
+  it('keeps the last opened conversation first across reload without changing the workspace tree', async () => {
+    onTestFailed(() => saveFailureShot(page, 'web-e2e-recent-order'))
+    const recent = page.getByRole('region', { name: 'Recent', exact: true })
+    const rows = recent.locator('[data-row-key^="recent-session:"]')
+    const treeRows = page.locator('[role="treeitem"][data-row-key^="session:"]')
+    const treeOrder = await treeRows.evaluateAll(elements => elements.map(element => element.getAttribute('data-row-key')))
+    expect(treeOrder).toEqual(expect.arrayContaining([`session:${SOURCE_SESSION_ID}`, `session:${TARGET_SESSION_ID}`]))
+    const openedAt = Date.now() + 60_000
+    await page.clock.setFixedTime(openedAt)
+    await recent.locator(`[data-row-key="recent-session:${SOURCE_SESSION_ID}"]`).click()
+    await expect.poll(() => rows.first().getAttribute('data-row-key')).toBe(`recent-session:${SOURCE_SESSION_ID}`)
+    await page.clock.setFixedTime(openedAt + 1_000)
+    await recent.locator(`[data-row-key="recent-session:${TARGET_SESSION_ID}"]`).click()
+    await expect.poll(() => rows.first().getAttribute('data-row-key')).toBe(`recent-session:${TARGET_SESSION_ID}`)
+    expect(await treeRows.evaluateAll(elements => elements.map(element => element.getAttribute('data-row-key')))).toEqual(treeOrder)
+
+    const warningStart = tripwire.warnings.length
+    await page.reload()
+    await recent.waitFor()
+    await expect.poll(() => rows.first().getAttribute('data-row-key')).toBe(`recent-session:${TARGET_SESSION_ID}`)
+    await expect.poll(() => treeRows.evaluateAll(elements => elements.map(element => element.getAttribute('data-row-key')))).toEqual(treeOrder)
+    acknowledgeReloadConnectionLoss(tripwire, warningStart)
+    expect(tripwire.pageErrors).toEqual([])
+    expect(tripwire.warnings).toEqual([])
   })
 })

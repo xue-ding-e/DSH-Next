@@ -1158,6 +1158,11 @@
     },
     {
       "doc": "docs/subsystems/attachment.md",
+      "symbol": "HistoryFileUploadRequest",
+      "source": "packages/client/file-upload/src/types.ts"
+    },
+    {
+      "doc": "docs/subsystems/attachment.md",
       "symbol": "ImageMediaType",
       "source": "packages/attachment/attachment/src/types.ts"
     },

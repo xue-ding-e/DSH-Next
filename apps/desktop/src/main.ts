@@ -29,6 +29,7 @@ import { DesktopHostFatalError, DesktopHostProcess, DesktopHostUncleanExitError 
 import { DesktopPlatformView, PLATFORM_IPC, platformBounds } from './platform-view.ts'
 import { installDesktopFileDrag } from './file-drag.ts'
 import { installDesktopDirectoryPicker } from './directory-picker.ts'
+import { installDesktopQuestionNotifications } from './question-notifications.ts'
 import { installMicrophonePermissions } from './microphone-permissions.ts'
 import { DesktopBackendController } from './backend-controller.ts'
 import { DESKTOP_IPC, SCHEME, assertDesktopSender, type DesktopNavigationCommand, type DesktopUpdateState } from './ipc.ts'
@@ -340,6 +341,12 @@ function createWindow(preload: string, show = false, primary = false): BrowserWi
 async function main(): Promise<void> {
   const manifest: unknown = JSON.parse(await readFile(join(app.getAppPath(), 'package.json'), 'utf8'))
   const nextDistribution = app.isPackaged ? nextDesktopDistribution(manifest) : undefined
+  if (!app.isPackaged && process.platform === 'win32') {
+    app.setAppUserModelId(`${NEXT_DESKTOP_IDENTITY.appId}.development`)
+  } else if (app.isPackaged && process.platform === 'win32' && typeof manifest === 'object' && manifest !== null
+    && 'dshDesktopAppId' in manifest && typeof manifest.dshDesktopAppId === 'string') {
+    app.setAppUserModelId(manifest.dshDesktopAppId)
+  }
   if (nextDistribution !== undefined) {
     Object.assign(process.env, await nextDesktopEnvironment(
       homedir(), process.env, nextDesktopInstallRoot(process.execPath, process.platform)))
@@ -744,6 +751,8 @@ async function main(): Promise<void> {
   })
 
   installDesktopDirectoryPicker(() => mainWindow)
+  const disposeQuestionNotifications = installDesktopQuestionNotifications(event => assertProductSender(event))
+  app.on('will-quit', disposeQuestionNotifications)
   installMicrophonePermissions(session.defaultSession, () => mainWindow?.webContents)
   const shortcuts = installDesktopShortcuts(() => mainWindow, app.getPath('userData'),
     process.platform === 'darwin' ? 'macos' : process.platform === 'win32' ? 'windows' : 'linux', () => { refreshApplicationMenu() }, window => updateOverlays.input(window))
@@ -1322,6 +1331,7 @@ async function main(): Promise<void> {
   const finishQuit = (): void => {
     quitting = true
     shuttingDown = true
+    disposeQuestionNotifications()
     updateJournal?.action('quit-requested')
     quitConfirmation.dispose()
     backgroundNotice?.dispose()

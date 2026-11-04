@@ -9,6 +9,7 @@
   - button "更多会话视图"
 - text: 只回复 MESSAGES_WEB_READY，不调用工具。 {{clock}}
 - button "复制"
+- button "编辑并重新发送"
 - status: 已完成
 - button "已完成，用时 {{duration}}" [disabled]
 - paragraph: MESSAGES_WEB_READY

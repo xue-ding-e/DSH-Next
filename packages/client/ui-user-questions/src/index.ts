@@ -7,5 +7,10 @@
  * include it and to the TUI composition, which has no presets.
  */
 
+export type {
+  DesktopQuestionNotification, DesktopQuestionNotificationEvent, DesktopQuestionNotificationResult,
+  DesktopQuestionNotifications, QuestionNotificationId,
+} from './desktop-notifications.ts'
+
 /** Host plugin body — the model-facing tool is composed per preset, not here. */
 export function apply(): void {}

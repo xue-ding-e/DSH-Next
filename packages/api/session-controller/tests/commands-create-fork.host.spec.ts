@@ -8,7 +8,7 @@ import SessionStore, { SessionId } from '@deepseek-ai/dsh-session'
 import { RemoteError } from '@deepseek-ai/dsh-typert-protocol'
 import TypertRegistry from '@deepseek-ai/dsh-typert-registry'
 import type { Workspace, WorkspaceId } from '@deepseek-ai/dsh-workspace'
-import { describe, expect, it, vi } from 'vitest'
+import { describe, expect, it, onTestFinished, vi } from 'vitest'
 import {
   ApiSessionAgentController,
   ApiSessionCwdConflict,
@@ -59,6 +59,40 @@ async function baseContext(): Promise<Context> {
 }
 
 describe('Session creation failures', () => {
+  it('creates a Workspace Session in its primary source while preserving the original anchor', async () => {
+    const ctx = await baseContext()
+    onTestFinished(() => ctx.fiber.dispose())
+    const sessionIds: SessionId[] = []
+    const attachSession = vi.fn(async (id: SessionId) => { sessionIds.push(id) })
+    const workspace: Workspace = {
+      id: 'workspace-sources' as WorkspaceId,
+      path: '/original-anchor',
+      sourcePaths: ['/primary-source', '/secondary-source'],
+      primaryPath: '/primary-source',
+      title: 'Multiple sources',
+      createdAt: '2026-11-04T00:00:00.000Z',
+      updatedAt: '2026-11-04T00:00:00.000Z',
+      sessionIds,
+      setTitle: async () => {},
+      configure: async () => {},
+      attachSession,
+      detachSession: async () => {},
+      insertSessionBefore: async () => {},
+      status: async () => 'ok',
+    }
+    ctx.provide('workspaceRegistry', { get: () => workspace, list: () => [workspace], archivedSessionIds: [] } as never)
+    const createSession = vi.fn(publishedSession(ctx, SessionId('primary-source-session')))
+    const controller = new SessionCommandController(ctx, controllerAgents(ctx, { createSession }), '/deployment-default')
+
+    const created = await controller.create({ workspaceId: workspace.id })
+
+    expect(created).toEqual({ sessionId: 'primary-source-session' })
+    expect(createSession.mock.calls[0]?.[0].cwd).toBe('/primary-source')
+    expect(ctx.sessions.get(created.sessionId)?.header.cwd).toBe('/primary-source')
+    expect(attachSession).toHaveBeenCalledWith(created.sessionId)
+    expect(workspace.path).toBe('/original-anchor')
+  })
+
   it('creates in the default cwd without a named identity when no explicit target is supplied', async () => {
     const ctx = await baseContext()
     ctx.provide('workspaceRegistry', { get: () => undefined, list: () => [], archivedSessionIds: [] } as never)

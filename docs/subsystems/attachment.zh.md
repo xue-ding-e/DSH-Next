@@ -175,6 +175,21 @@ interface RequestImageAttachment {
 
 `saveImage()` 准备并原子提交提供方无关的规范化附件，然后直接返回 `ImageAttachmentRef`。`saveImages()` 在发布批次前为每个成员各准备一次经过验证的附件，因此校验拒绝不会留下部分对象，发布也不会重复解码或选择质量。`admitPromptContent()` 在上传凭证解析后接收完整且有序的 Host prompt，把 base64 图片上传替换为持久引用，让持久文件引用和已存储的图片原样通过，并把每张图片计入单条消息的图片数量与总字节上限，已存储的图片按其上传的字节数计入。`admitEncodedImages()` 支持其他 wire 入口，把张数、聚合字节和有序批量准入交给 `saveImages()`。`admitEncodedFile()` 让编码协议适配器使用服务拥有的规范 base64 准入，`isAttachmentError()` 让这些适配器无需导入实现辅助函数即可识别稳定的附件错误。`readImage()` 校验来自已授权会话路径的规范化附件。`imageHostPath()` 只公开提供方所持对象的宿主位置，不判断当前工具执行环境能否读取它。`readImageRequest()` 按确切的路由目标尺寸和编码字节目标派生并缓存确定性请求版本。该版本包含编码字节和元数据，不包含执行环境路径。新条目在发布前完整解码，缓存命中只做有界元数据探测。调用方需要有序批次时，对单数方法使用 `Promise.all`。本地实现按需编码首选候选、合并相同请求身份的并发任务、允许每个等待方单独取消、没有等待方时停止共享任务，并通过实例级限流器限制全部变换，默认同时执行两项。该服务不规定保留策略：恢复和 fork 后的会话可能共享对象，因此基于引用的垃圾回收会延期实现，不与单个会话的删除绑定。
 
+## 历史文件复用
+
+`fileUploads.stageHistory()` 校验来源和接收方 Session 的访问权限，选择准确的持久用户消息及文件位置，并返回归接收方所有的新凭据。它不会改写来源日志。文件缺失或不匹配时会拒绝请求；读取待发送文件仍须通过独立的队列授权。
+
+```ts type-equiv
+/** Exact durable human-message file to restage for a receiving Agent. */
+interface HistoryFileUploadRequest {
+  readonly sourceSessionId: SessionId
+  readonly messageId: MessageId
+  /** Zero-based content position distinguishes repeated bytes with different stored names. */
+  readonly contentIndex: number
+  readonly attachmentId: AttachmentId
+}
+```
+
 <!-- BEGIN GENERATED cordis-surface (gen-cordis-catalog.ts) — do not edit between markers -->
 
 <a id="cordis-surface"></a>
@@ -337,6 +352,17 @@ registerRecallResolver(resolve: QueueRecallResolver): () => void
  * @returns the staged receipt and durable file reference.
  */
 @Remote('upload') async upload(agent: Agent, request: EncodedFileUploadRequest, signal: AbortSignal): Promise<FileUploadValue>
+
+/**
+ * Restage a file referenced by one exact durable human message, without changing its source.
+ * The receiving Agent owns the fresh receipt; caller-supplied file metadata grants no authority.
+ * Cancellation or target disposal before staging grants no receipt. Observation failures reject the call.
+ * @param agent - ordinary receiving Agent resolved by the Remote Agent lookup.
+ * @param request - source Session, durable human message, content position, and file attachment identity.
+ * @param signal - cancellation while observing the source and before staging.
+ * @returns a fresh target-owned receipt and the authoritative stored file reference.
+ */
+@Remote({ resources: { session: (targetId, request) => [targetId, request.sourceSessionId] } }) async stageHistory(agent: Agent, request: HistoryFileUploadRequest, signal: AbortSignal): Promise<FileUploadValue>
 
 /**
  * Persist raw chunks for one Session without aggregating the upload.

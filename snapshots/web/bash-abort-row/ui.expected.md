@@ -8,6 +8,7 @@
   - button "More conversation views"
 - text: "Run two shell commands: wait for cancellation, then write skipped.txt. {{clock}}"
 - button "Copy"
+- button "Edit and resend"
 - status: Stopped
 - button "Stopped" [disabled] [expanded]
 - button "Ran commands" [expanded]

@@ -19,6 +19,7 @@ import {
   IconEllipsisOutlineRegular, IconFolderCloseRegular, IconFolderOpenRegular,
   IconNewChatOutlineRegular, IconPinFillRegular, IconTrashOutlineRegular,
   IconTriangleRightFillRegular, IconUnarchiveOutlineRegular, Menu, relativeTime, StateDot, Tooltip, useRowDragPreview,
+  writeClipboard,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { ShortcutCatalogEntry } from '@deepseek-ai/dsh-client-shortcuts/client'
 import type { StateDotState } from '@deepseek-ai/dsh-client-ui-primitives'
@@ -26,6 +27,7 @@ import { abbreviateHomePath } from '@deepseek-ai/dsh-util-workspace-path'
 import type { WorkspaceId } from '@deepseek-ai/dsh-api-workspace-controller/client'
 import type { MenuOpenState, WorkspaceBrowserProps } from '../contract/slots.ts'
 import type { GroupNode, SearchResultNode, SessionNode } from '../tree.ts'
+import { writeSessionReference } from '../session-drag.ts'
 import css from './Rows.module.css'
 
 /** Opening gesture determines placement and pointer-leave dismissal for one row menu. */
@@ -38,7 +40,7 @@ type RowMenuAnchor =
 function useRowMenu() {
   const [anchor, setAnchor] = useState<RowMenuAnchor | null>(null)
   const setMenuOpen = useCallback<Dispatch<SetStateAction<boolean>>>((next) => {
-    setAnchor(current => {
+    setAnchor((current) => {
       const open = typeof next === 'function' ? next(current !== null) : next
       return open ? current ?? { kind: 'trigger' } : null
     })
@@ -193,17 +195,39 @@ function createdLabel(createdAt: number, t: RowTranslate): string {
 }
 
 /** Hover-card body: workspace title, display directory path, absolute creation time. */
-function WorkspaceHoverContent({ label, cwd, createdAt, t }: {
+function WorkspaceHoverContent({ label, cwd, fullPath, createdAt, sourcePaths, sessionCount, activeSessionCount, onEdit, t }: {
   label: string
   cwd: string | undefined
+  fullPath: string | undefined
   createdAt: number
+  sourcePaths?: readonly string[] | undefined
+  sessionCount: number
+  activeSessionCount: number
+  onEdit?: (() => void) | undefined
   t: RowTranslate
 }) {
+  const [copied, setCopied] = useState(false)
+  useEffect(() => {
+    if (!copied) return
+    const timer = setTimeout(() => { setCopied(false) }, 1000)
+    return () => { clearTimeout(timer) }
+  }, [copied])
+  const details = <>
+    <div className={css.hoverTitle}>{label}</div>
+    <div className={css.hoverTime}>{t('workspace.activity.summary', { n: sessionCount, active: activeSessionCount })}</div>
+    {(sourcePaths ?? (cwd === undefined ? [] : [cwd])).map(path => <div className={css.hoverPath} key={path}>{path}</div>)}
+    <div className={css.hoverTime}>{createdLabel(createdAt, t)}</div>
+  </>
   return (
     <div className={css.hoverContent}>
-      <div className={css.hoverTitle}>{label}</div>
-      <div className={css.hoverPath}>{cwd}</div>
-      <div className={css.hoverTime}>{createdLabel(createdAt, t)}</div>
+      {fullPath === undefined ? details : <button type="button" className={css.hoverDetails}
+        aria-label={`${t('copy')}: ${fullPath}`}
+        onClick={() => { void writeClipboard(fullPath).then((ok) => { if (ok) setCopied(true) }) }}>
+        {copied ? <span role="status">{t('hover.copied')}</span> : details}
+      </button>}
+      {onEdit !== undefined && <button type="button" className={css.hoverEdit} onClick={onEdit}>
+        <IconEditOutlineRegular size={16} />{t('workspace.edit')}
+      </button>}
     </div>
   )
 }
@@ -373,6 +397,11 @@ function ProjectRow({
       <span className={css.projectText}>
         <span className={css.title}>{label}</span>
       </span>
+      {row.active === true && (
+        <span className={css.activity} role="img" aria-label={t('status.running')}>
+          <StateDot state="ongoing" />
+        </span>
+      )}
       <span className={css.rowActions}>
         {actions !== undefined && workspaceMenuItems.length > 0 && (
           <Menu
@@ -431,15 +460,17 @@ function ProjectRow({
       content={<WorkspaceHoverContent
         label={row.label}
         cwd={row.cwd === undefined ? undefined : abbreviateHomePath(row.cwd, home)}
+        fullPath={row.sourcePaths?.[0] ?? row.cwd}
         createdAt={row.createdAt}
+        sourcePaths={row.sourcePaths?.map(path => abbreviateHomePath(path, home))}
+        sessionCount={row.sessionCount}
+        activeSessionCount={row.activeSessionCount ?? 0}
+        onEdit={access.rename ? actions?.rename : undefined}
         t={t}
       />}
       openDelayMs={800}
       grouped
       disabled={menuOpen}
-      copyText={row.cwd}
-      copyLabel={t('copy')}
-      copiedLabel={t('hover.copied')}
     />
   )
 }
@@ -711,6 +742,7 @@ export function SessionNodeItem({
   const renamable = useSessionAccess(node.id, 'session/rename')
   const reorderable = useSessionAccess(node.id, 'workspace/insertSessionBefore')
   const draggable = drag !== undefined && reorderable && !row.blank && !row.archived
+  const referenceDraggable = !row.blank && !row.archived
   const { menuOpen, setMenuOpen, anchorProps, closeOnPointerLeave, openAtPointer, openAtRow } = useRowMenu()
   const dragPreview = useRowDragPreview(css.dragPreview as string)
   // The menu's open state, bound into the row entries' `useMenuOpenState` hook.
@@ -767,14 +799,17 @@ export function SessionNodeItem({
       }}
       onPointerEnter={marquee.enter}
       onPointerLeave={marquee.leave}
-      draggable={draggable}
-      onDragStart={!draggable
+      draggable={referenceDraggable}
+      onDragStart={!referenceDraggable
         ? undefined
         : (e) => {
-          e.dataTransfer.effectAllowed = 'move'
-          e.dataTransfer.setData('text/plain', node.id)
-          drag.start()
-          dragPreview.start(e)
+          e.dataTransfer.effectAllowed = draggable ? 'copyMove' : 'copy'
+          writeSessionReference(e.dataTransfer, node.id, title)
+          if (draggable) {
+            e.dataTransfer.setData('text/plain', node.id)
+            drag.start()
+            dragPreview.start(e)
+          }
         }}
       onDragEnd={() => { if (dragPreview.clear()) drag?.end() }}
       onDragOver={drag === undefined

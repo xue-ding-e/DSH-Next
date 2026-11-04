@@ -2,7 +2,7 @@
 
 import type { DesktopShortcutInput, ShortcutConfigSnapshot, ShortcutSaveResult } from '@deepseek-ai/dsh-client-shortcuts/protocol'
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
-import { DESKTOP_IPC, SCHEME, type DesktopNavigationCommand, type DshDesktopProductApi, type DesktopUpdatePresentation } from './ipc.ts'
+import { DESKTOP_IPC, SCHEME, type DshDesktopProductApi, type DesktopUpdatePresentation } from './ipc.ts'
 import { PLATFORM_IPC } from './platform-ipc.ts'
 import { markDocumentPlatform, syncWindowFullscreen } from './preload-platform.ts'
 import { syncNativeTheme } from './preload-theme.ts'
@@ -10,17 +10,27 @@ import { syncWindowsAppearance } from './preload-windows.ts'
 import { installMandatoryUpdateOverlay } from './preload-mandatory-overlay.ts'
 import { createDesktopBrowserBridge } from './preload-browser.ts'
 import type { FileDragHandle } from '@deepseek-ai/dsh-util-file-drag'
+import type { DesktopQuestionNotificationEvent, DesktopQuestionNotificationResult } from '@deepseek-ai/dsh-client-ui-user-questions'
 
 function createProductApi(): DshDesktopProductApi {
   return {
     protocolVersion: 1,
     browser: createDesktopBrowserBridge(),
+    questionNotifications: {
+      show: notice => ipcRenderer.invoke(DESKTOP_IPC.questionNotificationShow, notice) as Promise<DesktopQuestionNotificationResult>,
+      close: id => ipcRenderer.invoke(DESKTOP_IPC.questionNotificationClose, id) as Promise<void>,
+      subscribe(listener) {
+        const handle = (_event: Electron.IpcRendererEvent, event: DesktopQuestionNotificationEvent): void => { listener(event) }
+        ipcRenderer.on(DESKTOP_IPC.questionNotificationEvent, handle)
+        return () => { ipcRenderer.off(DESKTOP_IPC.questionNotificationEvent, handle) }
+      },
+    },
     navigation: {
       subscribe: (listener) => {
         // Side mouse buttons reach the main process as App Commands, so this is the
         // only reliable delivery path; the page-side DOM listeners stay as a
         // fallback for embedders that do produce `auxclick`.
-        const handle = (_event: Electron.IpcRendererEvent, command: DesktopNavigationCommand): void => {
+        const handle = (_event: Electron.IpcRendererEvent, command: unknown): void => {
           if (command === 'back' || command === 'forward') listener(command)
         }
         ipcRenderer.on(DESKTOP_IPC.navigationCommand, handle)

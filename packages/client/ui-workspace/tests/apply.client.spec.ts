@@ -851,7 +851,9 @@ describe('ui-workspace apply', () => {
     expect(b.search).toHaveBeenCalledWith('match', signal)
     expect(browser.searchResultLimit).toBe(20)
     await browser.renameWorkspace('ws' as never, 'renamed')
-    expect(b.rename).toHaveBeenCalledWith('ws', 'renamed')
+    expect(b.rename).toHaveBeenCalledWith('ws', 'renamed', undefined)
+    await browser.renameWorkspace('ws' as never, 'renamed', ['/primary', '/other'])
+    expect(b.rename).toHaveBeenLastCalledWith('ws', 'renamed', ['/primary', '/other'])
     await browser.createWorkspace({ path: '/tmp/browser-project' })
     expect(b.create).toHaveBeenCalledWith({ path: '/tmp/browser-project' })
 

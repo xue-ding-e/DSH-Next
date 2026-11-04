@@ -46,6 +46,7 @@ import {
 import { createWorkspaceShortcutControls, installWorkspaceShortcuts } from './shortcuts.ts'
 import { UiWorkspaceService } from './navigation.ts'
 import { createWorkspaceViewStore } from './stores.ts'
+import { RecentSessions } from './RecentSessions.tsx'
 import { WorkspaceBrowser } from './rows/WorkspaceBrowser.tsx'
 import { ArchiveSessionMenuItem, ArchiveSessionRowButton, SessionArchiveConfirmDialog } from './session-actions/ArchiveSession.tsx'
 import { derive } from './session-actions/derived.ts'
@@ -280,7 +281,7 @@ export function apply(ctx: Context): void {
     searchResultLimit: sessions.searchResultLimit,
     requestSessionRename,
     notifyArchivedNotOpenable: () => { notify({ kind: 'archivedNotOpenable' }) },
-    renameWorkspace: async (workspaceId, title) => { await workspaces.rename(workspaceId, title) },
+    renameWorkspace: async (workspaceId, title, sourcePaths) => { await workspaces.rename(workspaceId, title, sourcePaths) },
     openWorkspaceFolder,
     deleteWorkspace: async (workspaceId) => { await workspaces.delete(workspaceId) },
     insertWorkspaceBefore: async (workspaceId, beforeWorkspaceId) => {
@@ -294,6 +295,9 @@ export function apply(ctx: Context): void {
     setDirectoryBusy: shortcutControls.directoryBusy,
     hooks: { directoryFlow: browserFlowSource, hostInfo, workspaceShortcuts: shortcutControls.state, shortcuts: ctx.shortcuts.catalog },
   })
+  ctx.slots.inject('sidebar.recent', () => ctx.slots.register({
+    name: 'sidebar.recent', store: viewStore, locale: NS, inject: () => ({ open: openSession }),
+  }, RecentSessions))
   const pickerInjected = (): WorkspacePickerInjected => ({
     createWorkspace: input => workspaces.create(input),
     hooks: { directoryFlow: pickerFlowSource },

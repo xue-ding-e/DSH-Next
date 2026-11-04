@@ -1,0 +1,5 @@
+{
+  "exclude": [
+    "extensions/dsh-next/dsh-plugin-subscriptions/lib/"
+  ]
+}

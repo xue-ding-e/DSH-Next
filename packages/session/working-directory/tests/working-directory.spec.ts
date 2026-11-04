@@ -8,10 +8,28 @@ import { describe, expect, it, vi } from 'vitest'
 import LocalFileSystem from '@deepseek-ai/dsh-fs-local'
 import WorkingDirectory, { type Config as WorkingDirectoryConfig } from '@deepseek-ai/dsh-working-directory'
 import { mountAgentLoopTestDependencies, mountAgentLoopTestHarness } from '@deepseek-ai/dsh-agent-loop-testkit'
-import { SessionId } from '@deepseek-ai/dsh-session'
-import { ToolCallId } from '@deepseek-ai/dsh-llm'
+import { Session, SessionId } from '@deepseek-ai/dsh-session'
+import { createUserMessage, ToolCallId } from '@deepseek-ai/dsh-llm'
 import { renderContextSnapshot, renderPrompt } from '@deepseek-ai/dsh-system-prompt'
 import * as WorkingDirectoryTool from '@deepseek-ai/dsh-tool-working-directory'
+import WorkspaceRegistry from '@deepseek-ai/dsh-workspace'
+import Storage from '@deepseek-ai/dsh-storage'
+import { DomainFacility } from '@deepseek-ai/dsh-storage-domain'
+import { MemoryStorageBackend } from '../../../storage/storage-domain/tests/helpers/memory-backend.ts'
+import { MockAdapter, textResponse } from '../../../core/agent-loop/tests/mock-adapter.ts'
+import SandboxPolicy from '@deepseek-ai/dsh-sandbox-policy'
+
+async function mountWorkspaces(ctx: Context) {
+  await ctx.plugin(Storage)
+  ctx.storage.backend.register('memory', new MemoryStorageBackend())
+  const domain = new DomainFacility(ctx, { backend: 'memory', routes: {} })
+  ctx.storage.mount('domain', domain)
+  ctx.provide('storageDomain', domain)
+  ctx.provide('sessionPersistence', { list: async () => [] } as never)
+  const fiber = ctx.plugin(WorkspaceRegistry)
+  await fiber
+  return fiber
+}
 
 async function fixture(config?: (root: string) => WorkingDirectoryConfig) {
   const root = await realpath(await mkdtemp(join(tmpdir(), 'dsh-working-directory-')))
@@ -38,6 +56,96 @@ async function fixture(config?: (root: string) => WorkingDirectoryConfig) {
 }
 
 describe('Session working directories', () => {
+  it('contributes only the owning Workspace sources, refreshes edits, and removes the contribution with either owner', async () => {
+    await using f = await fixture()
+    await f.ctx.plugin(SandboxPolicy, { mode: 'workspace-write', workspaceRoot: f.root })
+    const originalPolicy = f.ctx.sandboxPolicy.resolve({ session: f.agent.session })
+    const assemble = () => f.ctx.systemPrompt.assemble({ agent: f.agent, scope: f.agent })
+    expect((await assemble()).contexts.some(section => section.name === 'workspace:sources')).toBe(false)
+    const registryFiber = await mountWorkspaces(f.ctx)
+    const workspace = await f.ctx.workspaceRegistry.create(f.root)
+    const secondary = join(f.root, '{{secondary}}')
+    await mkdir(secondary)
+    await workspace.configure('Two sources', [f.root, secondary])
+    const unowned = await assemble()
+    expect(unowned.contexts.find(section => section.name === 'workspace:sources')?.text).toBe('')
+    await workspace.attachSession(f.agent.id)
+    f.ctx.systemPrompt.variable('secondary', () => 'must-not-interpolate')
+    const expected = `Workspace source directories: ${JSON.stringify([f.root, secondary])}. The first directory is the primary source; the current working directory is reported separately. Directory access follows the current file policy.`
+    const assembly = await assemble()
+    expect(assembly.contexts.find(section => section.name === 'workspace:sources')).toMatchObject({ text: expected, interpolate: false })
+    expect(renderContextSnapshot(assembly)).toContain(expected)
+    expect(renderPrompt(assembly)).not.toContain(secondary)
+    expect((await f.ctx.systemPrompt.assemble()).contexts.find(section => section.name === 'workspace:sources')?.text).toBe('')
+    expect(f.ctx.workingDirectory.get(f.agent.session)).toBe(f.root)
+
+    await workspace.configure('Secondary primary', [secondary])
+    expect(renderContextSnapshot(await assemble())).toContain(`Workspace source directories: ${JSON.stringify([secondary])}.`)
+    expect(renderContextSnapshot(await assemble())).toContain(`Current working directory: ${JSON.stringify(f.root)}.`)
+    expect(f.ctx.sandboxPolicy.resolve({ session: f.agent.session })).toEqual({
+      ...originalPolicy, additionalWritableRoots: [secondary],
+    })
+    const newSession = f.ctx.sessions.create(SessionId('primary-policy'), { meta: { cwd: workspace.primaryPath } })
+    expect(f.ctx.sandboxPolicy.resolve({ session: newSession })).toEqual({
+      mode: 'workspace-write', workspaceRoot: secondary, sessionId: newSession.id,
+    })
+    await workspace.configure('Original only', [f.root])
+    expect(f.ctx.sandboxPolicy.resolve({ session: f.agent.session })).toEqual(originalPolicy)
+    expect((await assemble()).contexts.find(section => section.name === 'workspace:sources')?.text).toBe('')
+    await workspace.configure('Two again', [f.root, secondary])
+    await registryFiber.dispose()
+    expect(f.ctx.sandboxPolicy.resolve({ session: f.agent.session })).toEqual(originalPolicy)
+    expect((await assemble()).contexts.some(section => section.name === 'workspace:sources')).toBe(false)
+    const replacement = await f.ctx.plugin(WorkspaceRegistry)
+    expect(f.ctx.sandboxPolicy.resolve({ session: f.agent.session })).toEqual({
+      ...originalPolicy, additionalWritableRoots: [secondary],
+    })
+    expect((await assemble()).contexts.filter(section => section.name === 'workspace:sources')).toHaveLength(1)
+    await f.directoryFiber.dispose()
+    expect((await assemble()).contexts.some(section => section.name === 'workspace:sources')).toBe(false)
+    await replacement.dispose()
+  })
+
+  it('records source edits in runtime-context messages before the model receives them', async () => {
+    await using f = await fixture()
+    const adapter = new MockAdapter([textResponse('first reply'), textResponse('second reply')])
+    f.ctx.llm.registerAdapter(['mock'], adapter)
+    const agent = await f.harness.create(SessionId('source-model'), { provider: 'mock', model: 'mock' }, { cwd: f.root })
+    await mountWorkspaces(f.ctx)
+    const secondary = join(f.root, 'secondary')
+    await mkdir(secondary)
+    const workspace = await f.ctx.workspaceRegistry.create(f.root)
+    await workspace.configure('Two sources', [f.root, secondary])
+    await workspace.attachSession(agent.id)
+    f.ctx.on('llm/stream', (request, next) => {
+      expect(request.messages).toEqual(Session.create(agent.id, agent.session.snapshotEvents(), agent.session.header).deriveMessages())
+      return next()
+    })
+    const prompt = (): void => { agent.followup(createUserMessage({ content: [{ type: 'text', text: 'Describe the sources.' }], source: { kind: 'user' } })) }
+    prompt()
+    await agent.whenIdle()
+    expect(adapter.requests).toHaveLength(1)
+    const recorded = agent.session.snapshotEvents().findLast(event => event.type === 'user/message' && event.data.source.kind === 'runtime-context')
+    if (recorded?.type !== 'user/message' || recorded.data.source.kind !== 'runtime-context' || recorded.data.source.form !== 'snapshot') {
+      throw new Error('the request did not record its runtime-context snapshot')
+    }
+    expect(recorded.data.source.sections.find(section => section.name === 'workspace:sources')).toEqual({
+      name: 'workspace:sources',
+      text: `Workspace source directories: ${JSON.stringify([f.root, secondary])}. The first directory is the primary source; the current working directory is reported separately. Directory access follows the current file policy.`,
+    })
+
+    await workspace.configure('Secondary only', [secondary])
+    prompt()
+    await agent.whenIdle()
+    expect(adapter.requests).toHaveLength(2)
+    const latest = adapter.requests[1]?.messages.findLast(message => message.role === 'user' && message.source?.kind === 'runtime-context')
+    const latestText = latest?.content.map(block => block.type === 'text' ? block.text : '').join('')
+    expect(latestText).toContain(`Workspace source directories: ${JSON.stringify([secondary])}.`)
+    expect(latestText).toContain(`Current working directory: ${JSON.stringify(f.root)}.`)
+    expect(f.ctx.workingDirectory.get(agent.session)).toBe(f.root)
+    expect(agent.session.header.cwd).toBe(f.root)
+  })
+
   it('keeps origin metadata and other Sessions independent while logging the changed directory', async () => {
     await using f = await fixture()
     const child = join(f.root, 'child')

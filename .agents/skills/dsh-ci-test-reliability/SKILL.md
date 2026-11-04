@@ -61,6 +61,8 @@ CI runs the same suite on Windows and on POSIX hosts, and a value the operating 
 - Windows matches environment variable names case-insensitively, so a fixture seeding `http_proxy` and `HTTP_PROXY` as separate keys holds one entry there.
 - Windows releases file handles asynchronously, so a rename or removal that completes at once on a POSIX host needs a bounded retry sized to the observed contention.
 - Windows has no POSIX permission or signal semantics. A case that depends on them takes an explicit platform skip naming the reason, rather than an assertion weakened everywhere.
+- Local Chromium clipboard tests on Windows receive CRLF from both `navigator.clipboard.writeText()` and keyboard copying. Construct expected clipboard line endings with `node:os` `EOL`, preserving exact content and trailing-newline assertions. Browser and test process must run on the same operating system for that expectation.
+- A generated replay that executes a shell command must use a tool composed for the current platform. The shipped Windows profile uses `pwsh`; select its command syntax and presentation when the fixture's behavior is platform-independent. Keep historical recordings unchanged.
 
 Prefer an observation that holds on every platform. When a case genuinely cannot, exclude it on that platform explicitly.
 
@@ -81,6 +83,8 @@ A fixed sleep is not evidence that setup completed or cleanup settled.
 - Use a timeout only to bound a wait, never as the condition that makes the assertion correct.
 - Do not assert scheduler-dependent ordering unless that ordering is the product behavior under test.
 - When time itself is the subject, inject or fake the clock and always restore real timers.
+
+For a React 18 `lazy()` loaded-path test, await the actual component module's import promise inside async `act()` before asserting its committed DOM. This lets Suspense and its state updates settle even when concurrent tests delay module evaluation. Keep load-failure and fallback tests separate. The frontmatter cases in [markdown-body.client.spec.tsx](../../../packages/client/ui-sidebar-documentpreview/tests/markdown-body.client.spec.tsx) show the pattern.
 
 ## Dispose to quiescence
 

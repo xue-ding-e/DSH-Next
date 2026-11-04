@@ -30,15 +30,17 @@ export function createWorkspaceFolderOpener(
       const workspace = before.phase === 'ready' && before.state === 'idle'
         ? before.items.find(item => item.workspaceId === workspaceId) : undefined
       if (workspace === undefined) throw new Error('Workspace is unavailable')
+      const path = workspace.sourcePaths?.[0] ?? workspace.path
       const capability = await remote.canOpenWorkspacePath()
       signal.throwIfAborted()
       if (!capability.ok || !capability.value) throw new Error('Native folder opening is unavailable')
       const current = workspaces.list.getSnapshot()
       if (current.phase !== 'ready' || current.state !== 'idle'
-        || !current.items.some(item => item.workspaceId === workspaceId && item.path === workspace.path)) {
+        || !current.items.some(item => item.workspaceId === workspaceId
+          && (item.sourcePaths?.[0] ?? item.path) === path)) {
         throw new Error('Workspace changed before folder opening')
       }
-      const result = await remote.openWorkspacePath({ path: workspace.path }, signal)
+      const result = await remote.openWorkspacePath({ path }, signal)
       if (!result.ok) throw new Error('Native folder opening failed')
     }
     void open().catch(() => {

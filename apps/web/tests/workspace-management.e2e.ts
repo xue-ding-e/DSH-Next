@@ -52,6 +52,8 @@ describe('web e2e: workspace management (create / rename / grouping / hover affo
    */
   async function browseTo(path: string): Promise<Locator> {
     await page.getByRole('button', { name: 'Add workspace' }).click()
+    await page.getByRole('dialog', { name: 'Add workspace', exact: true })
+      .getByRole('button', { name: 'Choose folder', exact: true }).click()
     const dialog = page.getByRole('dialog', { name: 'Select Workspace Directory' })
     await dialog.waitFor({ timeout: 10_000 })
     await dialog.getByRole('button', { name: 'Edit path' }).click()
@@ -188,19 +190,19 @@ describe('web e2e: workspace management (create / rename / grouping / hover affo
     const alphaRow = page.locator('[role="treeitem"]').filter({ hasText: 'alpha-ws' }).first()
     await clickHoverAction(alphaRow, 'Workspace actions for alpha-ws')
     await page.getByRole('menuitem', { name: 'Rename' }).click()
-    const dialog = page.getByRole('dialog', { name: 'Rename workspace' })
+    const dialog = page.getByRole('dialog', { name: 'Edit workspace' })
     await dialog.waitFor({ timeout: 10_000 })
     const input = dialog.getByLabel('Workspace name')
     // Client pre-check: a name colliding with another live workspace raises
     // the inline alert and blocks the primary button before any wire call.
     await input.fill('beta-ws')
     await expect.poll(() => dialog.getByRole('alert').count(), { timeout: 5_000 }).toBe(1)
-    expect(await dialog.getByRole('button', { name: 'Rename' }).isDisabled()).toBe(true)
+    expect(await dialog.getByRole('button', { name: 'Save' }).isDisabled()).toBe(true)
     // A fresh name goes through workspace.rename to the durable registry.
     await input.fill('gamma-ws')
     await expect.poll(() => dialog.getByRole('alert').count(), { timeout: 5_000 }).toBe(0)
-    await dialog.getByRole('button', { name: 'Rename' }).click()
-    await expect.poll(() => page.getByRole('dialog', { name: 'Rename workspace' }).count(), { timeout: 10_000 }).toBe(0)
+    await dialog.getByRole('button', { name: 'Save' }).click()
+    await expect.poll(() => page.getByRole('dialog', { name: 'Edit workspace' }).count(), { timeout: 10_000 }).toBe(0)
     await expect.poll(() => page.getByText('gamma-ws', { exact: true }).count(), { timeout: 10_000 }).toBeGreaterThanOrEqual(1)
     expect(await page.getByText('alpha-ws', { exact: true }).count()).toBe(0)
     // Host durability, then reload: the projection is rebuilt from the wire.

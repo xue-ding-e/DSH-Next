@@ -10,6 +10,7 @@
   - button "More conversation views"
 - text: Inspect the protected operation, but do not run it unless authorized. {{clock}}
 - button "Copy"
+- button "Edit and resend"
 - status: Completed
 - button "Completed in {{duration}}" [expanded]
 - button "Called tools, ran code, ran commands" [expanded]
@@ -37,6 +38,7 @@
   - button "More conversation views"
 - text: Inspect the protected operation, but do not run it unless authorized. {{clock}}
 - button "Copy"
+- button "Edit and resend"
 - status: Completed
 - button "Completed in {{duration}}" [expanded]
 - button "Called tools, ran code, ran commands" [expanded]

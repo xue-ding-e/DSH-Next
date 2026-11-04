@@ -209,6 +209,8 @@ export function probeFreePort(): Promise<number> {
 export async function connectFreshWorkspace(page: Page, root: string, name = 'workspace'): Promise<void> {
   mkdirSync(join(root, name), { recursive: true })
   await page.getByRole('button', { name: 'Add workspace', exact: true }).click()
+  await page.getByRole('dialog', { name: 'Add workspace', exact: true })
+    .getByRole('button', { name: 'Choose folder', exact: true }).click()
   const dialog = page.getByRole('dialog', { name: 'Select Workspace Directory' })
   await dialog.waitFor({ timeout: 10_000 })
   await dialog.getByRole('button', { name: 'Edit path' }).click()
@@ -235,6 +237,8 @@ export async function connectFreshWorkspace(page: Page, root: string, name = 'wo
 export async function connectFreshWorkspaceZh(page: Page, root: string, name = 'workspace', modelAvailable = true): Promise<void> {
   mkdirSync(join(root, name), { recursive: true })
   await page.getByRole('button', { name: '添加工作区', exact: true }).click()
+  await page.getByRole('dialog', { name: '添加工作区', exact: true })
+    .getByRole('button', { name: '选择文件夹', exact: true }).click()
   const dialog = page.getByRole('dialog', { name: '选择工作区目录' })
   await dialog.waitFor({ timeout: 10_000 })
   await dialog.getByRole('button', { name: '编辑路径' }).click()

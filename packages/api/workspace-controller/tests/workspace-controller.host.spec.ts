@@ -116,6 +116,58 @@ async function nextFrame(
 }
 
 describe('WorkspaceController commands', () => {
+  it('saves canonical source directories with the title and maps source validation without partial writes', async () => {
+    const { controller, ctx, root } = await harness()
+    const anchor = stageDir(root, 'source-anchor')
+    const secondary = stageDir(root, 'source-secondary')
+    const created = await controller.create({ path: anchor })
+    const workspaceId = created.workspace.workspaceId
+    const accepted = await controller.rename({ workspaceId, title: '  Multiple sources  ', sourcePaths: [join(secondary, '.'), anchor] })
+    expect(accepted.workspace).toMatchObject({ path: anchor, title: 'Multiple sources', sourcePaths: [secondary, anchor] })
+    expect(ctx.workspaceRegistry.get(workspaceId)?.primaryPath).toBe(secondary)
+
+    for (const sourcePaths of [[], [anchor, anchor], [anchor, '.'], [anchor, join(root, 'missing')]]) {
+      await expect(controller.rename({ workspaceId, title: 'Must not save', sourcePaths }))
+        .rejects.toMatchObject({ code: 'gateway/bad-request' })
+      const unchanged = await controller.create({ path: anchor })
+      expect(unchanged.workspace).toEqual(accepted.workspace)
+    }
+    const renamed = await controller.rename({ workspaceId, title: 'Title only' })
+    expect(renamed.workspace.sourcePaths).toEqual([secondary, anchor])
+  })
+
+  it('projects identical sources and retained Session history in unary, incremental, and reconnect values', async () => {
+    const { controller, ctx, root } = await harness()
+    const anchor = stageDir(root, 'feed-anchor')
+    const secondary = stageDir(root, 'feed-secondary')
+    const created = await controller.create({ path: anchor })
+    const workspaceId = created.workspace.workspaceId
+    const abort = new AbortController()
+    const iterator = controller.follow(abort.signal)[Symbol.asyncIterator]()
+    expect(await nextFrame(iterator)).toMatchObject({ type: 'baseline', value: { items: [created.workspace] } })
+    try {
+      const configured = await controller.rename({ workspaceId, title: 'Two sources', sourcePaths: [secondary, anchor] })
+      expect(await nextFrame(iterator)).toEqual({ type: 'upsert', workspace: configured.workspace })
+      const session = ctx.sessions.create(SessionId('secondary-feed-session'), { meta: { cwd: secondary } })
+      await ctx.workspaceRegistry.get(workspaceId)!.attachSession(session.id)
+      expect(await nextFrame(iterator)).toMatchObject({ type: 'upsert', workspace: { sessionIds: [session.id] } })
+
+      const removed = await controller.rename({ workspaceId, title: 'Anchor only', sourcePaths: [anchor] })
+      expect(removed.workspace.sourcePaths).toBeUndefined()
+      expect(removed.workspace.sessionIds).toEqual([session.id])
+      expect(await nextFrame(iterator)).toEqual({ type: 'upsert', workspace: removed.workspace })
+      const reconnect = controller.follow(abort.signal)[Symbol.asyncIterator]()
+      try {
+        expect(await nextFrame(reconnect)).toMatchObject({ type: 'baseline', value: { items: [removed.workspace] } })
+      } finally {
+        await reconnect.return?.()
+      }
+    } finally {
+      abort.abort()
+      await iterator.return?.()
+    }
+  })
+
   it('serializes concurrent path adoption and preserves an existing title', async () => {
     const { controller, root } = await harness()
     const path = stageDir(root, 'alpha')

@@ -11,6 +11,7 @@
     { "path": "../../util/brand" },
     { "path": "../../core/agent" },
     { "path": "../../core/session" },
+    { "path": "../../session-query/session-query" },
     { "path": "../../llm/llm" },
     { "path": "../../attachment/attachment" },
     { "path": "../../interaction/commands" },

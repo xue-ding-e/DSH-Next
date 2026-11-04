@@ -64,7 +64,12 @@ async function bench() {
     openWorkspace: async (_workspaceId: WorkspaceId, beforeOpen: (id: SessionId) => void) => { beforeOpen(SID) },
     openSession: () => {},
   } as never)
-  runtime.remote.provideNamespaces({ session: { openWorkspacePath: async () => ({ ok: true, value: { opened: true } }) } })
+  runtime.remote.provideNamespaces({
+    session: { openWorkspacePath: async () => ({ ok: true, value: { opened: true } }) },
+    fileUploads: { stageHistory: async () => {
+      throw new Error('this Chat fixture does not script historical file staging')
+    } },
+  })
   const locale = new LocaleRuntime(runtime.ctx)
   runtime.ctx.provide('locale', locale)
   runtime.slots.installLocale(locale)

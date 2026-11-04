@@ -5,6 +5,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { installMandatoryUpdateOverlay } from '../src/preload-mandatory-overlay.ts'
 import { syncWindowsAppearance } from '../src/preload-windows.ts'
 import { DESKTOP_IPC, type DshDesktopProductApi } from '../src/ipc.ts'
+import type { QuestionNotificationId } from '@deepseek-ai/dsh-client-ui-user-questions'
 
 const electron = vi.hoisted(() => ({
   contextBridge: { exposeInMainWorld: vi.fn() },
@@ -19,6 +20,29 @@ vi.mock('../src/preload-mandatory-overlay.ts', () => ({ installMandatoryUpdateOv
 
 beforeEach(() => { vi.stubGlobal('process', { ...process, isMainFrame: true }) })
 afterEach(() => { document.body.replaceChildren(); vi.unstubAllGlobals(); vi.restoreAllMocks(); vi.clearAllMocks(); vi.resetModules() })
+
+it('submits and withdraws native question reminders and removes activation listeners', async () => {
+  vi.stubGlobal('location', new URL('dsh-app://app/'))
+  await import('../src/preload-app.ts')
+  const api = electron.contextBridge.exposeInMainWorld.mock.calls.find(([name]) => name === 'dshDesktop')?.[1] as DshDesktopProductApi
+  const id = 'question-a' as QuestionNotificationId
+  const notice = { id, title: 'Your answer is needed', body: 'Choose a mode' }
+  electron.ipcRenderer.invoke.mockResolvedValueOnce('submitted')
+  await expect(api.questionNotifications.show(notice)).resolves.toBe('submitted')
+  await api.questionNotifications.close(id)
+  expect(electron.ipcRenderer.invoke.mock.calls).toEqual([
+    [DESKTOP_IPC.questionNotificationShow, notice], [DESKTOP_IPC.questionNotificationClose, id],
+  ])
+  const listener = vi.fn()
+  const off = api.questionNotifications.subscribe(listener)
+  const handle = electron.ipcRenderer.on.mock.calls.find(([channel]) => channel === DESKTOP_IPC.questionNotificationEvent)?.[1] as
+    (event: unknown, value: { type: 'activated' | 'failed'; id: QuestionNotificationId }) => void
+  handle({ sender: 'private-electron-event' }, { type: 'activated', id })
+  handle({}, { type: 'failed', id })
+  expect(listener.mock.calls).toEqual([[{ type: 'activated', id }], [{ type: 'failed', id }]])
+  off()
+  expect(electron.ipcRenderer.off).toHaveBeenCalledWith(DESKTOP_IPC.questionNotificationEvent, handle)
+})
 
 it('reads only native login API-key presence through the onboarding bridge', async () => {
   vi.stubGlobal('location', new URL('dsh-app://app/'))

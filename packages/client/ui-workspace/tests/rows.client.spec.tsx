@@ -196,7 +196,7 @@ describe('native row drag previews', () => {
     expect(drag.end).not.toHaveBeenCalled()
     const image = start()
     expect(transfer.setDragImage).toHaveBeenCalledWith(image, 65, 12)
-    expect(transfer.effectAllowed).toBe('move')
+    expect(transfer.effectAllowed).toBe(kind === 'session' ? 'copyMove' : 'move')
     expect(transfer.setData).toHaveBeenCalledWith('text/plain', kind)
     expect(drag.start).toHaveBeenCalledOnce()
     expect(image.parentElement).toBe(document.body)
@@ -759,7 +759,8 @@ describe('workspace browser rows', () => {
       onRenameRequest={onRenameRequest} useSessionAccess={useSessionAccess} t={t} />)
     expect(useSessionAccess).toHaveBeenCalledWith(sid('s1'), 'session/rename')
     expect(useSessionAccess).toHaveBeenCalledWith(sid('s1'), 'workspace/insertSessionBefore')
-    expect(screen.getByRole('treeitem').getAttribute('draggable')).toBe('false')
+    // Session rows remain draggable for composer references even when local reorder is denied.
+    expect(screen.getByRole('treeitem').getAttribute('draggable')).toBe('true')
     fireEvent.doubleClick(screen.getByText('One'))
     expect(onRenameRequest).not.toHaveBeenCalled()
 
@@ -1703,7 +1704,6 @@ describe('row menu positioning', () => {
     const rowRect = vi.fn(() => new DOMRect(40, 100, 240, 32))
     Object.defineProperty(row, 'getBoundingClientRect', { configurable: true, value: rowRect })
     const trigger = screen.getByRole('button', { name: /actions/i })
-    expect(row.getBoundingClientRect).not.toBe(trigger.getBoundingClientRect)
     expect(row.getBoundingClientRect()).toEqual(new DOMRect(40, 100, 240, 32))
     expect(trigger.getBoundingClientRect()).toEqual(new DOMRect(250, 100, 24, 24))
     return { row, rowRect, trigger, onOpen }

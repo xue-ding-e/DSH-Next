@@ -28,6 +28,8 @@ Host 控制器会串行执行正确性取决于当前注册表状态的变更，
 
 Client 入口提供 `ClientWorkspaceModel` 和 `createWorkspaceStateStream()`。该模型拥有 Workspace 行、registry 顺序、归档与置顶会话身份、一元变更回显，以及流与一元调用的竞态处理。较新的 Host 行按 `updatedAt` 获胜；已提交的流顺序优先于较旧的一元响应；已经移除的 Workspace id 不会被延迟数据复活。置顶快照仅在会话身份或顺序变化时更新。该包公开与框架无关的快照和订阅，把导航策略与 React 钩子留给 UI owner。`WorkspaceController.archiveSession(sessionId, { stopActivity })` 抛出携带 Host `rpcError` 的 `WorkspaceArchiveError`，界面因此能区分"仍有工作在跑"的拒绝与会话缺失或载体故障，并提议停止这些工作。
 
+`workspace.rename({ workspaceId, title, sourcePaths? })` 原子保存去除首尾空白的标题及可选的有序来源目录。省略 `sourcePaths` 会保留它们；无效或重复目录、空列表会以 `gateway/bad-request` 拒绝，两个字段均不变。首个来源决定新 Session 的初始 cwd；`path` 仍为原始登记目录。移除次级来源会保留它的现有 Session 历史及顺序。一元响应、follow 增量和重连 baseline 暴露相同的来源列表；省略表示仅有 `path`。
+
 <a id="first-use-workspace"></a>
 ### 首次使用工作区
 

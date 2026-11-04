@@ -50,11 +50,13 @@ Load the package with a default mode; the fail-safe default is `read-only`, and 
 
 For a linked Git worktree, the caller can grant its shared Git directory with `additionalWritableRoots`. The caller selects that directory explicitly; the policy does not inspect Git files or grant a parent checkout. These grants are deployment configuration shared by the composition's sessions, rather than saved Session permissions. Granting the entire Git directory also permits changes to hooks and configuration that a later host Git invocation can execute outside the sandbox; use that grant only for trusted tasks. Use physical absolute directory paths. The enforcing host rejects missing paths, files, and symlinked roots, including a directory replaced by a symlink between calls. Remote grants are validated on the remote host.
 
+When the optional Workspace registry is mounted, `workspace-write` also permits writes to the calling Session's Workspace source directories. Each call merges the current canonical `sourcePaths` with deployment-configured `additionalWritableRoots`, removes duplicates, and omits the Session root from derived extras. Saved source edits apply on the next operation. Removing a source or unloading the registry withdraws its derived grant; explicit deployment grants remain. Existing Sessions keep their original cwd as the workspace root, even after that directory leaves the source list. Retained historical sources grant no extra access. `read-only` remains nonwritable, and `danger-full-access` remains unrestricted. The enforcing host validates the directories on each call.
+
 The generated [configuration catalog](../../../docs/config-catalog.md#deepseek-aidsh-sandbox-policy) is the exhaustive source for every accepted field and its JSDoc.
 
 ### Switching a session's mode
 
-A session's mode can be switched at runtime through a UI policy control or an explicit switch; the switch is recorded in the session log and takes effect on the session's next confined call. The switch survives restart through replay, and each session keeps its own mode — two sessions never see each other's state. A switched session keeps its immutable workspace cwd as the writable boundary.
+A session's mode can be switched at runtime through a UI policy control or an explicit switch; the switch is recorded in the session log and takes effect on the session's next confined call. The switch survives restart through replay, and each session keeps its own mode — two sessions never see each other's state. A switched session keeps its immutable workspace cwd as its workspace root.
 
 ### Failures and recovery
 
@@ -152,7 +154,7 @@ The stable system prompt remains byte-identical across mode changes. A changed f
 
 These limits define the policy surface this package provides. They are current package constraints, not a general sandbox comparison or a task backlog.
 
-- **Deployment-scoped extra grants** — additional directories come from configuration; they are not per-session permission settings. Backend support is defined by [sandbox-local](../sandbox-local/README.md).
+- **Extra grant ownership** — deployment-configured roots apply to every Session; Workspace source grants require the optional registry and current Session membership. Backend support is defined by [sandbox-local](../sandbox-local/README.md).
 - **File-effect modes only** — `SandboxMode` governs file effects; network and process policy are outside its vocabulary, so no knob here restricts them.
 - **Temporary areas are deliberately summarized** — enforcing backends grant different platform temporary areas, which are selected after policy resolution and therefore cannot be enumerated truthfully in the current context.
 

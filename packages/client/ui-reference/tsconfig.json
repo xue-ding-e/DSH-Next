@@ -21,7 +21,7 @@
       "path": "../../context/file-reference"
     },
     {
-      "path": "../../context/session-reference"
+      "path": "../../context/session-reference/tsconfig.client.json"
     },
     {
       "path": "../../typert/protocol"

@@ -31,6 +31,8 @@ Mount alongside `fs`, `sessionProjections`, and `systemPrompt`. `defaultDirector
 - name: '@deepseek-ai/dsh-working-directory'
 ```
 
+When the optional Workspace registry is mounted, an accounted Session also receives its configured source directories. Multiple sources, or a single source different from the original Workspace registration directory, identify the first source as primary while reporting the current cwd separately. Source edits do not move an existing Session. Under `workspace-write`, [Sandbox policy](../../sandbox/sandbox-policy/README.md#use-this-package) grants writes to the owning Workspace's current sources on the next operation; removing a source withdraws its extra grant while preserving the Session's original root. `read-only` remains nonwritable.
+
 -----
 
 <a id="understand-the-implementation"></a>
@@ -63,7 +65,7 @@ No runtime invariant companion is published because the service reads its only d
 
 #### What the model sees
 
-The current value is `Current working directory: <JSON-quoted absolute path>.` Each committed change, including automatic recovery, attempts to queue a user-context notice through the ordinary Agent inbox. Cancellation or disposal may discard unadmitted notices; the durable directory remains available to the next request. Directory context stays outside the system prompt and remains enabled when optional runtime context is disabled.
+The current value is `Current working directory: <JSON-quoted absolute path>.` Each committed change, including automatic recovery, attempts to queue a user-context notice through the ordinary Agent inbox. Cancellation or disposal may discard unadmitted notices; the durable directory remains available to the next request. Directory context stays outside the system prompt and remains enabled when optional runtime context is disabled. Workspace sources add `Workspace source directories: <JSON directory array>. The first directory is the primary source; the current working directory is reported separately. Directory access follows the current file policy.` This required `workspace:sources` contribution is selected by Session membership and follows saved source edits. The Agent loop records it in existing `runtime-context` user-message snapshots before model admission; no separate Session event is needed. Unmounting either owner removes the contribution.
 
 #### Token effect
 

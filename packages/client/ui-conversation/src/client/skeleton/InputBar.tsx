@@ -39,6 +39,8 @@ import { attachmentErrorText, imageSizeText } from '../image-labels.ts'
 import { isImageMediaType } from '../service.ts'
 import { ContextMeter } from './ContextMeter.tsx'
 import { observeControlRow } from './control-row-layout.ts'
+import { installSessionReferenceDrop, type SessionDropArea } from './session-reference-drop.ts'
+import { SessionReferenceDropOverlay } from './SessionReferenceDropOverlay.tsx'
 import css from './InputBar.module.css'
 
 export type InputBarProps = ComposerBarProps
@@ -309,6 +311,20 @@ export const InputBar = memo(function InputBar({
     if (document.activeElement !== editor.getRootElement()) focusDraftEditor(editor, revealSelection)
   }
 
+  const [sessionDropArea, setSessionDropArea] = useState<SessionDropArea | null>(null)
+  const referenceDropAllowed = useRef(false)
+  referenceDropAllowed.current = editable && !promptDenied
+  useEffect(() => {
+    const card = cardRef.current
+    if (card === null || keyboard === undefined) return
+    return installSessionReferenceDrop(card, {
+      sessionId,
+      canAccept: () => referenceDropAllowed.current && keyboard.editor.isEditable(),
+      insert: reference => keyboard.insertReferenceAtCaret(reference),
+      show: setSessionDropArea,
+    })
+  }, [keyboard, sessionId])
+
   const onToggleCommandMenu = (): void => {
     if (keyboard === undefined) return
     // The menu is a combobox over the editor, so the keyboard has to be there
@@ -391,6 +407,7 @@ export const InputBar = memo(function InputBar({
 
   return (
     <div className={clsx(css.root, variant === 'hero' && css.hero)}>
+      {sessionDropArea !== null && <SessionReferenceDropOverlay area={sessionDropArea} label={t('input.dropConversation')} />}
       {toast !== null && (
         <Toast
           key={toast.seq}
