@@ -491,7 +491,7 @@ describe.skipIf(MODE === 'record')('web e2e: file and session references through
     const snapshot = (await captureStableAria(page, '[class*="centerCol"]', scaffold.workspaceCwd))
       .split(TARGET_SESSION_ID).join('{{targetId}}')
     await compareOrRefreshGolden(ORDER_EXPECTED, snapshot, MODE)
-    expect(snapshot).toContain('Research notes what changed?')
+    expect(snapshot).toContain('- link "Research notes"\n- text: what changed?')
     expect(snapshot).not.toContain('Session recall Research notes')
     expect(tripwire.pageErrors).toEqual([])
     expect(tripwire.warnings).toEqual([])
