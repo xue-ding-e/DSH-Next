@@ -7,6 +7,7 @@ import { sessionReferenceRule } from '../src/client/user-text/session-reference-
 import { fileReferenceRule, folderReferenceRule } from '../../ui-reference/src/client/user-text-rules.ts'
 import { skillReferenceRule } from '../../ui-skill/src/client/user-text-rules.ts'
 import { goalCommandReferenceRule } from '../../ui-goal/src/client/user-text-rules.ts'
+import { SessionId } from '@deepseek-ai/dsh-session/types'
 
 const RULES = [sessionReferenceRule, fileReferenceRule, folderReferenceRule, skillReferenceRule, goalCommandReferenceRule]
 
@@ -27,6 +28,19 @@ function references(text: string, nodes: readonly UserTextNode[]) {
 }
 
 describe('original-text reference competition', () => {
+  it('re-evaluates an unchanged label when its message-associated identity changes', () => {
+    const { evaluate } = setup()
+    const text = '@Same title'
+    const first = evaluate({ text, facts: { sessionReferences: [{ sessionId: SessionId('source-a'), label: 'Same title' }] } })
+    expect(references(text, first)).toEqual([
+      ['session', text, { label: 'Same title', sessionId: 'source-a' }],
+    ])
+    const second = evaluate({ text, facts: { sessionReferences: [{ sessionId: SessionId('source-b'), label: 'Same title' }] } })
+    expect(references(text, second)).toEqual([
+      ['session', text, { label: 'Same title', sessionId: 'source-b' }],
+    ])
+  })
+
   it('keeps an earlier complete file instead of a Session label inside its path', () => {
     const { evaluate } = setup()
     const text = '参照 @types 修复 @src/@types/react/index.d.ts'

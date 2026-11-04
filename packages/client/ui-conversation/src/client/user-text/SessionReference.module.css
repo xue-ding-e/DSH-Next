@@ -1,0 +1,5 @@
+/* The primitive retains reference metrics and inherited transcript typography. */
+.link { cursor: pointer; border-radius: var(--dsw-radius-sm); }
+@media (hover: hover) {
+  .link:hover { background: var(--dsw-alias-state-business-tertiary); }
+}

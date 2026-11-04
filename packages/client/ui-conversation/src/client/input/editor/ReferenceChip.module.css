@@ -5,8 +5,23 @@
   align-items: baseline;
   gap: 3px;
   max-width: 240px;
+  border-radius: var(--dsw-radius-md);
+  corner-shape: round;
   color: var(--dsw-alias-state-business-primary);
   user-select: none;
+}
+
+/* Decorators have no native text box covering their icon, padding, and truncated label. */
+:global([data-composer-chip][data-selected]) > .chip {
+  color: HighlightText;
+  background: Highlight;
+  box-shadow: 0 0 0 1px Highlight;
+  opacity: 1;
+}
+
+:global([data-composer-chip][data-selected]) > .chip ::selection {
+  color: inherit;
+  background: transparent;
 }
 
 .marker {

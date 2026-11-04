@@ -1,0 +1,31 @@
+/* Custom gestures wrap within the existing General Settings content column. */
+.root { min-width: 0; }
+.custom {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin: 12px 0;
+  padding: 12px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: var(--dsw-radius-md);
+  font-size: 13px;
+  color: var(--dsw-alias-label-primary);
+}
+.custom label { display: inline-flex; align-items: center; gap: 6px; }
+.custom select {
+  max-width: 100%;
+  padding: 4px 8px;
+  font: inherit;
+  color: inherit;
+  background: var(--dsw-alias-bg-module-platform);
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: var(--dsw-radius-sm);
+}
+.error { color: var(--dsw-alias-state-error-primary); font-size: 13px; }
+@media (max-width: 767px) {
+  .root > div:first-child { flex-wrap: wrap; }
+}
+@media (pointer: coarse) {
+  .custom select { font-size: 16px; }
+}

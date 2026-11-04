@@ -165,7 +165,8 @@ function TurnMaxTokensItem({ t }: {
 /** Right-aligned bubble shared by user and steering rows. */
 function UserStyleBubble({
   content, loadImage, renderFactorySlot, time, pending = false, echo = false, batchStart = false,
-  referenceLabels, skillNames, previewAttachments, facts: inputFacts = EMPTY_TEXT_FACTS, interactive = false, onEdit, t,
+  referenceLabels, sessionReferences, skillNames, previewAttachments, facts: inputFacts = EMPTY_TEXT_FACTS,
+  interactive = false, onEdit, t,
 }: {
   content: readonly unknown[]
   renderFactorySlot: PropsRenderFactories['renderFactorySlot']
@@ -179,6 +180,8 @@ function UserStyleBubble({
   batchStart?: boolean
   /** Exact session mention labels associated by the adjacent recall node. */
   referenceLabels?: readonly string[]
+  /** Exact captured Session identities associated with this message's adjacent recall. */
+  sessionReferences?: UserTextFacts['sessionReferences']
   /** Skill names the step's `skill-invocation` injections loaded for this message. */
   skillNames?: readonly string[]
   /** Local submission-echo attachments replacing the content-derived attachment sequence. */
@@ -200,8 +203,9 @@ function UserStyleBubble({
   const facts = useMemo<Readonly<Partial<UserTextFacts>>>(() => ({
     ...inputFacts,
     ...(referenceLabels === undefined ? {} : { sessionLabels: referenceLabels }),
+    ...(sessionReferences === undefined ? {} : { sessionReferences }),
     ...(skillNames === undefined ? {} : { skillNames }),
-  }), [inputFacts, referenceLabels, skillNames])
+  }), [inputFacts, referenceLabels, sessionReferences, skillNames])
   return (
     <div
       className={css.userRow}
@@ -373,6 +377,7 @@ export const UserMessageNodeView = memo(function UserMessageNodeView({
         time={data.time}
         batchStart={node.kind === 'steering' && node.data.batchStart === true}
         {...data.referenceLabels === undefined ? {} : { referenceLabels: data.referenceLabels }}
+        {...data.sessionReferences === undefined ? {} : { sessionReferences: data.sessionReferences }}
         {...data.skillNames === undefined ? {} : { skillNames: data.skillNames }}
         onEdit={editable
           ? () => {

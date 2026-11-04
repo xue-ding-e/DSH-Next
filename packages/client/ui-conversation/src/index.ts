@@ -3,6 +3,7 @@ import type {} from '@deepseek-ai/dsh-settings'
 
 import type { Volatile, Context } from '@deepseek-ai/cordis'
 import type { BusyEnterBehavior } from './submission-settings.ts'
+import type { SessionReferenceNavigation } from './reference-navigation-settings.ts'
 import z from '@deepseek-ai/schemastery'
 import { BUSY_ENTER_FIELD } from './submission-settings.ts'
 
@@ -17,11 +18,14 @@ export {
 export interface Config {
   /** Enter key behavior while a turn is running. */
   busyEnter: Volatile<BusyEnterBehavior>
+  /** Left-button gesture used to open Session references. */
+  sessionReferenceNavigation: Volatile<SessionReferenceNavigation>
 }
 
 /** Live preferences projected to the browser. */
 export const Config = z.object({
   [BUSY_ENTER_FIELD]: ConversationSettingsFields[BUSY_ENTER_FIELD].volatile(),
+  sessionReferenceNavigation: ConversationSettingsFields.sessionReferenceNavigation.volatile(),
 })
 
 /** Host preferences are consumed through the configuration form projection.

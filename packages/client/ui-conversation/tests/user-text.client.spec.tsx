@@ -197,6 +197,23 @@ describe('UserText projection', () => {
     expect(openFile).not.toHaveBeenCalled()
   })
 
+  it('opens Session references through Enter and assistive activation and retains failures for retry', () => {
+    const openSessionReference = vi.fn()
+    const view = render(<div>{textView('@Research', ['Research'], [], 'skill', { openSessionReference })}</div>)
+    const link = view.getByRole('link', { name: 'Research' })
+    fireEvent.keyDown(link, { key: 'Enter' })
+    fireEvent.keyDown(link, { key: 'Enter', repeat: true })
+    expect(openSessionReference).toHaveBeenCalledExactlyOnceWith('@Research', undefined)
+    fireEvent.click(link, { detail: 0 })
+    expect(openSessionReference).toHaveBeenCalledTimes(2)
+    openSessionReference.mockImplementation(() => { throw new Error('Session unavailable') })
+    fireEvent.click(link, { detail: 0 })
+    expect(view.getByRole('dialog', { name: '无法打开会话' })).toBeTruthy()
+    expect(view.getByRole('link', { name: 'Research' })).toBeTruthy()
+    fireEvent.click(view.getByRole('button', { name: '重试' }))
+    expect(openSessionReference).toHaveBeenCalledTimes(4)
+  })
+
   it('renders undecorated text as one inline run', () => {
     const host = project('纯文本，无引用')
     expect(host.querySelectorAll('div').length).toBe(0)

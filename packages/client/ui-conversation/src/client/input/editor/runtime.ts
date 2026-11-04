@@ -16,6 +16,7 @@ import type { CommandClaim } from '../../contract/input.ts'
 import { QuoteNode, $createQuoteNode, $isQuoteNode, REMOVE_QUOTE_COMMAND } from './QuoteNode.tsx'
 import type { QuoteNodeLabels } from './QuoteNode.tsx'
 import { registerReferenceActivation } from './reference-activation.ts'
+import { registerReferenceSelection } from './reference-selection.ts'
 import { ReferenceChipNode, $createReferenceChipNode } from './chip-node.tsx'
 import { CommandChipNode, $createCommandChipNode, registerCommandChipSeat } from './command-chip-node.tsx'
 import { registerCommandChipSelection } from './command-chip-selection.ts'
@@ -116,6 +117,7 @@ export class DraftEditorRuntime {
       this.editor.registerNodeTransform(RootNode, preserveExternalSelection),
       registerReferenceActivation(this.editor, (source, reference) =>
         this.deps.openReference(source, reference)),
+      registerReferenceSelection(this.editor),
       registerHistory(this.editor, createEmptyHistoryState(), HISTORY_MERGE_DELAY_MS),
       this.editor.registerUpdateListener(() => { this.deps.onUpdate() }),
       registerCommandChipSeat(this.editor),

@@ -28,6 +28,37 @@ function userNode(index: number, text = `message ${String(index)}`): ChatConvers
 }
 
 describe('Chat Node keyed sources', () => {
+  it('publishes an identity change even when the recall label stays equal and reuses equivalent message facts', () => {
+    const builder = new ChatSnapshotBuilder()
+    const user = userNode(1, '@Same title')
+    const recall = (sessionId: string): ChatConversationViewNode => ({
+      key: 'recall:2', kind: 'context', id: '2', target: 'chat', anchorSeq: 2,
+      location: { kind: 'session' }, visibility: 'visible',
+      data: { kind: 'context', seq: 2, time: 2, content: [], source: {
+        kind: 'session-reference', form: 'recall', references: [{ sessionId, label: 'Same title' }],
+      } },
+    })
+    const initial = builder.replace({ nodes: [user, recall('source-a')], timeline })
+    builder.publish()
+    const source = initial.nodes.source(user.key)
+    const changed = vi.fn()
+    source.subscribe(changed)
+    builder.apply({ upserts: [recall('source-b')], timeline })
+    builder.publish()
+    expect(source.getSnapshot()?.data).toMatchObject({ sessionReferences: [{ sessionId: 'source-b', label: 'Same title' }] })
+    expect(changed).toHaveBeenCalledOnce()
+    const accepted = source.getSnapshot()
+    builder.apply({ upserts: [recall('source-b')], timeline })
+    builder.publish()
+    expect(source.getSnapshot()).toBe(accepted)
+    expect(changed).toHaveBeenCalledOnce()
+    builder.apply({ upserts: [{ ...recall('source-b'), data: {
+      kind: 'context', seq: 2, time: 2, content: [], source: { kind: 'notice', form: 'notice' },
+    } }], timeline })
+    builder.publish()
+    expect(source.getSnapshot()?.data).not.toHaveProperty('sessionReferences')
+  })
+
   it('provides ordered projected Nodes and previous values to grouping', () => {
     const builder = new ChatSnapshotBuilder()
     const user = userNode(1)

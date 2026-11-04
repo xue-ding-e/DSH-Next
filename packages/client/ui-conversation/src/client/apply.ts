@@ -14,7 +14,12 @@ import type {} from '@deepseek-ai/dsh-client-ui-session/client'
 import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 import type { ShortcutCommandId, ShortcutFixedCommand } from '@deepseek-ai/dsh-client-shortcuts/client'
 import { UiConversation } from './conversation/assembly.ts'
-import { UserText, PlainUserText, SessionReference } from './user-text/UserText.tsx'
+import { UserText, PlainUserText } from './user-text/UserText.tsx'
+import { SessionReference, type SessionReferenceInjected } from './user-text/SessionReference.tsx'
+import { ReferenceNavigationPreference } from './reference-navigation-preference.ts'
+import { ReferenceNavigationRow, type ReferenceNavigationRowInjected } from './settings/ReferenceNavigationRow.tsx'
+import { registerSessionReferenceActivation } from './input/editor/session-reference-activation.ts'
+import { sessionReferenceTarget } from './session-reference-target.ts'
 import { sessionReferenceRule } from './user-text/session-reference-rule.ts'
 import { collapseWhitespaceRule, trimWhitespaceRule } from './user-text/whitespace-rules.ts'
 import type { ViewTab } from './contract/views.ts'
@@ -160,6 +165,17 @@ export function apply(ctx: Context, config: Config = Config({})): void {
   const maxConcurrentFileUploads = config.maxConcurrentFileUploads as number
   const workspaceNavigation = ctx.get('uiWorkspace') as WorkspaceNavigation
   const uiConversation = new UiConversation(ctx, sessions)
+  const conversationForm = ctx.configForms.get<ConversationSettings>(CONVERSATION_SETTINGS_NAMESPACE)
+  const referencePreference = new ReferenceNavigationPreference(conversationForm)
+  ctx.effect(() => () => { referencePreference.dispose() }, 'ui-conversation: reference preference')
+  const openSessionReference = (origin: SessionId, raw: string, id: SessionId | undefined): void => {
+    const binding = sessions.binding(origin)
+    if (binding === undefined) throw new Error('Session reference requires its originating Conversation')
+    const target = sessionReferenceTarget(raw, id)
+    if (sessions.list.getSnapshot().byId[target] === undefined) throw new Error('Referenced Session is unavailable')
+    inputHub.shellFor(binding).actions.persistDraft()
+    workspaceNavigation.openSession(target)
+  }
   uiConversation.userText.register(sessionReferenceRule)
   uiConversation.userText.register(collapseWhitespaceRule)
   uiConversation.userText.register(trimWhitespaceRule)
@@ -182,14 +198,20 @@ export function apply(ctx: Context, config: Config = Config({})): void {
   }, UserText)
   slots.inject('conversation.user.text.node', function* () {
     yield slots.register({ name: 'conversation.user.text.node', key: 'text', priority: 100 }, PlainUserText)
-    yield slots.register({ name: 'conversation.user.text.node', key: 'session', priority: 100 }, SessionReference)
+    yield slots.register({
+      name: 'conversation.user.text.node', key: 'session', priority: 100, locale: NS,
+      inject: (sessionId: SessionId): SessionReferenceInjected => ({
+        hooks: { referenceNavigation: referencePreference.state },
+        openSessionReference: (raw, id) => { openSessionReference(sessionId, raw, id) },
+      }),
+    }, SessionReference)
   })
 
   ctx.effect(() => ctx.locale.register(NS, { zh, en, ja, es, fr, de, ru, pt }), 'ui-conversation: dictionaries')
   const t = ctx.locale.bind(NS)
   const conversationStore = createConversationStore()
   const submissionPolicy = new ComposerSubmissionPolicy(
-    ctx.configForms.get<ConversationSettings>(CONVERSATION_SETTINGS_NAMESPACE),
+    conversationForm,
   )
 
   ctx.effect(() => () => { submissionPolicy.dispose() })
@@ -204,6 +226,14 @@ export function apply(ctx: Context, config: Config = Config({})): void {
       setBusyEnter: (behavior) => { submissionPolicy.setBusyEnter(behavior) },
     }),
   }, EnterBehaviorRow))
+
+  ctx.slots.inject('settings.general.item', () => ctx.slots.register({
+    name: 'settings.general.item', id: 'session-reference-navigation', order: 21, locale: NS,
+    inject: (): ReferenceNavigationRowInjected => ({
+      hooks: { referenceNavigation: referencePreference.state },
+      setReferenceNavigation: value => referencePreference.set(value),
+    }),
+  }, ReferenceNavigationRow))
 
   const viewTabs = (): ViewTab[] => {
     const tabs: ViewTab[] = []
@@ -237,6 +267,15 @@ export function apply(ctx: Context, config: Config = Config({})): void {
     if (trackedBindings.has(binding)) return
     trackedBindings.add(binding)
     bindings.add(binding)
+    const shell = inputHub.shellFor(binding)
+    binding.ctx.effect(() => registerSessionReferenceActivation(
+      shell.editor,
+      () => referencePreference.state.getSnapshot(),
+      (raw) => {
+        try { openSessionReference(binding.sessionId, raw, undefined) }
+        catch (_error: unknown) { shell.notify('error', t('reference.open.failed')) }
+      },
+    ), 'ui-conversation: Session reference navigation')
     binding.ctx.effect(() => () => { bindings.delete(binding) }, 'ui-conversation: active Provider binding')
   }
   const refreshViews = (): void => {

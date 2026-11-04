@@ -2396,6 +2396,38 @@ describe('built-in conversation node Definitions', () => {
     expect(promptNodes(current).map(candidate => candidate.anchorSeq)).toEqual([1, 7, 10])
   })
 
+  it.each(['replay', 'live', 'prepend', 'split-prepend'] as const)(
+    'retains each message’s own identity when separate recalls use the same label (%s)',
+    (mode) => {
+      const recall = (id: string, sessionId: string) => ({
+        ...textMessage(id, 'snapshot'),
+        source: { kind: 'session-reference', form: 'recall', version: 1, references: [{ sessionId, label: 'Same title' }] },
+      })
+      const entries = [
+        at(1, 'user/message', textMessage('first-reference', '@Same title first question'), { surfaceOp: 'append' }),
+        at(2, 'user/message', recall('first-recall', 'source-a'), { surfaceOp: 'append' }),
+        at(3, 'user/message', textMessage('second-reference', '@Same title second question'), { surfaceOp: 'append' }),
+        at(4, 'user/message', recall('second-recall', 'source-b'), { surfaceOp: 'append' }),
+      ]
+      const split = mode === 'split-prepend' ? 1 : 2
+      const value = assembler(mode === 'replay' ? entries : mode === 'live' ? [] : entries.slice(split), mode.endsWith('prepend'))
+      if (mode === 'live') {
+        for (const entry of entries) { value.append(entry); value.flush() }
+      } else if (mode !== 'replay') {
+        const loaded = [...snapshot(value).nodes.values()].find(candidate => candidate.anchorSeq === 3)
+        expect(loaded?.data).toMatchObject({ sessionReferences: [{ sessionId: 'source-b', label: 'Same title' }] })
+        value.prepend(entries.slice(0, split), false)
+        value.flush()
+      }
+      const users = [...snapshot(value).nodes.values()].filter(candidate => candidate.kind === 'user')
+        .sort((left, right) => left.anchorSeq - right.anchorSeq)
+      expect(users.map(candidate => candidate.data)).toMatchObject([
+        { referenceLabels: ['Same title'], sessionReferences: [{ sessionId: 'source-a', label: 'Same title' }] },
+        { referenceLabels: ['Same title'], sessionReferences: [{ sessionId: 'source-b', label: 'Same title' }] },
+      ])
+    },
+  )
+
   it('associates each direct message with its immediately following session recall', () => {
     const value = assembler([
       at(1, 'user/message', textMessage('citing-research', '@Research notes what changed?'), { surfaceOp: 'append' }),
@@ -2426,9 +2458,14 @@ describe('built-in conversation node Definitions', () => {
       .filter(candidate => candidate.kind === 'user' || candidate.kind === 'context')
     const users = [...current.nodes.values()].filter(candidate => candidate.kind === 'user')
     expect(messages.map(candidate => candidate.kind)).toEqual(['user', 'context', 'user', 'context', 'user'])
-    expect(users[0]?.data).toMatchObject({ referenceLabels: ['Research notes'] })
-    expect(users[1]?.data).toMatchObject({ referenceLabels: ['Review'] })
+    expect(users[0]?.data).toMatchObject({
+      referenceLabels: ['Research notes'], sessionReferences: [{ sessionId: 'source-a', label: 'Research notes' }],
+    })
+    expect(users[1]?.data).toMatchObject({
+      referenceLabels: ['Review'], sessionReferences: [{ sessionId: 'source-b', label: 'Review' }],
+    })
     expect(users[2]?.data).not.toHaveProperty('referenceLabels')
+    expect(users[2]?.data).not.toHaveProperty('sessionReferences')
   })
 
   it('updates an already published direct node when its following recall arrives', () => {
@@ -2487,6 +2524,7 @@ describe('built-in conversation node Definitions', () => {
     expect(node(snapshot(value), 'steering')?.data).toMatchObject({
       messageId: 'steering-reference',
       referenceLabels: ['Research notes'],
+      sessionReferences: [{ sessionId: 'source-a', label: 'Research notes' }],
     })
   })
 

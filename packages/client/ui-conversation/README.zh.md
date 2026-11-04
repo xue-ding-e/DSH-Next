@@ -59,6 +59,8 @@ target package 通过 declaration merge 扩展 snapshot 与 Location data map，
 
 Queue 预览启用空白折叠和文档边缘 trim，保留 emoji，并使用 CSS 省略而不截断输入。编辑和复制保留原文；原生附件使用独立的展示路径。
 
+可交互的会话引用打开其规范 URI 中的标识或当前消息关联的 `sessionReferences` fact。Chat 从紧随其后的 recall 保留每条直接消息或 steering 消息捕获的 ID，历史 prepend 同样保留关联；不同消息中的同名标签仍对应各自的目标。缺少确切标识或可用目录记录的引用会保留当前 Conversation，并显示重试对话框。跳转先保存来源会话的草稿，再使用 Workspace 导航。已获得焦点的正文引用也可按 Enter 打开。
+
 [Message quotes](../../session/message-quotes/README.zh.md) 通过相同的 UserText 扩展点注册引用匹配与渲染。 每个用户文本容器和草稿编辑器各自拥有独立的悬停卡片分组，其中的 quote 原文弹层会立即互相替换。
 
 现有语义 `DraftSnapshot` 在 references 旁保留 quote 文本及 clipboard 坐标范围。存储接受较早的字符串和仅含 reference 的草稿；Session 切换、Workspace 转移以及发送失败恢复通过现有编辑器 runtime 保留原子 quote。`inputActions.insertQuote(text)` 仅在输入框处于 plain 模式时插入非空选区。提交产出普通 Markdown 文本；待发送回显、队列行、steering 行和持久消息使用同一文本匹配器。
@@ -129,6 +131,10 @@ Session 首次绑定或缓存的 Session 成为 current 时，shell 会在渲染
 Send 和 Stop 按钮禁用时不显示提示气泡，轮次结束后由 Stop 切换成禁用 Send 的按钮也遵循此规则。普通 composer 运行时，如果草稿为空或输入不可用，主指针操作保持为 Stop。可提交的文字或附件会把同一位置切换为 Send；清空或成功提交草稿后恢复 Stop。繁忙态 Enter 设置为普通 Session 与可继续 child 选择 Queue 或 Steer 投递，运行中的 Send 按钮按 plain Enter 解析出的同一模式投递；当它在普通消息草稿上可用（没有待上传文件）时，其标签以该模式命名（排队发送或插话发送），因此该设置同时约束 Enter 与按钮，而 Cmd/Ctrl+Enter 仍使用另一模式；空闲会话、空草稿与 `/` 命令行保留普通的 Send 标签。它们的 QueueDock 行共享 Edit、Remove 与 Steer，空草稿也共享 steer-all 组合键。One-shot child 继续只读。Plan Mode 与 active goal 不改变附件入口。可继续 child 保留独立的 Send 与 Stop 操作，允许粘贴或拖入图片，但不提供「文件」菜单项；parent 离线时，Send 与 composer 手势锁定，但在线 inbox 的 QueueDock 控制仍可使用（[决策](../../../.agents/notes/archived/bug-fix/2026-08-20-running-draft-primary-send.md)、[inbox 控制](../../subagent/subagent/README.zh.md)）。
 
 文件标签和可编辑的 skill 引用共用覆盖整个引用的悬停背景，并跟随输入框的行高与文字基线。首次点击立即由已注册的引用来源负责打开预览，包括双击序列的第一次点击。后续点击保留原生文本选择行为；已有非折叠选区时，指针点击不打开预览。预览不改变草稿、剪贴板文本或提交内容。
+
+原子引用 chip 在单独选中、范围选中和全选时，高亮覆盖完整 pill，包括图标、内边距和截断标签。选中态属于编辑器展示，不改变草稿文档、剪贴板文本或 Session 事件。
+
+设置 → 通用 → 会话引用跳转通过 `ui-conversation.sessionReferenceNavigation` 同时控制正文和 composer 内的会话引用。默认为单击，也可选择双击或 Ctrl/⌘ + 单击。自定义模式将单次或双次左键点击与精确的 Ctrl、Meta、Alt、Shift 组合。额外修饰键、指针移动、文本选择、取消手势以及按下鼠标后才补按修饰键均禁止跳转。设置使用共享的 Host 配置表单；保存被拒绝或失败时保留已接受的偏好，并显示局部错误。文件和 skill 预览保留各自的手势行为。
 
 当会话被其他写句柄占用时，发送失败的 toast 提示用户退出其他正在运行的 DSH 后重试。
 

@@ -1,7 +1,7 @@
 /** User-text presentation delegates evaluation to its data-layer document and renders JSON business nodes. */
 import { Fragment, useEffect, useMemo } from 'react'
 import type { FactoryComponentPropsOf } from '@deepseek-ai/dsh-client-ui-slots'
-import { HoverCardGroup, ReferenceChip, UserTextRun } from '@deepseek-ai/dsh-client-ui-primitives'
+import { HoverCardGroup, UserTextRun } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { UserTextNodeProps } from '../contract/slots.ts'
 import type { UserTextNode } from '../contract/user-text.ts'
 import css from './UserText.module.css'
@@ -52,13 +52,4 @@ export function UserText({
  */
 export function PlainUserText({ node }: UserTextNodeProps<'text'>) {
   return <UserTextRun text={node.data.display ?? node.data.text} />
-}
-
-/**
- * Display a confirmed Session label without inventing navigation behavior.
- * @param props - Session reference JSON and its original spelling.
- * @returns the existing non-interactive Session chip.
- */
-export function SessionReference({ node, raw }: UserTextNodeProps<'session'>) {
-  return <ReferenceChip appearance="session" label={node.data.label} title={raw} />
 }

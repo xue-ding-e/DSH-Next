@@ -9,7 +9,7 @@ import { $isReferenceChipNode } from './chip-node.tsx'
 import { TextRefNode } from './text-ref.ts'
 
 /**
- * Install preview activation for atomic chips and editable reference tokens.
+ * Install preview activation for non-Session atomic chips and editable reference tokens.
  * @param editor - composer editor.
  * @param open - live source routing; false preserves ordinary editor handling.
  * @returns command disposer.
@@ -26,6 +26,8 @@ export function registerReferenceActivation(
     if ($isReferenceChipNode(node)) {
       if (node.isInvalid()) return false
       const appearance = node.getAppearance()
+      // Session navigation has a shared configurable gesture and its own selection-safe listener.
+      if (appearance === 'session') return false
       return open(node.getSource(), { ref: node.getReference(), ...appearance === undefined ? {} : { appearance } })
     }
     return node instanceof TextRefNode && open(undefined, { ref: node.getTextContent() })

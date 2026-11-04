@@ -1,6 +1,6 @@
 ---
 name: dsh-client-ui-ux
-description: Design and review DeepSeek Harness client UI changes — visual tokens, reusable components, drag feedback, native desktop notifications, overlay and menu safety, platform window adaptation, loading states, and error placement. Use when adding or changing product-user-visible GUI behavior in packages/client, or when reviewing such a PR.
+description: Design and review DeepSeek Harness client UI changes — visual tokens, reusable components, Lexical editor callbacks, drag feedback, native desktop notifications, overlay and menu safety, platform window adaptation, loading states, and error placement. Use when adding or changing product-user-visible GUI behavior in packages/client, or when reviewing such a PR.
 ---
 
 # DeepSeek Harness Client UI/UX
@@ -55,6 +55,10 @@ Windows PowerShell 5.1 can inspect only the test application's notification hist
 - No loading text unless the context needs it (narrow sidebars almost never do).
 
 ## Composer editor focus
+
+In native DOM callbacks under the repository's patched Lexical 0.49.0, DOM-node queries such as `$getNearestNodeFromDOMNode` need the active editor as well as its state. First filter the event target with `closest('[data-composer-chip]')` and verify that the editor root contains it; ordinary text and empty-area clicks return before calling Lexical query functions. Resolve a matched chip inside `editor.read(() => ...)`. Calling `editor.getEditorState().read(() => ...)` alone did not provide the active editor in this tested path and raised Lexical error #337.
+
+The [native activation unit](../../../packages/client/ui-conversation/tests/session-reference-activation.client.spec.ts) verifies that ordinary root/text clicks do not call `editor.read`, and nested chip DOM resolves without an editor-context exception. The [browser navigation scenarios](../../../apps/web/tests/reference-navigation.e2e.ts) exercise actual mouse clicks, modifier combinations, selection, navigation, and draft restoration with a console-error tripwire. Recheck this API behavior against the installed Lexical version when it changes.
 
 For the repository's patched Lexical 0.49.0, editable listeners run while the editor queues updates. Restore a recalled draft's focus and selection in a `queueMicrotask` after that callback returns; an editor update inside the callback can remain pending until the next keystroke. Capture the initiating root, then recheck editability, disposal, root identity, and whether another control owns focus before applying the deferred change. The shell owns and cancels pending editable/root listener registrations on disposal, including when the root remains attached and never re-enables; a disposed guard inside a future callback does not release those registrations. A root-listener disposer also invokes its listener with `null`, so cleanup must tolerate reentry.
 

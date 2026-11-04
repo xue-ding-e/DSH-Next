@@ -2,8 +2,10 @@
 
 import type { ContentBlock, StreamChunk } from '@deepseek-ai/dsh-llm/types'
 import type {
-  AssistantBlock, ContextProducerView, KnownContextForm,
+  AssistantBlock, ContextProducerView, KnownContextForm, UserTextFacts,
 } from '@deepseek-ai/dsh-client-ui-conversation/client'
+import { brandString } from '@deepseek-ai/dsh-brand'
+import type { SessionId } from '@deepseek-ai/dsh-session/types'
 
 /* jscpd:ignore-start -- Chat and Trajectory own independent event-to-view projections. */
 
@@ -84,6 +86,25 @@ export function sessionRecallLabels(source: unknown): string[] {
   const record = asRecord(source)
   if (record === null || readString(record, 'kind') !== 'session-reference') return []
   return collect(record, 'references', 'label')
+}
+
+/**
+ * Read the captured identities associated with one message's cross-session recall.
+ * @param source - Logged `user/message` source.
+ * @returns Session identities and their captured labels, in recorded order; incomplete entries are omitted.
+ */
+export function sessionRecallReferences(source: unknown): UserTextFacts['sessionReferences'] {
+  const record = asRecord(source)
+  if (record === null || readString(record, 'kind') !== 'session-reference' || !Array.isArray(record.references)) return []
+  const references: Array<UserTextFacts['sessionReferences'][number]> = []
+  for (const entry of record.references) {
+    const reference = asRecord(entry)
+    if (reference === null) continue
+    const sessionId = readString(reference, 'sessionId')
+    const label = readString(reference, 'label')
+    if (sessionId !== null && label !== null) references.push({ sessionId: brandString<SessionId>(sessionId), label })
+  }
+  return references
 }
 
 /**

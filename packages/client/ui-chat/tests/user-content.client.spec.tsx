@@ -14,7 +14,11 @@ import { UserContent } from '../src/client/chat/UserContent.tsx'
 import { en, NS, zh } from '../src/client/locale.ts'
 import type { UserTextInjected } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import { UserTextRegistry } from '../../ui-conversation/src/client/conversation/user-text-registry.ts'
-import { UserText, PlainUserText, SessionReference } from '../../ui-conversation/src/client/user-text/UserText.tsx'
+import { UserText, PlainUserText } from '../../ui-conversation/src/client/user-text/UserText.tsx'
+import { SessionReference, type SessionReferenceInjected } from '../../ui-conversation/src/client/user-text/SessionReference.tsx'
+import { DEFAULT_SESSION_REFERENCE_NAVIGATION } from '../../ui-conversation/src/reference-navigation-settings.ts'
+import { en as conversationEn, zh as conversationZh } from '../../ui-conversation/src/client/locales.ts'
+import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
 import { sessionReferenceRule } from '../../ui-conversation/src/client/user-text/session-reference-rule.ts'
 import { collapseWhitespaceRule, trimWhitespaceRule } from '../../ui-conversation/src/client/user-text/whitespace-rules.ts'
 import { fileReferenceRule, folderReferenceRule } from '../../ui-reference/src/client/user-text-rules.ts'
@@ -48,11 +52,14 @@ async function bench() {
   locale.register('common', { en: commonEn, zh: commonZh })
   locale.register(NS, { en, zh })
   locale.register('reference', { en: referenceEn, zh: referenceZh })
+  locale.register('conversation', { en: conversationEn, zh: conversationZh })
   locale.setLocale('en')
   runtime.slots.installLocale(locale)
   const imageCalls: PropsRuntime<'conversation.chat.user.images'>[] = []
   const openFile = vi.fn<(path: string) => void>()
   const openSkill = vi.fn<(name: string) => void>()
+  const openSessionReference = vi.fn<SessionReferenceInjected['openSessionReference']>()
+  const referenceNavigation = createSnapshotStore(DEFAULT_SESSION_REFERENCE_NAVIGATION)
   await runtime.mount({ inject: ['slots'], apply: (ctx) => {
     const userText = new UserTextRegistry(ctx)
     for (const rule of [
@@ -73,7 +80,8 @@ async function bench() {
       }),
     }, UserText)
     ctx.slots.register({ name: 'conversation.user.text.node', key: 'text' }, PlainUserText)
-    ctx.slots.register({ name: 'conversation.user.text.node', key: 'session' }, SessionReference)
+    ctx.slots.register({ name: 'conversation.user.text.node', key: 'session', locale: 'conversation',
+      inject: (): SessionReferenceInjected => ({ hooks: { referenceNavigation }, openSessionReference }) }, SessionReference)
     ctx.slots.register({ name: 'conversation.user.text.node', key: 'file', locale: 'reference',
       inject: () => ({ openFile }) }, FileReference)
     ctx.slots.register({ name: 'conversation.user.text.node', key: 'folder' }, FolderReference)
@@ -118,7 +126,10 @@ async function bench() {
     return { ...view, rerender: update }
   }
   const loadImage = vi.fn<UserContentInput['loadImage']>(async () => 'blob:loaded')
-  return { runtime, locale, owner, mountContent, factory, render, loadImage, imageCalls, SessionProvider, openFile, openSkill }
+  return {
+    runtime, locale, owner, mountContent, factory, render, loadImage, imageCalls, SessionProvider,
+    openFile, openSkill, openSessionReference,
+  }
 }
 
 describe('user Content Factory', () => {

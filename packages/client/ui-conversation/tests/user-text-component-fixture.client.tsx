@@ -9,7 +9,11 @@ import type { UserTextNode } from '../src/client/contract/user-text.ts'
 import { UserTextRegistry } from '../src/client/conversation/user-text-registry.ts'
 import { QuotedUserText } from '@deepseek-ai/dsh-message-quotes/src/client/QuotedUserText.tsx'
 import { quoteRule } from '@deepseek-ai/dsh-message-quotes/src/client/quote-rule.ts'
-import { UserText, PlainUserText, SessionReference } from '../src/client/user-text/UserText.tsx'
+import { UserText, PlainUserText } from '../src/client/user-text/UserText.tsx'
+import { SessionReference, type SessionReferenceInjected } from '../src/client/user-text/SessionReference.tsx'
+import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
+import { DEFAULT_SESSION_REFERENCE_NAVIGATION } from '../src/reference-navigation-settings.ts'
+import { zh as conversationZh } from '../src/client/locales.ts'
 import { sessionReferenceRule } from '../src/client/user-text/session-reference-rule.ts'
 import { collapseWhitespaceRule, trimWhitespaceRule } from '../src/client/user-text/whitespace-rules.ts'
 import { skillReferenceRule } from '../../ui-skill/src/client/user-text-rules.ts'
@@ -26,6 +30,7 @@ import { GoalCommandReference } from '../../ui-goal/src/client/GoalCommandRefere
 interface UserTextFixtureActions {
   openFile?: (path: string) => void
   openSkill?: (name: string) => void
+  openSessionReference?: SessionReferenceInjected['openSessionReference']
 }
 
 type UserTextProps = ComponentProps<typeof UserText>
@@ -53,6 +58,9 @@ export function createUserTextFixture(actions: UserTextFixtureActions = {}): (in
   const openFile = actions.openFile ?? (() => { throw new Error('This fixture has no file navigation action') })
   const openSkill = actions.openSkill ?? (() => { throw new Error('This fixture has no skill navigation action') })
   const t = makeTranslate(referenceZh, commonZh)
+  const sessionT = makeTranslate(conversationZh, commonZh)
+  const useReferenceNavigation = bindSnapshotSelector(createSnapshotStore(DEFAULT_SESSION_REFERENCE_NAVIGATION))
+  const openSessionReference = actions.openSessionReference ?? (() => { throw new Error('This fixture has no Session navigation action') })
   const renderSlot: UserTextProps['renderSlot'] = (name: string, input: object, options?: { fallback?: ReactNode }) => {
     if (name !== 'conversation.user.text.node') throw new Error(`Unexpected UserText Slot: ${name}`)
     const owner = input as UserTextNodeOwnerProps & { node: UserTextNode }
@@ -61,7 +69,7 @@ export function createUserTextFixture(actions: UserTextFixtureActions = {}): (in
       case 'quote': return createElement(QuotedUserText, owner as ComponentProps<typeof QuotedUserText>)
       case 'secret': return createElement(SecretText, { ...owner, t } as ComponentProps<typeof SecretText>)
       case 'text': return createElement(PlainUserText, owner as ComponentProps<typeof PlainUserText>)
-      case 'session': return createElement(SessionReference, owner as ComponentProps<typeof SessionReference>)
+      case 'session': return createElement(SessionReference, { ...owner, useReferenceNavigation, openSessionReference, t: sessionT } as ComponentProps<typeof SessionReference>)
       case 'file': return createElement(FileReference, { ...owner, openFile, t } as ComponentProps<typeof FileReference>)
       case 'folder': return createElement(FolderReference, owner as ComponentProps<typeof FolderReference>)
       case 'skill': return createElement(SkillReference, { ...owner, openSkill } as ComponentProps<typeof SkillReference>)

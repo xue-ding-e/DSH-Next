@@ -3,6 +3,7 @@ import { notifySubscribers, type ObservableSnapshot } from '@deepseek-ai/dsh-cli
 import type {
   ConversationLocation, ConversationNode, ConversationTimelineSnapshot, ConversationViewBuilder,
   ConversationViewDefinition, ConversationGroupInput, GroupNodePosition, NodeChange, NodeKey, PartialAssistant, RunningToolCall,
+  UserTextFacts,
 } from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type { ChatConversationViewNode, ChatNode, ChatNodeDataMap, ChatNodeKind } from '../contract/chat-nodes.ts'
 import { isRunningTool } from '../contract/chat-nodes.ts'
@@ -13,7 +14,7 @@ import type {
 } from '../contract/snapshot.ts'
 import { isAtOrOutside } from '../contract/group-tree.ts'
 import { locationCoordinates } from './common.ts'
-import { sessionRecallLabels, skillInvocationName } from './event-projection.ts'
+import { sessionRecallLabels, sessionRecallReferences, skillInvocationName } from './event-projection.ts'
 import { GroupTreeSegments } from './group-tree-segments.ts'
 import { sameTurnNavigationItem, turnNavigationItem } from './turn-navigation.ts'
 import { ChatTurnProcessProjector } from './turn-process-presentation.ts'
@@ -22,6 +23,7 @@ const EMPTY_KEYS: readonly string[] = []
 const EMPTY_TURNS: readonly number[] = []
 const EMPTY_ITEMS: readonly TurnNavigationItem[] = []
 const EMPTY_LIST: readonly never[] = []
+const EMPTY_SESSION_REFERENCES: UserTextFacts['sessionReferences'] = []
 
 function sameReferences<T>(left: readonly T[], right: readonly T[]): boolean {
   return left.length === right.length && left.every((value, index) => value === right[index])
@@ -541,54 +543,71 @@ function referenceMessageSeq(node: ChatConversationViewNode): number | undefined
     : undefined
 }
 
-function followingRecall(node: ChatConversationViewNode): {
-  readonly messageSeq: number
+interface MessageSessionReferences {
   readonly labels: readonly string[]
-} | undefined {
+  readonly references: UserTextFacts['sessionReferences']
+}
+
+function followingRecall(node: ChatConversationViewNode): (MessageSessionReferences & { readonly messageSeq: number }) | undefined {
   const candidate = node as ChatNode
   if (candidate.kind !== 'context') return undefined
   return {
     messageSeq: candidate.data.seq - 1,
     labels: sessionRecallLabels(candidate.data.source),
+    references: sessionRecallReferences(candidate.data.source),
   }
 }
 
-function withReferenceLabels(
+function sameSessionReferences(left: UserTextFacts['sessionReferences'], right: UserTextFacts['sessionReferences']): boolean {
+  return left.length === right.length && left.every((reference, index) => {
+    const other = right[index]
+    return other !== undefined && reference.sessionId === other.sessionId && reference.label === other.label
+  })
+}
+
+function withSessionReferences(
   node: ChatConversationViewNode,
-  labels: readonly string[],
+  recall: MessageSessionReferences | undefined,
 ): ChatConversationViewNode {
   const candidate = node as ChatNode
   if (candidate.kind !== 'user' && candidate.kind !== 'steering') return node
   const current = candidate.data.referenceLabels ?? EMPTY_KEYS
+  const currentReferences = candidate.data.sessionReferences ?? EMPTY_SESSION_REFERENCES
+  const labels = recall?.labels ?? EMPTY_KEYS
+  const references = recall?.references ?? EMPTY_SESSION_REFERENCES
   const hasLabels = Object.hasOwn(candidate.data, 'referenceLabels')
-  if (sameReferences(current, labels) && hasLabels === (labels.length > 0)) return node
+  const hasReferences = Object.hasOwn(candidate.data, 'sessionReferences')
+  if (sameReferences(current, labels) && hasLabels === (labels.length > 0)
+    && sameSessionReferences(currentReferences, references) && hasReferences === (references.length > 0)) return node
   const data: Record<string, unknown> = { ...candidate.data }
   if (labels.length === 0) delete data.referenceLabels
   else data.referenceLabels = labels
+  if (references.length === 0) delete data.sessionReferences
+  else data.sessionReferences = references
   return { ...candidate, data }
 }
 
 /** Associates a direct message with the sourced recall event that immediately follows it. */
-class ReferenceLabelProjector {
+class SessionReferenceProjector {
   private readonly messagesBySeq = new Map<number, string>()
-  private readonly labelsByMessageSeq = new Map<number, readonly string[]>()
+  private readonly recallsByMessageSeq = new Map<number, MessageSessionReferences>()
 
   replace(nodes: readonly ChatConversationViewNode[]): readonly ChatConversationViewNode[] {
     this.messagesBySeq.clear()
-    this.labelsByMessageSeq.clear()
+    this.recallsByMessageSeq.clear()
     for (const node of nodes) {
       const messageSeq = referenceMessageSeq(node)
       if (messageSeq !== undefined) this.messagesBySeq.set(messageSeq, node.key)
       const recall = followingRecall(node)
       if (recall !== undefined && recall.labels.length > 0) {
-        this.labelsByMessageSeq.set(recall.messageSeq, recall.labels)
+        this.recallsByMessageSeq.set(recall.messageSeq, recall)
       }
     }
     return nodes.map((node) => {
       const messageSeq = referenceMessageSeq(node)
       return messageSeq === undefined
         ? node
-        : withReferenceLabels(node, this.labelsByMessageSeq.get(messageSeq) ?? EMPTY_KEYS)
+        : withSessionReferences(node, this.recallsByMessageSeq.get(messageSeq))
     })
   }
 
@@ -606,12 +625,13 @@ class ReferenceLabelProjector {
       }
       const recall = followingRecall(node)
       if (recall === undefined) continue
-      const current = this.labelsByMessageSeq.get(recall.messageSeq)
-      if (recall.labels.length === 0) this.labelsByMessageSeq.delete(recall.messageSeq)
+      const current = this.recallsByMessageSeq.get(recall.messageSeq)
+      if (recall.labels.length === 0) this.recallsByMessageSeq.delete(recall.messageSeq)
       else {
-        this.labelsByMessageSeq.set(
+        this.recallsByMessageSeq.set(
           recall.messageSeq,
-          current !== undefined && sameReferences(current, recall.labels) ? current : recall.labels,
+          current !== undefined && sameReferences(current.labels, recall.labels)
+            && sameSessionReferences(current.references, recall.references) ? current : recall,
         )
       }
       affected.add(recall.messageSeq)
@@ -621,7 +641,7 @@ class ReferenceLabelProjector {
       if (key === undefined) continue
       const node = byKey.get(key) ?? store.get(key)
       if (node === undefined) continue
-      byKey.set(key, withReferenceLabels(node, this.labelsByMessageSeq.get(messageSeq) ?? EMPTY_KEYS))
+      byKey.set(key, withSessionReferences(node, this.recallsByMessageSeq.get(messageSeq)))
     }
     return [...byKey.values()]
   }
@@ -1084,7 +1104,7 @@ export class ChatSnapshotBuilder implements ConversationViewBuilder<ChatConversa
   private readonly locations = new MutableChatLocationIndex()
   private readonly navigation = new MutableTurnNavigationIndex()
   private readonly legacy = new LegacySliceBuilder()
-  private readonly referenceLabels = new ReferenceLabelProjector()
+  private readonly sessionReferences = new SessionReferenceProjector()
   private readonly skillNames = new SkillNameProjector()
   private order: readonly string[] = EMPTY_KEYS
   private latestGroupInput: ConversationGroupInput<ChatConversationViewNode>
@@ -1111,7 +1131,7 @@ export class ChatSnapshotBuilder implements ConversationViewBuilder<ChatConversa
     readonly nodes: readonly ChatConversationViewNode[]
     readonly timeline: ConversationTimelineSnapshot
   }): ChatSnapshot {
-    const nodes = this.skillNames.replace(this.referenceLabels.replace(input.nodes))
+    const nodes = this.skillNames.replace(this.sessionReferences.replace(input.nodes))
     this.store.replace(nodes)
     this.order = orderedVisibleChatNodes(nodes).map(node => node.key)
     this.locations.rebuild(this.order, this.store)
@@ -1136,7 +1156,7 @@ export class ChatSnapshotBuilder implements ConversationViewBuilder<ChatConversa
     readonly timeline: ConversationTimelineSnapshot
     readonly changedTurns?: readonly number[]
   }): ChatSnapshot {
-    const upserts = this.skillNames.apply(this.referenceLabels.apply(input.upserts, this.store), this.store)
+    const upserts = this.skillNames.apply(this.sessionReferences.apply(input.upserts, this.store), this.store)
     const processTurns = new Set<number>()
     let structural = false
     const contentOnly: ChatConversationViewNode[] = []
