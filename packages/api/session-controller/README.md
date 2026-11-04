@@ -27,6 +27,8 @@ Desktop analytics follows the [product collection policy](../../client/product-a
 <a id="use-this-package"></a>
 ## Use this package
 
+Prompt retries recover their first acceptance from committed inbox insertions and admitted messages. Claiming or removing a queued occurrence does not permit duplicate delivery; forked Sessions do not inherit the parent's request receipts. Attachment admission rechecks acceptance before committing a competing retry.
+
 Queue recall compares the complete expected content before removing one pending user occurrence. Its request identity and removed message commit together in one inbox splice without changing model admission. Recovery reads only committed operations owned by the current Session, excludes inherited fork events, and preserves the original message block order. A continuable child must still have its existing owner.
 
 The controller reads a Session's recorded preset through the optional `agentPresets.presetForSession(session)` service method. A null result means no preset was recorded; an absent service means preset identity is unavailable to the controller.
