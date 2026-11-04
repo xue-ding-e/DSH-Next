@@ -96,7 +96,8 @@ describe('web e2e: queued image submission', () => {
     await input.press('Enter')
     await expect.poll(() => existsSync(readyFile), { timeout: 15_000 }).toBe(true)
 
-    // A just-submitted composer is read-only for the prompt round-trip.
+    // The composer keeps the sent prompt, still editable, until the Host accepts it.
+    await expect.poll(() => input.textContent(), { timeout: 10_000 }).toBe('')
     await page.locator('[data-composer-input][contenteditable="true"]').first().waitFor({ timeout: 10_000 })
     await pasteImage(page, await readFile(PNG))
     await page.getByRole('img', { name: 'queued.png' }).waitFor({ timeout: 10_000 })
@@ -126,17 +127,20 @@ describe('web e2e: queued image submission', () => {
     try {
       await input.fill(QUEUED_TEXT)
       await input.press('Enter')
-      await dockThumb.waitFor({ timeout: 15_000 })
-      await expect.poll(() => dockThumb.getAttribute('src'), { timeout: 15_000 }).toMatch(/^blob:/)
-      expect(await page.locator('[data-queue-dock] [data-submission-echo]').count()).toBe(1)
+      // The composer keeps the text and image, read-only, until the Host accepts the prompt.
+      await expect.poll(() => input.getAttribute('contenteditable'), { timeout: 15_000 }).toBe('false')
+      expect(await page.getByRole('img', { name: 'queued.png' }).count()).toBe(1)
+      expect(await page.locator('[data-queue-dock] [data-submission-echo]').count()).toBe(0)
       releasePrompt.resolve(undefined)
       await expect.poll(() => imageRequested, { timeout: 15_000 }).toBe(true)
-      await page.getByText(QUEUED_TEXT, { exact: true }).waitFor()
+      // The Host queue row can arrive before the prompt reply that clears the composer.
+      await expect.poll(() => input.textContent(), { timeout: 15_000 }).toBe('')
+      await page.locator('[data-queue-dock]').getByText(QUEUED_TEXT, { exact: true }).waitFor()
       await page.getByRole('button', { name: 'Remove queued message', disabled: false }).waitFor({ timeout: 15_000 })
       expect(await page.locator('[data-queue-dock] [data-submission-echo]').count()).toBe(0)
       expect(await dockThumb.count()).toBe(0)
       releaseImage.resolve(undefined)
-      // Admission replaces the optimistic image; wait for the durable row's own thumbnail.
+      // The Host queue row replaces the accepted echo; wait for the durable row's own thumbnail.
       const durableThumb = page.locator('[data-queue-dock] li:not([data-submission-echo]) img[alt="Queued message image"]')
       await durableThumb.waitFor({ timeout: 15_000 })
       await expect.poll(() => durableThumb.getAttribute('src'), { timeout: 15_000 }).toMatch(/^blob:/)
@@ -239,7 +243,7 @@ describe('web e2e: queued image submission', () => {
 
     // A definitive rejection must not transfer the prepared image into the draft.
     let rejectedItem: string | undefined
-    await page.route('**/api/session/updateQueue', async route => {
+    await page.route('**/api/session/updateQueue', async (route) => {
       const envelope = route.request().postDataJSON() as { rpcId: string; payload: { args: { request: { itemId: string } } } }
       rejectedItem = envelope.payload.args.request.itemId
       await route.fulfill({ status: 200, contentType: 'application/json', json: {
@@ -254,19 +258,19 @@ describe('web e2e: queued image submission', () => {
     expect(await rows.count()).toBe(2)
     expect(await page.locator('[data-composer-card]').getByRole('img', { name: 'queued.png' }).count()).toBe(0)
 
-    const received = Promise.withResolvers<void>()
-    const release = Promise.withResolvers<void>()
+    const received = Promise.withResolvers<undefined>()
+    const release = Promise.withResolvers<undefined>()
     let recalls = 0
     let recallRequest: unknown
-    await page.route('**/api/session/updateQueue', async route => {
+    await page.route('**/api/session/updateQueue', async (route) => {
       recalls++
       recallRequest = route.request().postDataJSON()
-      received.resolve()
+      received.resolve(undefined)
       await release.promise
       await route.continue()
     })
     cleanupRoutes = async () => {
-      release.resolve()
+      release.resolve(undefined)
       await page.unrouteAll({ behavior: 'wait' })
     }
     try {
@@ -286,7 +290,7 @@ describe('web e2e: queued image submission', () => {
       expect(await input.textContent()).toBe('')
       expect(await rows.count()).toBe(2)
       expect(recalls).toBe(1)
-      release.resolve()
+      release.resolve(undefined)
       await expect.poll(() => input.textContent()).toBe(QUEUED_TEXT)
       await expect.poll(() => rows.count()).toBe(1)
       expect(await rows.textContent()).toContain(older)
@@ -294,7 +298,7 @@ describe('web e2e: queued image submission', () => {
       await restored.waitFor()
       await expect.poll(() => restored.evaluate(element =>
         element instanceof HTMLImageElement && element.complete && element.naturalWidth > 0)).toBe(true)
-      const restoredBytes = await restored.evaluate(async element => {
+      const restoredBytes = await restored.evaluate(async (element) => {
         if (!(element instanceof HTMLImageElement) || !element.src.startsWith('blob:')) {
           throw new Error('Recalled image must use a browser-owned preview')
         }

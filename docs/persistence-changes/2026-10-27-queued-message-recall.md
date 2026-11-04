@@ -27,20 +27,20 @@ id: 2026-10-27-queued-message-recall
 baseline: false
 changes:
   - root: "event:agent/inbox/spliced"
-    previous: "2026-10-22-action-card-status"
-    after: "4ee9d5bde7cfa90e7c66e9245a3fff014f9535baaf90fa2b7d2e8661f007309b"
+    previous: "2026-10-27-retry-control-input"
+    after: "58e19083c1e104320107ca3b3e73543e39c060a402adf746d72f10691529a9ea"
     decision: same-version
 ```
 
 <a id="compatibility"></a>
 ## Compatibility
 
-Existing events without recall remain valid and the recovery projection ignores them. Existing readers apply the unchanged canceled splice and do not use the optional metadata, so removal is retained and content is not requeued. New recovery is restricted to committed own-Session operations, excluding inherited fork events. Older clients do not gain recall recovery support; this is not a general downgrade guarantee.
+Existing splice events without recall remain valid. Readers that do not consume the optional recall metadata still apply the unchanged cancellation and do not requeue removed input. Recovery reads committed own-Session operations and excludes inherited fork events. The combined event retains the upstream skill-catalog incomplete discriminator; this optional field does not change splice behavior. Older clients do not gain recall recovery support or general downgrade support.
 
 <a id="verification"></a>
 ## Verification
 
-Source inspection of both inbox readers and the recovery projection; 90 bounded adapted tests passed locally, including JSON Session replay and response-loss recovery. CI run 40591419528 generated the schema and classified this sole change as optional-property-added with requiresCompatibilityReview false; 620 types unchanged. Full locked-toolchain behavior, disk persistence, SDK and native UI validation remain pending.
+The combined source passes 142 prompt-admission and bundle-purity checks and 62 queue-recall and Liveshare tests. The recall transaction cases cover committed response-loss recovery and write ownership. Generated schema validation and the complete build are checked separately; native desktop behavior is not established by these unit tests.
 
 <a id="dev-note"></a>
 ## Dev Note

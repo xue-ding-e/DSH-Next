@@ -29,7 +29,7 @@ export class QueueRecallController {
     agent: Agent,
     itemId: SessionUpdateQueueRequest['itemId'],
     requestId: SessionRequestId,
-    projection: ProjectionHandle<QueueRecallState>,
+    projection: Pick<ProjectionHandle<QueueRecallState>, 'stateOf'>,
     fileUploads: FileUploads,
   ): SessionUpdateQueueValue {
     const message = projection.stateOf(agent.session).recalls.find(value =>
@@ -56,7 +56,7 @@ export class QueueRecallController {
     agent: Agent,
     itemId: SessionUpdateQueueRequest['itemId'],
     action: Extract<SessionUpdateQueueRequest['action'], { readonly kind: 'recall' }>,
-    projection: ProjectionHandle<QueueRecallState>,
+    projection: Pick<ProjectionHandle<QueueRecallState>, 'stateOf'>,
     fileUploads: FileUploads,
   ): SessionUpdateQueueValue {
     const committedRecall = () => projection.stateOf(agent.session).recalls

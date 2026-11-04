@@ -167,7 +167,7 @@ export class ConversationController extends Service implements IConversation {
   private readonly recalledAttachments = new Map<DraftAttachmentId, { ids: readonly DraftAttachmentId[]; content: InboxState['next-turn'][number]['content'] }>()
   private readonly recalls = new QueueRecall(
     (session, item, signal, recalledRequestId) => this.prepareRecall(session, item, signal, recalledRequestId),
-    attachments => this.releaseDraftAttachments(attachments),
+    (attachments) => { this.releaseDraftAttachments(attachments) },
     () => randomUUID() as SessionRequestId,
   )
   private readonly draftAttachments = new Map<DraftAttachmentId, ComposerAttachment>()
@@ -229,17 +229,22 @@ export class ConversationController extends Service implements IConversation {
   }
 
   /**
-   * Submit ordered draft attachments with text through one host admission. A local
-   * submission echo enters the session snapshot synchronously; serialization
-   * and the prompt round-trip start after the browser can paint it. On the
-   * echo's observed retirement seeds admitted image previews into the durable
-   * cache and removes every attachment from the draft registry. On failure,
-   * every attachment remains registered so the composer can restore it.
+   * Submit ordered draft attachments with text through one host admission. A
+   * local submission echo is registered first and enters the session snapshot
+   * once the Host accepts the prompt; serialization and the prompt round-trip
+   * start after the browser can paint the composer's sending state. The
+   * outcome is success as soon as the Host accepts the prompt, which an Inbox
+   * row carrying the request id can show before the receipt. The echo's
+   * observed retirement seeds admitted image previews into the durable cache
+   * and removes every attachment from the draft registry; an accepted prompt
+   * whose echo retires unobserved also releases them. Until the Host accepts
+   * the prompt, every attachment remains registered for the composer.
    * @param session - target session.
    * @param text - serialized prompt text.
    * @param attachmentIds - ordered draft-local attachment ids.
    * @param mode - queue or steer delivery selected by composer policy.
    * @param signal - optional cancellation for the complete Host admission.
+   * @param accept - called inside the Session's acceptance, before the echo renders, so the composer settles with it.
    * @returns the Host admission outcome; local attachment preparation failures reject.
    */
   async sendSession(
@@ -248,6 +253,7 @@ export class ConversationController extends Service implements IConversation {
     attachmentIds: readonly DraftAttachmentId[],
     mode: InputSubmitMode,
     signal?: AbortSignal,
+    accept?: () => void,
   ): Promise<SubmitOutcome> {
     const attachments = this.resolveDraftAttachments(attachmentIds)
     if (attachments.length !== attachmentIds.length) {
@@ -287,33 +293,43 @@ export class ConversationController extends Service implements IConversation {
           : { type: 'file' as const, receiptId }
       }),
     )
-    let finishRetirement: ((retirement: PendingSubmissionRetirement) => void) | undefined
-    const retirement = attachments.length === 0
-      ? undefined
-      : new Promise<PendingSubmissionRetirement>((resolve) => { finishRetirement = resolve })
+    // The composer owns the attachments until the Host accepts the prompt.
+    const ownership = { accepted: false, retiredUnobserved: false }
+    const acceptance = Promise.withResolvers<undefined>()
     const submission = session.beginSubmission({
       mode,
       text,
       attachments: pendingAttachments,
+      onAccept: () => {
+        ownership.accepted = true
+        accept?.()
+        acceptance.resolve(undefined)
+      },
       onRetire: (settlement) => {
-        this.settleSubmittedAttachments(session.sessionId, attachments, settlement)
-        finishRetirement?.(settlement)
+        if (settlement.reason === 'observed') this.settleSubmittedAttachments(session.sessionId, attachments, settlement)
+        else if (ownership.accepted) this.releaseDraftAttachments(attachments)
+        else ownership.retiredUnobserved = true
       },
     })
     let content: Parameters<SessionFace['prompt']>[0]
     try {
       await nextPaint()
       const uploaded = await serializeAttachments()
+      const firstAttachmentId = attachmentIds[0]
       const recalled = attachmentIds.length === 0
         ? this.recalledText.get(session.sessionId)
-        : this.recalledAttachments.get(attachmentIds[0]!)
+        : firstAttachmentId === undefined ? undefined : this.recalledAttachments.get(firstAttachmentId)
       if (recalled !== undefined && recalled.ids.length === attachmentIds.length
         && recalled.ids.every((id, index) => id === attachmentIds[index])) {
         const originalText = recalled.content.filter(block => block.type === 'text').map(block => block.text).join('')
         let attachmentIndex = 0
         let textPlaced = false
         content = recalled.content.flatMap((block) => {
-          if (block.type !== 'text') return [uploaded[attachmentIndex++]!]
+          if (block.type !== 'text') {
+            const uploadedAttachment = uploaded[attachmentIndex++]
+            if (uploadedAttachment === undefined) throw new Error('recalled attachment order is incomplete')
+            return [uploadedAttachment]
+          }
           if (text === originalText) return [block]
           if (textPlaced) return []
           textPlaced = true
@@ -327,9 +343,13 @@ export class ConversationController extends Service implements IConversation {
       submission.abandon()
       throw error
     }
-    const result = await session.prompt(content, mode, signal, submission.requestId)
-    if (!result.ok) return { kind: 'error' }
-    if (retirement !== undefined && (await retirement).reason !== 'observed') return { kind: 'error' }
+    // An Inbox row can show the acceptance before the receipt; a receipt that fails afterwards changes
+    // nothing here because the Host already holds the message.
+    const result = await Promise.race([session.prompt(content, mode, signal, submission.requestId), acceptance.promise])
+    if (result !== undefined && !result.ok) return { kind: 'error' }
+    ownership.accepted = true
+    // An accepted prompt whose echo already retired unobserved, as when its queue entry was removed.
+    if (ownership.retiredUnobserved) this.releaseDraftAttachments(attachments)
     if (attachmentIds.length === 0) this.recalledText.delete(session.sessionId)
     return { kind: 'success' }
   }
@@ -589,7 +609,7 @@ export class ConversationController extends Service implements IConversation {
           continue
         }
         if (block.type !== 'image' || !('attachment' in block)) throw new Error('queue recall: unsupported content')
-        const read = await session.readAttachment(block.attachment.attachmentId)
+        const read = await session.readAttachment(block.attachment)
         if (!read.ok) throw new Error(`queue recall: ${read.error.message}`)
         const file = new File([new Uint8Array(read.value.data)], block.attachment.name ?? '', { type: block.attachment.mediaType })
         const attachment = browserDraftAttachment(file)
@@ -615,14 +635,17 @@ export class ConversationController extends Service implements IConversation {
    * @throws On preparation, storage, transport, or Host rejection; uncertain handoffs remain recoverable.
    */
   async recallQueue(session: SessionFace, stillAccepts: () => boolean, signal?: AbortSignal): Promise<{
-    readonly text: string; readonly attachmentIds: readonly DraftAttachmentId[]; commit(): void
+    readonly text: string
+    readonly attachmentIds: readonly DraftAttachmentId[]
+    commit(): void
   } | undefined> {
     const result = await this.recalls.recall(session, stillAccepts, signal)
     if (result === undefined) return undefined
     const { prepared, recalled } = result
-    const uploads = { ...this.fileUploads.getSnapshot() }
+    let uploads = { ...this.fileUploads.getSnapshot() }
     for (const [index, attachment] of prepared.entries()) {
-      const receipt = recalled.attachments[index]!
+      const receipt = recalled.attachments[index]
+      if (receipt === undefined) throw new Error('recalled attachment receipt is missing')
       if (attachment.kind === 'image' && !this.draftAttachments.has(attachment.id)) {
         attachment.previewUrl = URL.createObjectURL(attachment.file)
       }
@@ -633,7 +656,7 @@ export class ConversationController extends Service implements IConversation {
         uploads[attachment.id] = { status: 'ready', receiptId: receipt.receiptId }
       } else {
         // Continuable children accept inline image bytes, not upload receipts.
-        delete uploads[attachment.id]
+        uploads = Object.fromEntries(Object.entries(uploads).filter(([id]) => id !== attachment.id))
       }
     }
     this.fileUploads.set(uploads)
@@ -641,7 +664,7 @@ export class ConversationController extends Service implements IConversation {
     if (replay.ids.length === 0) this.recalledText.set(session.sessionId, replay)
     else for (const id of replay.ids) this.recalledAttachments.set(id, replay)
     return { text: recalled.content.filter(block => block.type === 'text').map(block => block.text).join(''),
-      attachmentIds: prepared.map(attachment => attachment.id), commit: result.commit }
+      attachmentIds: prepared.map(attachment => attachment.id), commit: () => { result.commit() } }
   }
 
   /** Apply one operation to a pending queue occurrence. */
@@ -695,19 +718,17 @@ export class ConversationController extends Service implements IConversation {
   }
 
   /**
-   * Settle one submission's draft attachments when its echo retires. Observed:
-   * each image leaves the registry, handing its preview URL to the durable
-   * image cache (seeded under the admitted reference so the transcript node
-   * renders immediately while the cache reads canonical bytes) or revoking it
-   * when the cache already holds that reference. Failed: nothing changes;
-   * the ids stay registered for the composer's rail restore.
+   * Settle one submission's draft attachments when its echo is observed: each
+   * file is released, and each image leaves the registry, handing its preview
+   * URL to the durable image cache (seeded under the admitted reference so the
+   * transcript node renders immediately while the cache reads canonical
+   * bytes) or revoking it when the cache already holds that reference.
    */
   private settleSubmittedAttachments(
     sessionId: SessionId,
     attachments: readonly ComposerAttachment[],
-    retirement: PendingSubmissionRetirement,
+    retirement: Extract<PendingSubmissionRetirement, { readonly reason: 'observed' }>,
   ): void {
-    if (retirement.reason !== 'observed') return
     const uiConversation = this.ctx.get('uiConversation')
     let observedIndex = 0
     for (const attachment of attachments) {

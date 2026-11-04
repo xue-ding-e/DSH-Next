@@ -4,9 +4,9 @@
 
 DSH-Next 是基于 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 独立维护的社区源码仓库，并非 DeepSeek 官方发行版，与 DeepSeek 无隶属关系，也未获得其背书。
 
-`main` 保持独立线性历史；`upstream-main` 原样保留官方 `master` 的完整历史。初始源码快照为 [22ddee3](https://github.com/deepseek-ai/deepseek-harness/commit/22ddee3792402c3e70ec5f86a63c3e3e895a2f60)，原始 [MIT 许可证](LICENSE)、[第三方声明](THIRD_PARTY_NOTICES.md)和作者归属均予以保留。
+`main` 保持独立线性历史；`upstream-main` 原样保留官方 `master` 的完整历史。初始源码快照为 [source-import](https://github.com/xue-ding-e/DSH-Next/tree/source-import)，原始 [MIT 许可证](LICENSE)、[第三方声明](THIRD_PARTY_NOTICES.md)和作者归属均予以保留。
 
-发布自动化尚未配置。上游 GitHub Actions 工作流以 `.disabled` 后缀原样保存在 `.github/upstream-workflows/`，已启用经过审查的手动验证工作流；继承的发布和部署工作流仍保持禁用。本仓库尚未发布 DSH-Next 软件包或二进制文件；下方 npm 命令安装的是上游软件，而非 DSH-Next。
+Windows 安装包和更新通过本仓库的 [GitHub Releases](https://github.com/xue-ding-e/DSH-Next/releases) 发布。个人扩展由 [DSH-Next-Plugins](https://github.com/xue-ding-e/DSH-Next-Plugins) 独立维护，版本清单和安装入口由 [DSH-Next-Profile](https://github.com/xue-ding-e/DSH-Next-Profile) 管理。下方 npm 命令安装官方上游程序。Next 安装包使用独立的应用身份、更新源和数据目录。
 
 DeepSeek Harness（`dsh`）是由 [DeepSeek AI](https://deepseek.com) 开发的开源 agent harness（智能体框架）。
 

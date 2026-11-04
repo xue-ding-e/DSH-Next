@@ -11,7 +11,7 @@
 - button "复制"
 - button "编辑并重新发送"
 - status: 已完成
-- button "已完成，用时 {{duration}}" [disabled]
+- button "已完成，用时 {{duration}}"
 - paragraph: MESSAGES_WEB_READY
 - button "复制"
 - button "好的回答"

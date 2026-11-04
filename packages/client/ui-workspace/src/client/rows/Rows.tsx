@@ -3,65 +3,37 @@
  * all data and callbacks arrive via props. Hover swaps (folder->chevron,
  * time->ellipsis, action buttons) are CSS-only, and a session row's clipped
  * title marquees programmatically while the row is hovered. Workspace row
- * menus offer native folder opening, Rename, and Delete. A Session row's "..." menu and
- * its hover buttons are the `sidebar.workspaces.session.menu.item` and
- * `sidebar.workspaces.session.row.action` lists, rendered through the
- * browser's `renderSlot` with the menu's open state as the occurrence's hook
- * context; this package's own actions are entries like any plugin's. The
- * session and workspace hover cards are suppressed while a menu is open.
+ * menus share captured Workspace actions with right-click. Both row types
+ * render the shared `contextMenu.button` factory for their menu trigger.
+ * Session hover buttons use the browser's `renderSlot` for the
+ * `sidebar.workspaces.session.row.action` list. Session and Workspace
+ * hover cards are suppressed while their menu is open.
  */
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { Dispatch, RefObject, SetStateAction } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import type { PointerEvent, RefObject } from 'react'
 import clsx from 'clsx'
 import type { PropsRenderSlots } from '@deepseek-ai/dsh-client-ui-slots'
 import {
   HoverCard, IconArchiveOutlineRegular, IconEditOutlineRegular,
-  IconEllipsisOutlineRegular, IconFolderCloseRegular, IconFolderOpenRegular,
-  IconNewChatOutlineRegular, IconPinFillRegular, IconTrashOutlineRegular,
-  IconTriangleRightFillRegular, IconUnarchiveOutlineRegular, Menu, relativeTime, StateDot, Tooltip, useRowDragPreview,
-  writeClipboard,
+  IconFolderCloseRegular, IconFolderOpenRegular,
+  IconNewChatOutlineRegular, IconPinFillRegular,
+  IconTriangleRightFillRegular, IconUnarchiveOutlineRegular, relativeTime, StateDot, Tooltip, useRowDragPreview, writeClipboard,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { ShortcutCatalogEntry } from '@deepseek-ai/dsh-client-shortcuts/client'
 import type { StateDotState } from '@deepseek-ai/dsh-client-ui-primitives'
 import { abbreviateHomePath } from '@deepseek-ai/dsh-util-workspace-path'
 import type { WorkspaceId } from '@deepseek-ai/dsh-api-workspace-controller/client'
-import type { MenuOpenState, WorkspaceBrowserProps } from '../contract/slots.ts'
+import type { WorkspaceBrowserProps } from '../contract/slots.ts'
 import type { GroupNode, SearchResultNode, SessionNode } from '../tree.ts'
 import { writeSessionReference } from '../session-drag.ts'
 import css from './Rows.module.css'
 
-/** Opening gesture determines placement and pointer-leave dismissal for one row menu. */
-type RowMenuAnchor =
-  | { kind: 'trigger' }
-  | { kind: 'row'; element: HTMLElement }
-  | { kind: 'pointer'; x: number; y: number }
-
-/** Keep the open state and its anchor together; action entries retain their boolean close API. */
-function useRowMenu() {
-  const [anchor, setAnchor] = useState<RowMenuAnchor | null>(null)
-  const setMenuOpen = useCallback<Dispatch<SetStateAction<boolean>>>((next) => {
-    setAnchor((current) => {
-      const open = typeof next === 'function' ? next(current !== null) : next
-      return open ? current ?? { kind: 'trigger' } : null
-    })
-  }, [])
-  const anchorProps = useMemo(() => {
-    if (anchor === null || anchor.kind === 'trigger') return {}
-    return {
-      getAnchorRect: () => anchor.kind === 'row'
-        ? anchor.element.getBoundingClientRect()
-        : new DOMRect(anchor.x, anchor.y, 0, 0),
-    }
-  }, [anchor])
-  return {
-    menuOpen: anchor !== null,
-    setMenuOpen,
-    anchorProps,
-    closeOnPointerLeave: anchor?.kind === 'trigger',
-    openAtPointer: (x: number, y: number) => { setAnchor({ kind: 'pointer', x, y }) },
-    openAtRow: (element: HTMLElement) => { setAnchor({ kind: 'row', element }) },
-  }
-}
+/** Sidebar-owned layout values needed by row copies mounted outside the sidebar. */
+const DRAG_PREVIEW_PROPERTIES = [
+  '--dsh-sidebar-row-padding',
+  '--dsh-sidebar-label-gap',
+  '--dsh-sidebar-paint-inset',
+] as const
 
 /** The standard locale seat, prop-passed from the browser root. */
 type RowTranslate = WorkspaceBrowserProps['t']
@@ -74,7 +46,6 @@ type RowTranslate = WorkspaceBrowserProps['t']
  * card is open.
  */
 type RowRenderSlots = PropsRenderSlots<
-  | 'sidebar.workspaces.session.menu.item'
   | 'sidebar.workspaces.session.row.action'
   | 'sidebar.session.row.trailing'
   | 'sidebar.session.row.leading'
@@ -136,13 +107,20 @@ function restTitle(title: HTMLSpanElement): void {
  * @param title - ref to the row's clipping title element.
  * @returns stable pointer enter/leave handlers for the row.
  */
-function useTitleMarquee(title: RefObject<HTMLSpanElement | null>): { enter: () => void; leave: () => void } {
+function useTitleMarquee(title: RefObject<HTMLSpanElement | null>): {
+  enter: (event?: PointerEvent) => void
+  leave: () => void
+} {
   const frame = useRef(0)
+  const revealing = useRef(false)
   useEffect(() => () => { cancelAnimationFrame(frame.current) }, [])
   return useMemo(() => ({
-    enter: (): void => {
+    enter: (event?: PointerEvent): void => {
+      if (event?.pointerType === 'touch') return
       /* v8 ignore next -- defensive: the title span renders unconditionally. */
       if (title.current === null) return
+      if (revealing.current) return
+      revealing.current = true
       const element = title.current
       const range = element.scrollWidth - element.clientWidth
       if (range <= MIN_TITLE_REVEAL_PX) return
@@ -162,6 +140,7 @@ function useTitleMarquee(title: RefObject<HTMLSpanElement | null>): { enter: () 
       frame.current = requestAnimationFrame(step)
     },
     leave: (): void => {
+      revealing.current = false
       cancelAnimationFrame(frame.current)
       /* v8 ignore next -- defensive: the title span renders unconditionally. */
       if (title.current === null) return
@@ -266,23 +245,20 @@ type ProjectRowItemProps = {
   group: GroupNode
   newShortcut?: ShortcutCatalogEntry | undefined
   containsCurrentDescendant?: boolean
+  onEdit?: (() => void) | undefined
   onToggle: () => void
   onCreate: () => void
-  /** Real-Workspace actions; absent for the ungrouped bucket (no menu shown). */
-  actions?: { rename: () => void; delete: () => void; openFolder?: () => void } | undefined
   /** Present only for real Workspace rows in the grouped view. */
   drag?: WorkspaceRowDragProps | undefined
   /** Host account home; POSIX home-rooted hover paths display as `~`. */
   home?: string | undefined
   t: RowTranslate
-} & Pick<WorkspaceBrowserProps, 'useRemoteAccess' | 'useWorkspaceAccess'>
+} & Pick<WorkspaceBrowserProps, 'useRemoteAccess' | 'useWorkspaceAccess' | 'renderFactorySlot' | 'useContextMenuTarget' | 'useContextMenu'>
 
 /** Which of one header row's actions the caller's access snapshot allows. */
 interface ProjectRowAccess {
-  readonly create: boolean
-  readonly openFolder: boolean
   readonly rename: boolean
-  readonly delete: boolean
+  readonly create: boolean
   readonly reorder: boolean
 }
 
@@ -291,9 +267,8 @@ interface ProjectRowAccess {
  * hover reveals the chevron and create button, and dwelling on a real
  * Workspace shows its hover card (the ungrouped bucket has none).
  * `containsCurrent` arrives on the node (derivation fact, no renderer scan).
- * The create button, each Workspace menu row, and the drag handle are absent
- * while the access snapshot excludes their endpoint: a real Workspace asks
- * its own resource, and the ungrouped bucket asks the global resource.
+ * Create and drag follow the Workspace access snapshot. Menu providers own
+ * their access checks; the ungrouped bucket has no Workspace menu.
  * @param props.group - derived group node.
  * @param props.containsCurrentDescendant - highlight an ancestor even when its subtree is collapsed.
  * @param props.onToggle - expand/collapse the group.
@@ -313,40 +288,34 @@ export function ProjectRowItem(props: ProjectRowItemProps) {
 /** The ungrouped bucket's header: no Workspace resource, so starting a Session there asks the global resource. */
 function UngroupedProjectRow(props: ProjectRowItemProps) {
   const create = props.useRemoteAccess('session/create')
-  return <ProjectRow {...props} access={{ create, openFolder: false, rename: false, delete: false, reorder: false }} />
+  return <ProjectRow {...props} access={{ create, rename: false, reorder: false }} />
 }
 
 /** A real Workspace's header: every action asks that Workspace's resource. */
 function WorkspaceProjectRow({ workspaceId, ...props }: ProjectRowItemProps & { workspaceId: WorkspaceId }) {
   const { useWorkspaceAccess } = props
-  const canOpen = props.useRemoteAccess('session/openWorkspacePath')
-  const canCheckOpen = props.useRemoteAccess('session/canOpenWorkspacePath')
   const access: ProjectRowAccess = {
     create: useWorkspaceAccess(workspaceId, 'session/create'),
-    openFolder: canOpen && canCheckOpen,
     rename: useWorkspaceAccess(workspaceId, 'workspace/rename'),
-    delete: useWorkspaceAccess(workspaceId, 'workspace/delete'),
     reorder: useWorkspaceAccess(workspaceId, 'workspace/insertBefore'),
   }
   return <ProjectRow {...props} access={access} />
 }
 
 function ProjectRow({
-  group, containsCurrentDescendant = false, onToggle, onCreate, actions, drag: offeredDrag, home, newShortcut, t, access,
+  group, containsCurrentDescendant = false, onToggle, onCreate, onEdit, drag: offeredDrag, home, newShortcut, t, access,
+  renderFactorySlot, useContextMenuTarget, useContextMenu,
 }: ProjectRowItemProps & { access: ProjectRowAccess }) {
+  const { getTriggerProps } = useContextMenu()
   const drag = access.reorder ? offeredDrag : undefined
   const row = group
   // The ungrouped bucket has no workspace title: its label is dictionary copy.
   const label = row.workspaceId === undefined ? t('group.ungrouped') : row.label
   const active = containsCurrentDescendant || (group.expanded && group.containsCurrent)
-  const { menuOpen, setMenuOpen, anchorProps, closeOnPointerLeave, openAtPointer, openAtRow } = useRowMenu()
-  const dragPreview = useRowDragPreview(css.dragPreview as string)
-  const menuTriggerRef = useRef<HTMLButtonElement>(null)
-  const workspaceMenuItems = [
-    ...access.openFolder && actions?.openFolder !== undefined ? [{ id: 'openFolder', label: t('open.workspaceFolder'), icon: <IconFolderOpenRegular /> }] : [],
-    ...access.rename ? [{ id: 'rename', label: t('rename'), icon: <IconEditOutlineRegular /> }] : [],
-    ...access.delete ? [{ id: 'delete', label: t('delete.workspace'), icon: <IconTrashOutlineRegular />, danger: true }] : [],
-  ]
+  const menuOpen = useContextMenuTarget(target => target?.kind === 'workspace' && target.value.workspaceId === row.workspaceId)
+  const dragPreview = useRowDragPreview(css.dragPreview as string, DRAG_PREVIEW_PROPERTIES)
+  const workspaceMenuTarget = row.workspaceId !== undefined && row.cwd !== undefined
+    ? { workspaceId: row.workspaceId, path: row.cwd } : undefined
   const ownRow = (
     <div
       className={clsx(css.projectRow, menuOpen && css.menuOpen)}
@@ -355,28 +324,12 @@ function ProjectRow({
       aria-expanded={row.expanded}
       tabIndex={0}
       onClick={onToggle}
-      onContextMenu={actions === undefined || workspaceMenuItems.length === 0 ? undefined : (event) => {
-        // Ignore React events bubbling from the portaled menu.
-        if (!(event.target instanceof Node) || !event.currentTarget.contains(event.target)) return
+      {...getTriggerProps(workspaceMenuTarget === undefined ? undefined : { kind: 'workspace', value: { ...workspaceMenuTarget, displayTitle: label } }, { onKeyDown: (event) => {
+        if (event.target !== event.currentTarget || (event.key !== 'Enter' && event.key !== ' ')) return
+        if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return
         event.preventDefault()
-        event.stopPropagation()
-        menuTriggerRef.current?.focus()
-        openAtPointer(event.clientX, event.clientY)
-      }}
-      onKeyDown={(event) => {
-        if (event.target !== event.currentTarget) return
-        if (actions !== undefined && workspaceMenuItems.length > 0
-          && (event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10'))) {
-          event.preventDefault()
-          event.stopPropagation()
-          menuTriggerRef.current?.focus()
-          openAtRow(event.currentTarget)
-        } else if ((event.key === 'Enter' || event.key === ' ')
-          && !event.altKey && !event.ctrlKey && !event.metaKey && !event.shiftKey) {
-          event.preventDefault()
-          onToggle()
-        }
-      }}
+        onToggle()
+      } })}
       draggable={drag !== undefined}
       onDragStart={drag === undefined
         ? undefined
@@ -403,38 +356,12 @@ function ProjectRow({
         </span>
       )}
       <span className={css.rowActions}>
-        {actions !== undefined && workspaceMenuItems.length > 0 && (
-          <Menu
-            open={menuOpen}
-            onClose={() => { setMenuOpen(false) }}
-            items={workspaceMenuItems}
-            onSelect={(id) => {
-              setMenuOpen(false)
-              // Unknown ids leave before the dispatch: a future menu row must
-              // not inherit the destructive branch as an else fallback.
-              /* v8 ignore next -- Menu emits only the supplied action ids. */
-              if (id !== 'openFolder' && id !== 'rename' && id !== 'delete') return
-              if (id === 'openFolder') actions.openFolder?.()
-              else if (id === 'rename') actions.rename()
-              else actions.delete()
-            }}
-            portal
-            {...anchorProps}
-            closeOnPointerLeave={closeOnPointerLeave}
-            anchor={(
-              <button
-                type="button"
-                className={css.iconButton}
-                ref={menuTriggerRef}
-                aria-haspopup="menu"
-                aria-expanded={menuOpen}
-                aria-label={t('actions.workspace.aria', { name: label })}
-                onClick={(e) => { e.stopPropagation(); setMenuOpen(v => !v) }}
-              >
-                <IconEllipsisOutlineRegular />
-              </button>
-            )}
-          />
+        {workspaceMenuTarget !== undefined && (
+          renderFactorySlot('contextMenu.button', {
+            target: { kind: 'workspace', value: { ...workspaceMenuTarget, displayTitle: label } },
+            label: t('actions.workspace.aria', { name: label }),
+            className: css.iconButton,
+          })
         )}
         {access.create && (
           <Tooltip label={t('actions.newSession')} shortcutKeys={newShortcut?.keys} side="bottom" align="end" delayMs={500} portal>
@@ -445,7 +372,7 @@ function ProjectRow({
               aria-label={t('actions.newSession.aria', { name: label })}
               onClick={(e) => { e.stopPropagation(); onCreate() }}
             >
-              <IconNewChatOutlineRegular />
+              <IconNewChatOutlineRegular size={14} />
             </button>
           </Tooltip>
         )}
@@ -465,7 +392,7 @@ function ProjectRow({
         sourcePaths={row.sourcePaths?.map(path => abbreviateHomePath(path, home))}
         sessionCount={row.sessionCount}
         activeSessionCount={row.activeSessionCount ?? 0}
-        onEdit={access.rename ? actions?.rename : undefined}
+        onEdit={access.rename ? onEdit : undefined}
         t={t}
       />}
       openDelayMs={800}
@@ -706,8 +633,12 @@ export function SearchResultItem({
  * @returns the session row.
  */
 export function SessionNodeItem({
-  node, currentId, now, onOpen, onRenameRequest, renderSlot, onReveal, drag, home, useSessionAccess, t,
+  node, currentId, now, onOpen, onRenameRequest, renderSlot, renderFactorySlot, useContextMenuTarget,
+  useContextMenu, onReveal, drag, home, useSessionAccess, t,
 }: {
+  useContextMenu: WorkspaceBrowserProps['useContextMenu']
+  renderFactorySlot: WorkspaceBrowserProps['renderFactorySlot']
+  useContextMenuTarget: WorkspaceBrowserProps['useContextMenuTarget']
   node: SessionNode
   currentId: string | undefined
   now: number
@@ -722,12 +653,12 @@ export function SessionNodeItem({
   home?: string | undefined
   t: RowTranslate
 } & Pick<WorkspaceBrowserProps, 'useSessionAccess'> & PropsRenderSlots<
-  | 'sidebar.workspaces.session.menu.item'
   | 'sidebar.workspaces.session.row.action'
   | 'sidebar.session.row.trailing'
   | 'sidebar.session.row.leading'
   | 'sidebar.session.row.hover'
 >) {
+  const { getTriggerProps } = useContextMenu()
   const row = node
   const title = displayTitle(node, t)
   const selected = node.id === currentId
@@ -737,18 +668,13 @@ export function SessionNodeItem({
   // Archived rows hold their in-place grayed slot, so manual reorder cannot
   // move them. Pinned rows drag within the pinned block: the browser gates
   // their drop targets to fellow pinned rows.
-  // Renaming from the title and starting a drag ask the row's own access snapshot; a row that
-  // cannot start a drag still accepts drops from rows that can.
   const renamable = useSessionAccess(node.id, 'session/rename')
   const reorderable = useSessionAccess(node.id, 'workspace/insertSessionBefore')
   const draggable = drag !== undefined && reorderable && !row.blank && !row.archived
   const referenceDraggable = !row.blank && !row.archived
-  const { menuOpen, setMenuOpen, anchorProps, closeOnPointerLeave, openAtPointer, openAtRow } = useRowMenu()
-  const dragPreview = useRowDragPreview(css.dragPreview as string)
-  // The menu's open state, bound into the row entries' `useMenuOpenState` hook.
-  const menuOpenState = useMemo((): MenuOpenState => [menuOpen, setMenuOpen], [menuOpen, setMenuOpen])
+  const menuOpen = useContextMenuTarget(target => target?.kind === 'session' && target.value.sessionId === node.id)
+  const dragPreview = useRowDragPreview(css.dragPreview as string, DRAG_PREVIEW_PROPERTIES)
   const rowRef = useRef<HTMLDivElement>(null)
-  const menuTriggerRef = useRef<HTMLButtonElement>(null)
   const titleRef = useRef<HTMLSpanElement>(null)
   // On macOS the click that activates the window is not delivered, but the
   // next click arrives with detail 2 and fires dblclick, so rename requires a
@@ -757,11 +683,14 @@ export function SessionNodeItem({
   const disarmRename = useRef(() => { renameArmed.current = false }).current
   const marquee = useTitleMarquee(titleRef)
   useEffect(() => {
+    if (menuOpen || rowRef.current?.matches(':hover')) marquee.enter()
+    else marquee.leave()
+  }, [menuOpen, marquee])
+  useEffect(() => {
     if (onReveal === undefined) return
     rowRef.current?.scrollIntoView({ block: 'nearest' })
     onReveal()
   }, [onReveal])
-  // Figma session cell: pad 8, status slot 16, then a 4px title gap.
   const ownRow = (
     <div
       ref={rowRef}
@@ -775,30 +704,16 @@ export function SessionNodeItem({
       aria-selected={selected}
       aria-description={row.archived ? t('toast.archivedNotOpenable') : undefined}
       tabIndex={0}
+
       onClick={() => { onOpen(node.id) }}
-      onContextMenu={row.blank ? undefined : (event) => {
-        // Portaled menu entries bubble through React, but are not part of this row.
-        if (!(event.target instanceof Node) || !event.currentTarget.contains(event.target)) return
+      {...getTriggerProps(row.blank ? undefined : { kind: 'session', value: { sessionId: node.id, displayTitle: row.title } }, { onKeyDown: (event) => {
+        if (event.target !== event.currentTarget || (event.key !== 'Enter' && event.key !== ' ')) return
+        if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return
         event.preventDefault()
-        event.stopPropagation()
-        menuTriggerRef.current?.focus()
-        openAtPointer(event.clientX, event.clientY)
-      }}
-      onKeyDown={(event) => {
-        if (event.target !== event.currentTarget) return
-        if (!row.blank && (event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10'))) {
-          event.preventDefault()
-          event.stopPropagation()
-          menuTriggerRef.current?.focus()
-          openAtRow(event.currentTarget)
-        } else if ((event.key === 'Enter' || event.key === ' ')
-          && !event.altKey && !event.ctrlKey && !event.metaKey && !event.shiftKey) {
-          event.preventDefault()
-          onOpen(node.id)
-        }
-      }}
+        onOpen(node.id)
+      } })}
       onPointerEnter={marquee.enter}
-      onPointerLeave={marquee.leave}
+      onPointerLeave={() => { if (!menuOpen) marquee.leave() }}
       draggable={referenceDraggable}
       onDragStart={!referenceDraggable
         ? undefined
@@ -863,7 +778,7 @@ export function SessionNodeItem({
       {!row.blank && (
         <span className={css.rowResting}>
           <span
-            className={css.time}
+            className={clsx(css.time, primaryStatus.trailingLabel === undefined && css.timestamp)}
             aria-hidden={primaryStatus.trailingLabel === undefined ? undefined : true}
           >
             {primaryStatus.trailingLabel ?? timeLabel(row.updatedAt, now, t)}
@@ -877,32 +792,11 @@ export function SessionNodeItem({
           button needs no propagation handling of its own. */}
       {!row.blank && (
         <span className={css.rowActions} onClick={(e) => { e.stopPropagation() }}>
-          <Menu
-            open={menuOpen}
-            onClose={() => { setMenuOpen(false) }}
-            portal
-            {...anchorProps}
-            closeOnPointerLeave={closeOnPointerLeave}
-            anchor={(
-              <button
-                type="button"
-                className={css.iconButton}
-                ref={menuTriggerRef}
-                aria-haspopup="menu"
-                aria-expanded={menuOpen}
-                aria-label={t('actions.session.aria', { name: title })}
-                onClick={() => { setMenuOpen(v => !v) }}
-              >
-                <IconEllipsisOutlineRegular />
-              </button>
-            )}
-          >
-            {renderSlot(
-              'sidebar.workspaces.session.menu.item',
-              { sessionId: node.id, displayTitle: row.title },
-              { hookContext: menuOpenState },
-            )}
-          </Menu>
+          {renderFactorySlot('contextMenu.button', {
+            target: { kind: 'session', value: { sessionId: node.id, displayTitle: row.title } },
+            label: t('actions.session.aria', { name: title }),
+            className: css.iconButton,
+          })}
           <span className={css.rowQuickActions}>
             {renderSlot('sidebar.workspaces.session.row.action', { sessionId: node.id, displayTitle: row.title })}
           </span>

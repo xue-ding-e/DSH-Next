@@ -24,7 +24,7 @@ async function fixture(distribution: 'official' | 'next' = 'next') {
   const upstream = join(root, 'official-custom')
   await Promise.all([bootstrap, host, home, upstream].map(path => mkdir(path, { recursive: true })))
   const manifest = {
-    type: 'module', name: NEXT_DESKTOP_IDENTITY.packageName, productName: NEXT_DESKTOP_IDENTITY.productName,
+    type: 'module', name: NEXT_DESKTOP_IDENTITY.packageName, productName: NEXT_DESKTOP_IDENTITY.productName, version: '1.0.0',
     dshDesktopAppId: NEXT_DESKTOP_IDENTITY.appId, dshDesktopUpdateChannel: 'latest',
     dshNext: { schemaVersion: 1, repository: NEXT_DESKTOP_IDENTITY.repository,
       repositoryId: NEXT_DESKTOP_IDENTITY.repositoryId, updateMode: 'auto' },
@@ -115,7 +115,7 @@ it('dispatches once through the actual bootstrap and shared entry with separate 
     ...process.platform === 'win32' ? { signals: 'installed' } : {},
     manager: ['--expose-internals', join(f.resources, 'runtime', 'primary-runtime', 'dependencies', 'pnpm', 'bin', 'pnpm.mjs')],
   })
-  expect(result.stderr).toBe('separate stderr\n')
+  expect(result.stderr).toBe(`Next desktop: migrated existing Harness data to ${join(f.home, '.dsh-next')}\nseparate stderr\n`)
 })
 
 it('keeps nested Next CLI invocations isolated while retaining the original upstream root', async () => {

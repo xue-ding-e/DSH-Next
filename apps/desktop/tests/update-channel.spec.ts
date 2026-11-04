@@ -3,8 +3,9 @@ import { desktopUpdateChannel } from '../src/update-channel.ts'
 
 it('reads the installed channel independently from the current version', () => {
   expect(desktopUpdateChannel({ version: '1.0.0', dshDesktopUpdateChannel: 'nightly' })).toBe('nightly')
-  expect(desktopUpdateChannel({ version: '1.0.0', dshDesktopUpdateChannel: 'latest' })).toBe('latest')
+  expect(desktopUpdateChannel({ version: '1.0.0', dshDesktopUpdateChannel: 'stable' })).toBe('stable')
   expect(desktopUpdateChannel({ version: '1.0.0' })).toBe('nightly')
+  expect(() => desktopUpdateChannel({ dshDesktopUpdateChannel: 'latest' })).toThrow(/channel/u)
   expect(() => desktopUpdateChannel({ dshDesktopUpdateChannel: 'beta' })).toThrow(/channel/u)
   expect(() => desktopUpdateChannel(null)).toThrow(/manifest/u)
 })
@@ -25,4 +26,13 @@ it('reads only the first prerelease field, ignoring later ones and build metadat
   expect(() => desktopUpdateChannel({ version: '0.2.1-rc.3', dshDesktopUpdateChannel: '3' })).toThrow(/channel/u)
   // Fixed channels stay valid regardless of the version they ship with.
   expect(desktopUpdateChannel({ version: '0.2.1-anything.1', dshDesktopUpdateChannel: 'nightly' })).toBe('nightly')
+})
+
+it('keeps Next on its packaged GitHub version channel independently of official feed names', () => {
+  const next = { dshNext: {}, version: '0.2.2-rc.1.20261105.12', dshDesktopUpdateChannel: 'rc' }
+  expect(desktopUpdateChannel(next)).toBe('rc')
+  for (const channel of ['stable', 'nightly', 'latest']) {
+    expect(() => desktopUpdateChannel({ ...next, dshDesktopUpdateChannel: channel })).toThrow(/channel/u)
+  }
+  expect(desktopUpdateChannel({ dshNext: {}, version: '0.2.2', dshDesktopUpdateChannel: 'latest' })).toBe('latest')
 })

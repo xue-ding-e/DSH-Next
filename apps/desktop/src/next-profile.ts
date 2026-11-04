@@ -62,7 +62,8 @@ async function migrateUpstreamHome(upstream: string, target: string): Promise<vo
         delay = Math.min(delay * 2, 500)
       }
     }
-    console.info(`Next desktop: migrated existing Harness data to ${target}`)
+    // CLI stdout belongs to command output, including machine-readable responses.
+    console.error(`Next desktop: migrated existing Harness data to ${target}`)
   } catch (error) {
     await rm(staging, { recursive: true, force: true }).catch(() => undefined)
     try {
@@ -129,6 +130,8 @@ export async function resolveNextDesktopHome(
  * Map only a verified Next process to its own root, preserving the original upstream root in children.
  * Internal markers let a nested dsh-next command retain the same protection without mistaking its
  * parent's mapped DSH_HOME for an upstream configuration. They never establish product identity.
+ * A missing default Next root receives the initial upstream copy; explicit roots skip that transfer.
+ * Transfer diagnostics use stderr so CLI stdout remains available to the command.
  * @param userHome Operating-system home.
  * @param environment Parent environment, not modified.
  * @param installationRoot Actual application installation directory.

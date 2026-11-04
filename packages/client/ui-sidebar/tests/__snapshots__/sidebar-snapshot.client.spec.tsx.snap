@@ -16,6 +16,7 @@ exports[`sidebar shell snapshots > renders Windows caption controls in expanded 
       <button
         aria-label="Open sidebar"
         class="iconButton toggle"
+        data-sidebar-toggle="true"
         type="button"
       >
         <svg
@@ -54,15 +55,27 @@ exports[`sidebar shell snapshots > renders Windows caption controls in expanded 
       </span>
     </button>
     <div
-      data-slot="sidebar.recent"
-      style="display: contents;"
-    />
-    <div
-      class="regionArea"
+      class="scrollRegion"
     >
       <div
-        data-slot="sidebar.workspaces"
-        style="display: contents;"
+        class="scrollArea"
+      >
+        <div
+          data-slot="sidebar.recent"
+          style="display: contents;"
+        />
+        <div
+          class="regionArea"
+        >
+          <div
+            data-slot="sidebar.workspaces"
+            style="display: contents;"
+          />
+        </div>
+      </div>
+      <span
+        aria-hidden="true"
+        class="scrollFade"
       />
     </div>
     <div
@@ -162,6 +175,7 @@ exports[`sidebar shell snapshots > renders Windows caption controls in expanded 
       <button
         aria-label="Collapse sidebar"
         class="iconButton toggle"
+        data-sidebar-toggle="true"
         type="button"
       >
         <svg
@@ -201,15 +215,28 @@ exports[`sidebar shell snapshots > renders Windows caption controls in expanded 
       </span>
     </button>
     <div
-      data-slot="sidebar.recent"
-      style="display: contents;"
-    />
-    <div
-      class="regionArea"
+      class="scrollRegion"
     >
       <div
-        data-slot="sidebar.workspaces"
-        style="display: contents;"
+        class="scrollArea"
+        data-sidebar-scrollport=""
+      >
+        <div
+          data-slot="sidebar.recent"
+          style="display: contents;"
+        />
+        <div
+          class="regionArea"
+        >
+          <div
+            data-slot="sidebar.workspaces"
+            style="display: contents;"
+          />
+        </div>
+      </div>
+      <span
+        aria-hidden="true"
+        class="scrollFade"
       />
     </div>
     <div
@@ -252,6 +279,7 @@ exports[`sidebar shell snapshots > renders the collapsed rail after the crossfad
       <button
         aria-label="Open sidebar"
         class="iconButton toggle"
+        data-sidebar-toggle="true"
         type="button"
       >
         <span
@@ -308,15 +336,27 @@ exports[`sidebar shell snapshots > renders the collapsed rail after the crossfad
       </span>
     </button>
     <div
-      data-slot="sidebar.recent"
-      style="display: contents;"
-    />
-    <div
-      class="regionArea"
+      class="scrollRegion"
     >
       <div
-        data-slot="sidebar.workspaces"
-        style="display: contents;"
+        class="scrollArea"
+      >
+        <div
+          data-slot="sidebar.recent"
+          style="display: contents;"
+        />
+        <div
+          class="regionArea"
+        >
+          <div
+            data-slot="sidebar.workspaces"
+            style="display: contents;"
+          />
+        </div>
+      </div>
+      <span
+        aria-hidden="true"
+        class="scrollFade"
       />
     </div>
     <div
@@ -416,6 +456,7 @@ exports[`sidebar shell snapshots > renders the expanded column (wordmark, capsul
       <button
         aria-label="Collapse sidebar"
         class="iconButton toggle"
+        data-sidebar-toggle="true"
         type="button"
       >
         <svg
@@ -455,15 +496,28 @@ exports[`sidebar shell snapshots > renders the expanded column (wordmark, capsul
       </span>
     </button>
     <div
-      data-slot="sidebar.recent"
-      style="display: contents;"
-    />
-    <div
-      class="regionArea"
+      class="scrollRegion"
     >
       <div
-        data-slot="sidebar.workspaces"
-        style="display: contents;"
+        class="scrollArea"
+        data-sidebar-scrollport=""
+      >
+        <div
+          data-slot="sidebar.recent"
+          style="display: contents;"
+        />
+        <div
+          class="regionArea"
+        >
+          <div
+            data-slot="sidebar.workspaces"
+            style="display: contents;"
+          />
+        </div>
+      </div>
+      <span
+        aria-hidden="true"
+        class="scrollFade"
       />
     </div>
     <div
@@ -563,6 +617,7 @@ exports[`sidebar shell snapshots > renders the expanded column in the default lo
       <button
         aria-label="收起侧边栏"
         class="iconButton toggle"
+        data-sidebar-toggle="true"
         type="button"
       >
         <svg
@@ -602,15 +657,28 @@ exports[`sidebar shell snapshots > renders the expanded column in the default lo
       </span>
     </button>
     <div
-      data-slot="sidebar.recent"
-      style="display: contents;"
-    />
-    <div
-      class="regionArea"
+      class="scrollRegion"
     >
       <div
-        data-slot="sidebar.workspaces"
-        style="display: contents;"
+        class="scrollArea"
+        data-sidebar-scrollport=""
+      >
+        <div
+          data-slot="sidebar.recent"
+          style="display: contents;"
+        />
+        <div
+          class="regionArea"
+        >
+          <div
+            data-slot="sidebar.workspaces"
+            style="display: contents;"
+          />
+        </div>
+      </div>
+      <span
+        aria-hidden="true"
+        class="scrollFade"
       />
     </div>
     <div

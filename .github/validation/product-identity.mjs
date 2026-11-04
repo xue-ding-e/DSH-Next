@@ -3,10 +3,10 @@ import { createHash } from 'node:crypto'
 import { execFileSync } from 'node:child_process'
 import { resolve } from 'node:path'
 
-export const INITIAL_MAIN = 'fae57ca3e87f40b0fdb0500334d5519a212ae1c2'
-export const CANONICAL_WORKSPACE = 'c67ff3501c2a7d38d3cf60eb21f7634eb40b68e7'
+export const INITIAL_MAIN = 'refs/tags/validation/initial-main'
+export const CANONICAL_WORKSPACE = 'workspace context menu'
 export const WORKSPACE_PATCH_SHA256 = '2747e5ad6c950f1a4d1ffe69e00298c46c75a62dd68f40709125470f5855f6c7'
-export const CANONICAL_PRODUCT = '36833515300e6ec74877dc489e05a4aa15f82c4c'
+export const CANONICAL_PRODUCT = 'session context menu'
 export const CANONICAL_PATCH_SHA256 = '13f9a4854336a0d5d48f1ed292445fdfedfcb5754cf1757bd3fdf2eeed17d470'
 const controlFiles = [
   '.github/workflows/next-context-menu-validation.yml',
@@ -31,7 +31,7 @@ export function verifyProductGraph(root) {
   assert.match(sessionSha, /^[0-9a-f]{40}$/, 'W must have exactly one parent, S')
   assert.equal(text('show', '-s', '--format=%P', sessionSha), controlSha, 'S must have exactly one parent, C')
   assert.equal(text('show', '-s', '--format=%P', controlSha), automationSha, 'C must have exactly one parent, D')
-  assert.equal(text('show', '-s', '--format=%P', automationSha), INITIAL_MAIN, 'D must have exactly the initial main parent')
+  assert.equal(text('show', '-s', '--format=%P', automationSha), text('rev-parse', `${INITIAL_MAIN}^{commit}`), 'D must have exactly the initial main parent')
   assert.deepEqual(text('diff', '--no-renames', '--name-only', INITIAL_MAIN, automationSha).split('\n').sort(),
     ['.github/dependabot.yml', '.github/upstream-dependabot.yml.disabled'])
   assert.equal(text('ls-tree', automationSha, '--', '.github/dependabot.yml'), '')

@@ -1,4 +1,6 @@
+import type { AssistantNodeInjected } from '../src/client/chat/AssistantNodeView.tsx'
 import { MessageId } from '@deepseek-ai/dsh-llm/brand'
+import { apply as applyMenus, inject as injectMenus } from '@deepseek-ai/dsh-client-ui-context-menu/client'
 // @vitest-environment jsdom
 /** Chat inject factories exercised over independently mounted Conversation and Chat plugins. */
 import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
@@ -80,8 +82,11 @@ async function bench(initialSettings?: ChatSettings, withBrowserRegistry = true,
   const openWorkspacePath = vi.fn<ClientRemote['session']['openWorkspacePath']>(
     () => Promise.resolve({ ok: true, value: { opened: true } }),
   )
+  const imageAttachment = vi.fn<ClientRemote['session']['attachment']>(request => Promise.resolve({
+    ok: true, value: { attachment: request.attachment, data: 'AQ==' },
+  }))
   runtime.remote.provideNamespaces({
-    session: { openWorkspacePath },
+    session: { openWorkspacePath, attachment: imageAttachment },
     fileUploads: { stageHistory: vi.fn<ClientRemote['fileUploads']['stageHistory']>(async () => {
       throw new Error('this Chat fixture does not script historical file staging')
     }) },
@@ -105,6 +110,8 @@ async function bench(initialSettings?: ChatSettings, withBrowserRegistry = true,
   const locale = new LocaleRuntime(runtime.ctx)
   runtime.ctx.provide('locale', locale)
   runtime.slots.installLocale(locale)
+  runtime.ctx.provide('shortcuts', { catalog: createSnapshotStore([]) })
+  await runtime.mount({ inject: [...injectMenus], apply: applyMenus })
   await runtime.root.declare({
     'main': { kind: 'keyed', scope: 'root' },
     'settings.general.item': { kind: 'list', scope: 'root' },
@@ -139,11 +146,45 @@ async function bench(initialSettings?: ChatSettings, withBrowserRegistry = true,
       return preference as LinkOpeningRowInjected
     },
     runtime, chat, chatSettings, browserAvailable,
-    layout, openWorkspacePath, sidebarRight, sidebarRightTabs, session, chatViewApi, chatFlowApi, rootReference, openSession,
+    layout, openWorkspacePath, imageAttachment, sidebarRight, sidebarRightTabs,
+    session, chatViewApi, chatFlowApi, rootReference, openSession,
   }
 }
 
 describe('Chat inject API', () => {
+  it('reads each edited image with its complete source reference and preserves names when sending to the child', async () => {
+    const b = await bench()
+    try {
+      const childPrompt = vi.fn<ISession['prompt']>().mockResolvedValue({ ok: true, value: { accepted: true } })
+      const childId = await b.runtime.sessions.add({ id: 'edited-image-child', session: { prompt: childPrompt } })
+      const fork = vi.spyOn(b.runtime.ctx.sessions, 'fork').mockImplementation(async (options) => {
+        options.onCreated?.(childId)
+        return childId
+      })
+      const edit = b.chatViewApi(b.rootReference).injected.editUserMessage
+      if (edit === undefined) throw new Error('Official Chat fixture did not provide message editing')
+      const first = { ...ATTACHMENT, name: 'first.png' }
+      const renamed = { ...ATTACHMENT, name: 'renamed.png' }
+      const message: Parameters<typeof edit>[0] = {
+        kind: 'user', seq: 7, time: 1000, messageId: MessageId('edit-image-ref'), source: { kind: 'user' },
+        content: [{ type: 'image', attachment: first }, { type: 'text', text: 'Original caption' },
+          { type: 'image', attachment: renamed }],
+      }
+      await expect(edit(message).submit('Revised caption', new AbortController().signal)).resolves.toEqual({ kind: 'sent' })
+      expect(fork).toHaveBeenCalledOnce()
+      expect(b.imageAttachment.mock.calls.map(call => call[0])).toEqual([
+        { sessionId: ROOT, attachment: first }, { sessionId: ROOT, attachment: renamed },
+      ])
+      expect(childPrompt.mock.calls[0]?.[0]).toEqual([
+        { type: 'image', mediaType: 'image/png', data: 'AQ==', name: 'first.png' },
+        { type: 'text', text: 'Revised caption' },
+        { type: 'image', mediaType: 'image/png', data: 'AQ==', name: 'renamed.png' },
+      ])
+      expect(b.session.prompt).not.toHaveBeenCalled()
+      expect(b.openSession).toHaveBeenCalledWith(childId)
+    } finally { vi.restoreAllMocks(); await b.runtime.dispose() }
+  })
+
   it('routes text gestures from each Chat view to the registered consumer with its own Session', async () => {
     const b = await bench()
     try {
@@ -319,9 +360,15 @@ describe('Chat inject API', () => {
   it('resolves relative file paths against the Session\'s current working directory', async () => {
     const b = await bench()
     const { injected } = b.chatViewApi(b.rootReference)
+    vi.spyOn(b.runtime.ctx.contextMenus, 'open')
     await b.runtime.sessions.setProjection(ROOT, 'workingDirectory', '/proj/.agents/worktrees/w')
     await injected.openFile('src/a.ts')
     expect(b.sidebarRight.openResource).toHaveBeenLastCalledWith('dsh-resource://file/session/root-1/.agents/worktrees/w/src/a.ts')
+    expect(injected.resolveFilePath('src/a.ts')).toBe('/proj/.agents/worktrees/w/src/a.ts')
+    await b.runtime.sessions.setProjection(ROOT, 'workingDirectory', null)
+    expect(injected.resolveFilePath('file.ts')).toBe('/proj/file.ts')
+    await b.runtime.sessions.setProjection(ROOT, 'workingDirectory', '/proj/.agents/worktrees/w')
+
     // A leading `./` names the same file, so the Sidebar reuses its tab.
     await injected.openFile('./src/a.ts')
     expect(b.sidebarRight.openResource).toHaveBeenLastCalledWith('dsh-resource://file/session/root-1/.agents/worktrees/w/src/a.ts')
@@ -520,12 +567,16 @@ describe('Chat inject API', () => {
     expect(flow.injected.hooks.connectionState).toBe(b.runtime.ctx.get('connection')!.state)
     expect(flow.injected.hooks.presentation).toBe(injected.hooks.presentation)
 
-    expect(injected.fileMentions(owner)).toBeUndefined()
+    const entry = b.runtime.slots.entries('conversation.chat.node').find(entry => entry.options.key === 'assistant-step')!
+    const assistant = entry.inject!(ROOT as never)
+    const fileMentions = assistant.fileMentions as AssistantNodeInjected['fileMentions']
+    const getFileTriggerProps = vi.fn(() => ({}))
+    expect(fileMentions(owner, getFileTriggerProps)).toBeUndefined()
     const mentions = { resolve: vi.fn() } as never
     const forClosing = vi.fn(() => mentions)
     b.runtime.ctx.provide('chatFileMentions', { forClosing } as never)
-    expect(injected.fileMentions(owner)).toBe(mentions)
-    expect(forClosing).toHaveBeenCalledWith(owner, ROOT)
+    expect(fileMentions(owner, getFileTriggerProps)).toBe(mentions)
+    expect(forClosing).toHaveBeenCalledWith(owner, ROOT, getFileTriggerProps)
 
     expect(injected.chatScroll.read()).toBeNull()
     const position = { anchorKey: 'node-1', anchorTop: 4, scrollTop: 12 }
@@ -536,7 +587,7 @@ describe('Chat inject API', () => {
 
     const loaded = await injected.loadImage(ATTACHMENT)
     expect(loaded).toEqual(expect.any(String))
-    expect(b.session.readAttachment).toHaveBeenCalledWith(ATTACHMENT.attachmentId)
+    expect(b.session.readAttachment).toHaveBeenCalledWith(ATTACHMENT)
     expect(injected.loadImage.peek?.(ATTACHMENT)).toBe(loaded)
     await b.runtime.dispose()
   })
