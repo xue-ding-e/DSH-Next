@@ -11,6 +11,7 @@
 - button "Copy"
 - button "Edit and resend"
 - button "Context injection runtime-context"
+- button "Context injection skill-catalog"
 - button "Context injection time-context"
 - paragraph: partial
 - status: Deep diving
