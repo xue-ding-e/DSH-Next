@@ -58,7 +58,8 @@ export interface ClientSlotEntry {
   occupants: readonly string[]
   /**
    * `shadows-shipped-ui` when registering here replaces shipped UI; `wraps-owner-content` when your
-   * component wraps the owner content and must render `children`; `none` when additive.
+   * component wraps the owner content and renders `children` at most once, omitting it to replace
+   * that content; `none` when additive.
    */
   replaceRisk: string
   /** A minimal browser half that registers into this slot. */
@@ -379,6 +380,72 @@ export const CLIENT_SLOT_API: readonly ClientSlotEntry[] = [
     replaceRisk: 'shadows-shipped-ui',
     example: 'return {\n  inject: [\'slots\'],\n  apply(ctx) {\n    ctx.slots.inject(\'conversation.chat.flow\', () => ctx.slots.register(\n      { name: \'conversation.chat.flow\' },\n      () => React.createElement(\'div\', null, \'hello\'),\n    ))\n  },\n}',
     source: 'packages/client/ui-chat/src/client/contract/slots.ts:451',
+  },
+  {
+    key: 'conversation.chat.markdown.fence',
+    kind: 'hoc',
+    scope: 'session',
+    summary: 'Language-keyed layers around one Markdown fence in the Chat flow; the content is the plain code block.',
+    doc: 'Language-keyed layers around one Markdown fence in the Chat flow; the content is the plain code block.',
+    registerOptions: [
+      {
+        name: 'id',
+        requirement: 'required',
+        type: 'string',
+        doc: 'Your layer key. A fresh id adds a layer; reusing a shipped id replaces that layer. Your component may omit `children`, which replaces everything inside the layer.',
+      },
+      {
+        name: 'key',
+        requirement: 'optional',
+        type: 'string',
+        doc: 'Dispatch key this layer serves; omitted, it serves every dispatch. Within one id, an exact-key layer replaces the wildcard layer for that key.',
+      },
+      {
+        name: 'order',
+        requirement: 'optional',
+        type: 'number',
+        doc: 'Nesting position, ascending (default 0); the lowest order is the outermost layer. Render the `children` prop at most once.',
+      },
+    ],
+    ownerProps: [
+      '/** One Markdown code fence whose language is final, as {@link MarkdownDelegate.renderCode} receives it. */\nexport interface MarkdownDelegateFenceInfo {\n  /**\n   * The info string\'s language word, cut at its first character outside\n   * letters, digits, `_`, and `-`, then lowercased (`c++` yields `c`).\n   */\n  readonly lang: string\n  /** The fence body without its closing newline. */\n  readonly code: string\n  /** The surrounding document is still streaming, so `code` may still change. */\n  readonly streaming: boolean\n  /** The info string after the language word, as the author wrote it; absent when the fence names only a language. */\n  readonly meta?: string | undefined\n}',
+    ],
+    ownerPropsReferences: [
+      'MarkdownDelegate',
+    ],
+    standardProps: [
+      'useRemoteAccess: (action: RemoteEndpoint) => boolean',
+      'useResource: UseResource',
+      'useContextMenu: UseContextMenu',
+      'useWorkspaces: SnapshotSelectorHook<WorkspaceSnapshot>',
+      'usePanelInfo: UsePanelInfo',
+      'useSessions: UseSessions',
+      'useSessionStatus: UseSessionStatus',
+      'useSessionRetainInfo: UseSessionRetainInfo',
+      'useSessionAccess: (sessionId: SessionId, action: RemoteEndpoint) => boolean',
+      'useWorkspaceAccess: (workspaceId: WorkspaceId, action: RemoteEndpoint) => boolean',
+      'useChat: UseChat',
+      'useConversation: UseConversation',
+      'useInput: SnapshotSelectorHook<InputState>',
+      'inputActions: InputActions',
+      'useSession: SessionSnapshotSelector',
+      'sessionId: SessionId',
+      'useProjection: UseProjection',
+      'useAccess: (action: RemoteEndpoint) => boolean',
+      'useTrajectory: UseTrajectory',
+    ],
+    keyDomain: 'open: any entryKey the owner dispatches; a layer without key serves every dispatch, already taken: diff, math, patch',
+    hookContext: '',
+    slotInject: '',
+    declaredBy: 'an entry in \'conversation.view\' (client-ui-chat), so it exists while that entry is mounted',
+    occupants: [
+      'client-ui-chat MathFenceLayer id \'@deepseek-ai/dsh-client-ui-chat/fence/math\' key \'math\'',
+      'client-ui-chat DiffFenceLayer id \'@deepseek-ai/dsh-client-ui-chat/fence/diff\' key \'diff\'',
+      'client-ui-chat DiffFenceLayer id \'@deepseek-ai/dsh-client-ui-chat/fence/diff\' key \'patch\'',
+    ],
+    replaceRisk: 'wraps-owner-content',
+    example: 'return {\n  inject: [\'slots\'],\n  apply(ctx) {\n    ctx.slots.inject(\'conversation.chat.markdown.fence\', () => ctx.slots.register(\n      { name: \'conversation.chat.markdown.fence\', id: \'my-layer\', order: 100 },\n      ({ children }) => React.createElement(\'div\', null, children),\n    ))\n  },\n}',
+    source: 'packages/client/ui-chat/src/client/contract/slots.ts:430',
   },
   {
     key: 'conversation.chat.message.images',
@@ -1077,13 +1144,19 @@ export const CLIENT_SLOT_API: readonly ClientSlotEntry[] = [
         name: 'id',
         requirement: 'required',
         type: 'string',
-        doc: 'Your layer key. A fresh id adds a layer; reusing a shipped id replaces that layer. Your component must render its `children` prop: a layer that omits it hides the owner content, such as the whole conversation and its composer.',
+        doc: 'Your layer key. A fresh id adds a layer; reusing a shipped id replaces that layer. Your component may omit `children`, which replaces everything inside the layer.',
+      },
+      {
+        name: 'key',
+        requirement: 'optional',
+        type: 'string',
+        doc: 'Dispatch key this layer serves; omitted, it serves every dispatch. Within one id, an exact-key layer replaces the wildcard layer for that key.',
       },
       {
         name: 'order',
         requirement: 'optional',
         type: 'number',
-        doc: 'Nesting position, ascending (default 0); the lowest order is the outermost layer. Render the `children` prop exactly once.',
+        doc: 'Nesting position, ascending (default 0); the lowest order is the outermost layer. Render the `children` prop at most once.',
       },
     ],
     ownerProps: [
