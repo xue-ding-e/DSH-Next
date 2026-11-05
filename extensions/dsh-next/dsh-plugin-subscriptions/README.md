@@ -339,7 +339,7 @@ Releases are published by GitHub Actions ([`release.yml`](.github/workflows/rele
 git tag v0.9.8 && git push origin main v0.9.8
 ```
 
-The workflow checks that the tag matches `package.json`, installs with the frozen lockfile, runs `pnpm build` and `pnpm test`, publishes through [npm Trusted Publishing](https://docs.npmjs.com/trusted-publishers) with a [provenance attestation](https://docs.npmjs.com/generating-provenance-statements), and creates the GitHub release with generated notes. Prerelease versions (`0.10.0-rc.1`) go to the `next` dist-tag. No npm token is stored in the repository: npm authenticates the workflow via OIDC, and the provenance on the npm package page links each published tarball to the exact commit and workflow run that built it.
+The workflow checks that the tag matches `package.json`, installs with the frozen lockfile, runs `pnpm build` and `pnpm test`, publishes through [npm Trusted Publishing](https://docs.npmjs.com/trusted-publishers) with a [build evidence attestation](https://docs.npmjs.com/trusted-publishers), and creates the GitHub release with generated notes. Prerelease versions (`0.10.0-rc.1`) go to the `next` dist-tag. No npm token is stored in the repository: npm authenticates the workflow via OIDC, and the build evidence on the npm package page links each published tarball to the exact commit and workflow run that built it.
 
 ## Layout
 

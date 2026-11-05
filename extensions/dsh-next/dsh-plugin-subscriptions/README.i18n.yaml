@@ -1,0 +1,70 @@
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write extensions/dsh-next/dsh-plugin-subscriptions/README.md
+/dsh-plugin-subscriptions:
+  en: f6c27a95a033e7f6
+  zh: c806481e2b136362
+/dsh-plugin-subscriptions/subscription-and-model-display-names:
+  en: 387411916625b2bb
+  zh: eb81b88f2cacb165
+/dsh-plugin-subscriptions/demo:
+  en: 6c7c20143a2bf7a2
+  zh: b9f1cc34c057122f
+/dsh-plugin-subscriptions/providers:
+  en: 46284776b50541e5
+  zh: dabbba6f6ddac6b4
+/dsh-plugin-subscriptions/install:
+  en: 98304b8243bd9f26
+  zh: 50ca82df59e0bc52
+/dsh-plugin-subscriptions/install/dsh-compatibility:
+  en: 3e847698d9104a4f
+  zh: 7586ec8ed758c1c5
+/dsh-plugin-subscriptions/install/managing-accounts-and-pool-models:
+  en: 3d69c55c4a8b4404
+  zh: 22dd48ca07385b33
+/dsh-plugin-subscriptions/install/refreshing-model-lists:
+  en: 2a4232fdceda1f5b
+  zh: 9a953016e787e875
+/dsh-plugin-subscriptions/install/installation-commands:
+  en: 37eb04fb8248825e
+  zh: b58cac19c39fa4d2
+/dsh-plugin-subscriptions/update:
+  en: d881c7c0e5f34c27
+  zh: fb6e6ee78e2e2fe9
+/dsh-plugin-subscriptions/use:
+  en: 850059236eecfe8a
+  zh: 9a8daf8a6e70b1a3
+/dsh-plugin-subscriptions/use/multiple-accounts:
+  en: 2f06d856738ad7ee
+  zh: 40550a88d5498bad
+/dsh-plugin-subscriptions/use/edit-visible-models-context-windows-and-tools:
+  en: 8b023e024766ff35
+  zh: 2f0685390a0d1cc5
+/dsh-plugin-subscriptions/use/reasoning-defaults-in-the-model-editor:
+  en: 11da4d91f79a7b79
+  zh: 8db519dcabef0db3
+/dsh-plugin-subscriptions/config:
+  en: b36e7eaad55d5058
+  zh: 7983b33ad0e32b68
+/dsh-plugin-subscriptions/model-pools:
+  en: f54df641f0724836
+  zh: 513c97ac766dae9c
+/dsh-plugin-subscriptions/model-pools/waiting-out-a-rate-limit-window:
+  en: 2ae8e9a1c46ebfb1
+  zh: 47cab9b17f41650c
+/dsh-plugin-subscriptions/proxy:
+  en: 4ff77b50e65e87e4
+  zh: 8640533cf7acf76e
+/dsh-plugin-subscriptions/related-plugins:
+  en: 84a3a4a78cb85368
+  zh: fb963bd3c3ab7801
+/dsh-plugin-subscriptions/develop:
+  en: 5b4879adafb5952e
+  zh: e8bcaf27ce9f1221
+/dsh-plugin-subscriptions/develop/release:
+  en: 9006d488abe362cf
+  zh: 54663e8838aef07a
+/dsh-plugin-subscriptions/layout:
+  en: 0135bd79ff779a5b
+  zh: 6f812d831687f840

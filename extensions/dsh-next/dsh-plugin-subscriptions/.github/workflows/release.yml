@@ -1,4 +1,4 @@
-# Publish a tagged version to npm with provenance (see #132).
+# Publish a tagged version to npm with build evidence (see #132).
 #
 # Trigger: push a `vX.Y.Z` tag whose version matches package.json. The job
 # builds and tests from a clean checkout with the frozen lockfile, publishes
@@ -33,7 +33,7 @@ jobs:
     timeout-minutes: 20
     permissions:
       contents: write   # create the GitHub release
-      id-token: write   # npm Trusted Publishing (OIDC) + provenance
+      id-token: write   # npm Trusted Publishing (OIDC) + build evidence
     steps:
       - name: Check out ${{ github.ref_name }}
         uses: actions/checkout@v7
@@ -117,10 +117,10 @@ jobs:
           rm -f /tmp/exchange.json
 
       # No NODE_AUTH_TOKEN: npm authenticates with the job's OIDC token and
-      # attaches a provenance attestation linking the tarball to this commit
+      # attaches a build evidence attestation linking the tarball to this commit
       # and workflow run. `prepublishOnly`/`prepare` run as they do locally.
       - name: Publish to npm
-        run: npm publish --registry=https://registry.npmjs.org --provenance --access public --tag "$DIST_TAG"
+        run: npm publish --registry=https://registry.npmjs.org --build evidence --access public --tag "$DIST_TAG"
 
       - name: Create GitHub release
         env:

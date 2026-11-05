@@ -25,7 +25,7 @@ const root = fileURLToPath(new URL('../../..', import.meta.url))
 const product = JSON.parse(await readFile(join(root, 'package.json'), 'utf8')).version
 const releaseVersion = `${desktopBuildVersionPrefix(product)}20261104.12`
 const releaseChannel = desktopBuildVersionChannel(releaseVersion)
-const commit = '1813d72421df0a0675df18f219d3a28cae640da7'
+const commit = 'abcdef1234567'
 const nativeConfig = new URL('../tsdown.config.ts', import.meta.url).href
 const clientMetadata = new URL('../src/client-metadata.ts', import.meta.url).href
 const tsdown = fileURLToPath(import.meta.resolve('tsdown/run'))
@@ -84,9 +84,9 @@ test('source builds keep the commit and actual dirty marker through native confi
   const environment = { DSH_CLIENT_COMMIT_HASH: commit, DSH_CLIENT_VERSION: 'stale', DSH_CLIENT_BUILD_VERSION: 'stale' }
   const repository = repositoryClientBuildEnvironment(root, environment)
   const selected = resolveClientBuildEnvironment(repository, 'local')
-  const display = `${product}-1813d72${selected.DSH_CLIENT_GIT_DIRTY === 'true' ? '-dirty' : ''}`
+  const display = `${product}-abcdef1${selected.DSH_CLIENT_GIT_DIRTY === 'true' ? '-dirty' : ''}`
   assert.deepEqual(await nativeIdentity(clientBuildProcessEnvironment(system, selected)), { version: product, display })
-  assert.equal(officialClientBuildEnvironment(root, { DSH_CLIENT_COMMIT_HASH: commit }).DSH_CLIENT_BUILD_VERSION, `${product}-1813d72`)
+  assert.equal(officialClientBuildEnvironment(root, { DSH_CLIENT_COMMIT_HASH: commit }).DSH_CLIENT_BUILD_VERSION, `${product}-abcdef1`)
 })
 
 test('stable release versions and rejected release overrides use the packaging validator', async () => {
@@ -160,7 +160,7 @@ test('release asset verification rejects either client version disagreeing with 
     })
     const environment = { DSH_CLIENT_VERSION: releaseVersion, DSH_CLIENT_BUILD_VERSION: releaseVersion }
     for (const field of Object.keys(environment)) {
-      await writeFile(record, JSON.stringify({ environment: { ...environment, [field]: `${product}-1813d72` } }))
+      await writeFile(record, JSON.stringify({ environment: { ...environment, [field]: `${product}-abcdef1` } }))
       assert.throws(invoke, /Client build identity does not match release/u)
     }
     await writeFile(record, JSON.stringify({ environment }))

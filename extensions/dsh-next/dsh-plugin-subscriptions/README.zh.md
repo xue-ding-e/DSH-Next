@@ -143,8 +143,8 @@ dsh plugin --profile web add ./dsh-plugin-subscriptions
 不装进 profile 的 headless 用法(先在 web 界面登录过 —— token 文件是共享的):
 
 ```sh
-cp overlay.example.yml overlay.yml   # 然后把 name: 改成本检出的 lib/index.js 绝对路径
-dsh --profile headless --patch <检出目录>/overlay.yml "你的任务"
+cp overlay.example.yml overlay.yml   # then edit the name: to this checkout's absolute lib/index.js path
+dsh --profile headless --patch <checkout>/overlay.yml "your task"
 ```
 
 ## 更新
@@ -193,17 +193,17 @@ Codex 模型还可填写上下文 token 数，留空跟随服务商。插件读�
 - id: llm-subscriptions
   name: dsh-plugin-subscriptions
   config:
-    providers: [codex, claude]        # 子集;默认五个全启用
+    providers: [codex, claude]        # subset; default all five
     streamIdleTimeoutMs: 300000
-    claudePromptCacheTtl: 5m           # Claude 提示缓存时长:5m(默认)或 1h
+    claudePromptCacheTtl: 5m           # Claude prompt-cache lifetime: 5m (default) or 1h
     rateLimit:
-      wait: true                       # 等待限流窗口重开(默认开启)
-      maxWaitMs: 21600000              # 单次等待上限;6 小时,足够覆盖 5 小时会话窗口
-    models:                            # 覆盖实时发现/内置目录
+      wait: true                       # wait out a closed rate-limit window (default)
+      maxWaitMs: 21600000              # ceiling on one wait; 6 h, covers a 5-hour session window
+    models:                            # override the discovered/built-in catalogs
       codex:
         - { id: gpt-5.6-sol, name: GPT-5.6 Sol, contextWindow: 272000, inputModalities: [text, image] }
-      copilot:                         # 手工条目会关闭 Copilot 目录发现
-        - { id: gpt-5.6-sol, wire: responses }   # 仅 copilot:强制指定上游协议
+      copilot:                         # manual entries disable Copilot catalog discovery
+        - { id: gpt-5.6-sol, wire: responses }   # copilot only: force the upstream protocol
 ```
 
 `claudePromptCacheTtl` 决定 Anthropic 在最近一次使用之后保留 Claude 对话缓存多久。默认 `5m` 发送的请求
@@ -248,15 +248,15 @@ Antigravity 为 Gemini 使用 `parametersJsonSchema`，为 Claude/GPT-OSS 使用
   name: dsh-plugin-subscriptions
   config:
     pool:
-      enabled: true                   # 默认开;需同一 provider ≥2 个账号
-      strategy: quota_aware           # 或 priority
-      switchMargin: 2                 # quota_aware 的滞后切换倍率
-      autoAccounts: true              # 把该 provider 各账号自动池到每个目录模型
-      families:                       # 某个目录模型的显式账号列表(同一 provider)
+      enabled: true                   # default; needs ≥2 accounts of one provider
+      strategy: quota_aware           # or priority
+      switchMargin: 2                 # hysteresis factor for quota_aware
+      autoAccounts: true              # pool each catalog model across that provider's accounts
+      families:                       # explicit account list for one catalog model (same provider)
         claude-sonnet-5:
-          - { provider: claude, model: claude-sonnet-5 }                   # 默认账号
+          - { provider: claude, model: claude-sonnet-5 }                   # default account
           - { provider: claude, account: bob@example.com, model: claude-sonnet-5 }
-      tiers:                          # 可选的额外选择器条目
+      tiers:                          # optional extra picker rows
         smart:
           - { provider: claude, model: claude-sonnet-5 }
           - { provider: codex, model: gpt-5.6-sol }
@@ -283,8 +283,8 @@ Antigravity 为 Gemini 使用 `parametersJsonSchema`，为 Claude/GPT-OSS 使用
 - name: dsh-plugin-subscriptions
   config:
     rateLimit:
-      wait: true            # 默认；false 恢复此前秒级的行为
-      maxWaitMs: 21600000   # 6 小时 —— 留有余量地覆盖 5 小时会话窗口
+      wait: true            # default; false keeps the previous seconds-scale behaviour
+      maxWaitMs: 21600000   # 6 h — covers a 5-hour session window with slack
 ```
 
 重开时刻超过 `maxWaitMs`(比如几天后才重置的周窗口,或者整个池的冷却时间超过这个上限)会立即失败并带上重开时刻,而不是把会话挂上好几天。`wait: false` 则只保留本地退避。
@@ -295,7 +295,7 @@ Antigravity 为 Gemini 使用 `parametersJsonSchema`，为 Claude/GPT-OSS 使用
 
 ## 代理
 
-DSH `v0.1.3-alpha.1` 新增宿主统一代理支持。建议在启动环境或 `$DSH_HOME/.env` 中配置 `HTTP_PROXY` / `HTTPS_PROXY`(或 `ALL_PROXY`)以及 `NO_PROXY`,重启 DSH,然后**关闭插件代理**。参见 [DSH 网络代理指南](https://github.com/deepseek-ai/deepseek-harness/blob/dsh-v0.1.3-alpha.1/docs/user/guide/network-proxy.zh.md)。环境变量中的代理凭据会被子命令继承,与插件私有配置文件的凭据边界不同;不会自动删除或迁移已有设置。
+DSH `v0.1.3-alpha.1` 新增宿主统一代理支持。建议在启动环境或 `$DSH_HOME/.env` 中配置 `HTTP_PROXY` / `HTTPS_PROXY`(或 `ALL_PROXY`)以及 `NO_PROXY`,重启 DSH,然后**关闭插件代理**。参见 [DSH 网络代理指南](https://github.com/deepseek-ai/deepseek-harness/blob/dsh-v0.1.3-alpha.1/docs/user/guide/network-proxy.md)。环境变量中的代理凭据会被子命令继承,与插件私有配置文件的凭据边界不同;不会自动删除或迁移已有设置。
 
 插件代理作为可选覆盖设置保留,用于仍受支持的旧版 DSH 以及仅订阅请求使用独立代理的场景。所有订阅相关请求 —— token 交换、模型 API 流式调用、用量查询、模型目录发现,以及 `x_search` / `image_generate` / `video_generate` 工具 —— 都可以使用。在 **设置 → 订阅 → 代理 → 配置…** 中设置:勾选启用,填写代理地址(`http://127.0.0.1:7890`)、可选用户名/密码,以及可选的逗号分隔绕过列表(如 `127.0.0.1`、`localhost`、`*.example.com`)。关闭或绕过插件代理后使用 DSH 的全局 fetch 路由,**不一定直连**;要求直连时还应配置宿主的 `NO_PROXY`。密码保存在 `~/.dsh/plugins/subscriptions/proxy.json`(权限 0600),不会回传给浏览器;「测试」按钮会用当前配置探测一次端点,显示 HTTP 状态码与耗时。
 
@@ -310,9 +310,9 @@ DSH `v0.1.3-alpha.1` 新增宿主统一代理支持。建议在启动环境或 `
 ## 开发
 
 ```sh
-pnpm install   # 开发基线：已发布的 DSH 0.2.1-rc.2 依赖
-pnpm build     # tsc(lib/)+ tsdown(lib/client.js 浏览器 bundle)
-pnpm test      # 编译后跑 node --test 单测
+pnpm install   # development baseline: published DSH 0.2.1-rc.2 packages
+pnpm build     # tsc (lib/) + tsdown (lib/client.js browser bundle)
+pnpm test      # node --test over compiled unit specs
 ```
 
 `prepare`(git 安装时触发)执行 `tsdown.prepare.config.ts`:自包含打包两个面,所有 `@deepseek-ai/*` 依赖外部化 —— 运行时从 dsh 安装解析,保证不会引入第二份 cordis。
@@ -329,13 +329,14 @@ pnpm 的 package extension 为 Node 组件测试补齐已发布 UI primitives �
 git tag v0.9.8 && git push origin main v0.9.8
 ```
 
-工作流会校验 tag 与 `package.json` 版本一致，用锁定的 lockfile 安装依赖，执行 `pnpm build` 和 `pnpm test`，通过 [npm Trusted Publishing](https://docs.npmjs.com/trusted-publishers) 发布并附带 [provenance 证明](https://docs.npmjs.com/generating-provenance-statements)，最后创建带自动生成说明的 GitHub release。预发布版本（如 `0.10.0-rc.1`）发布到 `next` dist-tag。仓库中不保存任何 npm token：npm 通过 OIDC 对工作流鉴权，npm 包页面上的 provenance 可以将每个发布的 tarball 追溯到构建它的具体 commit 和工作流运行。
+工作流会校验 tag 与 `package.json` 版本一致，用锁定的 lockfile 安装依赖，执行 `pnpm build` 和 `pnpm test`，通过 [npm Trusted Publishing](https://docs.npmjs.com/trusted-publishers) 发布并附带 [build evidence 证明](https://docs.npmjs.com/trusted-publishers)，最后创建带自动生成说明的 GitHub release。预发布版本（如 `0.10.0-rc.1`）发布到 `next` dist-tag。仓库中不保存任何 npm token：npm 通过 OIDC 对工作流鉴权，npm 包页面上的 build evidence 可以将每个发布的 tarball 追溯到构建它的具体 commit 和工作流运行。
 
 ## 目录结构
 
 - `src/index.ts` —— 插件入口:配置 schema、adapter 注册、登录态变更通告、RPC 接线
 - `src/auth/` —— PKCE/JWT 工具、token 存储、OAuth 流程引擎(临时本地回调服务)、Claude Code 凭据读取器(Keychain/文件)、`/subscriptions-auth` RPC 通道
 - `src/providers/` —— 各 provider 的 OAuth 常量/换发/刷新 + `LlmAdapter` 实现，多账号 token 管理（`accounts.ts`），模型池（`pool.ts` + `pool-health.ts` / `pool-usage.ts` / `pool-family.ts`），以及 `rate-limit.ts`（限流重开时刻解析 + 重试策略）
+- `src/providers/codex-search.ts` —— DSH 原生 `web_search` 能力使用的 Codex provider
 - `src/translate/` —— dsh `Message[]` 与 OpenAI Responses / Anthropic Messages 格式互转,SSE → `StreamChunk`
 - `src/tools/` —— `x_search`、`image_generate` 与 `video_generate`
 - `src/client/` —— 设置 → 订阅页面(浏览器面,中英文,跟随明暗主题)
