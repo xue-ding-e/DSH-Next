@@ -41,7 +41,12 @@ async function nativeIdentity(environment) {
     await writeFile(entry, `import { desktopClientVersion, desktopClientBuildVersion } from ${JSON.stringify(clientMetadata)};\n`
       + 'console.log(JSON.stringify({ version: desktopClientVersion(), display: desktopClientBuildVersion() }));\n')
     await writeFile(config, `import configs from ${JSON.stringify(nativeConfig)};\n`
-      + `export default { ...configs[1], entry: [${JSON.stringify(entry)}], outDir: ${JSON.stringify(output)}, onSuccess: undefined };\n`)
+      + `const main = configs.find(config => {\n`
+      + `  const entries = typeof config.entry === 'string' ? [config.entry] : Array.isArray(config.entry) ? config.entry : Object.values(config.entry ?? {});\n`
+      + `  return entries.some(value => String(value).endsWith('lib/types/main.js'));\n`
+      + `});\n`
+      + `if (main === undefined) throw new Error('desktop identity test: main tsdown configuration is missing');\n`
+      + `export default { ...main, entry: [${JSON.stringify(entry)}], outDir: ${JSON.stringify(output)}, onSuccess: undefined };\n`)
     execFileSync(process.execPath, [tsdown, '--config', config, '--config-loader', 'native'], {
       cwd: root, env: { ...system, ...environment }, encoding: 'utf8', stdio: 'pipe', timeout: 30_000, windowsHide: true,
     })
