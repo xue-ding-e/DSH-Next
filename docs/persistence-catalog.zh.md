@@ -1335,7 +1335,7 @@ export type SessionEvent<T extends SessionEventType = SessionEventType> = {
 }
 ```
 
-来源：[`packages/session/working-directory/src/index.ts:37`](../packages/session/working-directory/src/index.ts)
+来源：[`packages/session/working-directory/src/index.ts:52`](../packages/session/working-directory/src/index.ts)
 
 ### `workspace/*`
 
@@ -6346,7 +6346,7 @@ SHA-256: `fe14d9e998ced86902a049a1e1edc952b9891b9970551ea199dd84511c500685`
 
 SHA-256: `da60ed58a8fa23d7aa4920ab5c1f4e3d28109cb0797ef9e5c8b125721b847582`
 
-来源：[`packages/session/working-directory/src/index.ts:37`](../packages/session/working-directory/src/index.ts)
+来源：[`packages/session/working-directory/src/index.ts:52`](../packages/session/working-directory/src/index.ts)
 
 | 属性 | 存在性 | 类型 |
 |---|---|---|
@@ -8041,7 +8041,7 @@ SHA-256: `9edc162949abf93bd5ff049191b345454ba104f583937ce5580fb50f067d2b94`
 
 SHA-256: `2235d957bf4b7c6cf959231d480f0ba1f3a6d72d82981493fb6c7c963021d3d5`
 
-来源：[`packages/session/working-directory/src/index.ts:30`](../packages/session/working-directory/src/index.ts)
+来源：[`packages/session/working-directory/src/index.ts:45`](../packages/session/working-directory/src/index.ts)
 
 | 属性 | 存在性 | 类型 |
 |---|---|---|
