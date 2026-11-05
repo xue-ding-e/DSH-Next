@@ -12,6 +12,7 @@
     "apps/web/tests/queue-recall-focus.e2e.ts",
     "apps/web/tests/message-edit.e2e.ts",
     "apps/web/tests/message-edit-files.e2e.ts",
+    "snapshots/session/headless.snapshot.ts",
     "apps/web/tests/home-whale.e2e.ts",
     "apps/web/tests/sidebar-drawer.e2e.ts",
     "apps/web/tests/creation-recommendations.e2e.ts",
