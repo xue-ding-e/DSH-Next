@@ -258,7 +258,7 @@ type OptionalSessionSeq = SessionSeq | null
  * A proper discriminated union over `type` (not independent `type`/`data`
  * unions), so `switch (event.type)` narrows `event.data` without casts.
  *
- * The {@link sourceEventSeqs} and {@link surfaceOp} fields are conditional:
+ * The {@link sourceEventSeqs}, {@link surfaceOp}, and {@link conversationOp} fields are conditional:
  * they only exist on {@link SurfaceEventType} variants (`system/message`, `user/message`,
  * `assistant/message`, `tool/result`).
  * Non-surface events (boundary markers, attempts, errors) never carry
@@ -287,6 +287,7 @@ type SessionEvent<T extends SessionEventType = SessionEventType> = {
   } & (K extends SurfaceEventType ? SurfaceIntent<K> : {
     surfaceOp?: never
     sourceEventSeqs?: never
+    conversationOp?: never
   })
 }[T]
 ```
@@ -356,7 +357,10 @@ type SurfaceIntent<T extends SurfaceEventType = SurfaceEventType> = {
 } : {
   /** Complete non-empty set of known earlier source-event seqs. */
   sourceEventSeqs?: SessionSeq[]
-})
+}) & {
+  /** Optional user-facing conversation replacement committed with this message. */
+  conversationOp?: ConversationOp
+}
 ```
 
 对 `SurfaceEventType` 事件必填：每个产生消息的事件都必须声明它如何加入 surface（派生模型历史的唯一来源）。面向人类的 transcript（文本记录）是另一个投影，读取的是日志中追加来源的事件，因为 surface 会有意遮蔽替换所概括的范围（见 [dsh-session](../../packages/core/session/README.zh.md) 的 `isAppendSurfaceEvent`）。非 surface 类型在编译期拒绝此参数。
@@ -963,6 +967,14 @@ workspaceDesktop(): { name: string; available: boolean; fileManager: 'finder' | 
  * @returns acknowledgement that the Agent accepted the prompt.
  */
 @Remote('prompt') async prompt(request: SessionPromptRequest, signal: AbortSignal): Promise<SessionPromptValue>
+
+/**
+ * Replace the latest editable human message inside the same Session.
+ * @param request - Session identity, target message, expected latest user message, and replacement text.
+ * @param signal - caller cancellation for the remote operation.
+ * @returns acknowledgement containing the replaced message sequence.
+ */
+@Remote('edit') async edit(request: SessionEditRequest, signal: AbortSignal): Promise<SessionEditValue>
 
 /**
  * Read one image from the attachment store after gateway authorization.

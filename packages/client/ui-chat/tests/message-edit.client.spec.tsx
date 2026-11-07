@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { createElement } from 'react'
 import { makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
 import { en as commonEn } from '@deepseek-ai/dsh-client-locale/src/locales/en.ts'
 import { MessageId } from '@deepseek-ai/dsh-llm/brand'
@@ -51,7 +52,7 @@ function fixture(operation: UserMessageEdit, message = MESSAGE, available = true
     useGroupAction: () => { throw new Error('unused group action') },
     openFile: vi.fn(), inspectCall: undefined, forkAt: vi.fn(),
   }
-  return { ...render(UserMessageNodeView(props as never)), begin, renderSlotChain: renderSlotChainCalls }
+  return { ...render(createElement(UserMessageNodeView, props as never)), begin, renderSlotChain: renderSlotChainCalls }
 }
 
 describe('editing a recorded user message', () => {

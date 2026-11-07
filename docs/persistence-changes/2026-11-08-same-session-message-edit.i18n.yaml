@@ -1,0 +1,28 @@
+# Bilingual-pair consistency record for 2026-11-08-same-session-message-edit.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write docs/persistence-changes/2026-11-08-same-session-message-edit.md
+/:
+  en: 3d5a424ae7d7e46b
+  zh: c22a8e4a62d8cc1a
+/2026-11-08-same-session-message-edit:
+  en: 9ee61b7ab5764d2f
+  zh: 9fd412c4edf7c8ff
+/2026-11-08-same-session-message-edit/summary:
+  en: a62f9a5c14d612e4
+  zh: 76f432c55ceecad1
+/2026-11-08-same-session-message-edit/table-of-contents:
+  en: 6cf314a069ceb451
+  zh: 9adff678e9ecab3b
+/2026-11-08-same-session-message-edit/declaration:
+  en: 6907136f28e48c90
+  zh: 02f8298485f3d8e7
+/2026-11-08-same-session-message-edit/compatibility:
+  en: 84468a250a347250
+  zh: ca640435bcaeadf8
+/2026-11-08-same-session-message-edit/verification:
+  en: 858db5e478c3ac98
+  zh: cb92a1ae7c0c9544
+/2026-11-08-same-session-message-edit/dev-note:
+  en: b75c8458928b72b9
+  zh: 003ba4e17b4b5269

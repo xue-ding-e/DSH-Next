@@ -112,8 +112,9 @@ interface Agent {
    * @param message - identified content and the source that supplied it.
    * @param target - the preferred next-turn or next-step inbox boundary.
    * @param wakeup - whether delivery may wake the driver.
+   * @param options - optional queue position, Session placement, and companions.
    */
-  send(message: UserMessage, target: InboxTarget, wakeup: boolean): void
+  send(message: UserMessage, target: InboxTarget, wakeup: boolean, options?: AgentSendOptions): void
 
   /**
    * Queue an ordinary follow-up turn and wake the driver. The item becomes the
@@ -294,14 +295,14 @@ interface Inbox {
    * @param target - pending list to extend.
    * @param message - message to append.
    */
-  append(target: InboxTarget, message: UserMessage): void
+  append(target: InboxTarget, message: UserMessage, surfaceIntent?: SurfaceIntent): void
 
   /**
    * Prepend one message to a pending list.
    * @param target - pending list to extend.
    * @param message - message to prepend.
    */
-  prepend(target: InboxTarget, message: UserMessage): void
+  prepend(target: InboxTarget, message: UserMessage, surfaceIntent?: SurfaceIntent): void
 
   /**
    * Replace one pending message in place.
@@ -339,6 +340,7 @@ interface Inbox {
     start: number,
     deleteCount: number,
     inserted: UserMessage[],
+    admissions?: import('./types.ts').InboxAdmission[],
   ): UserMessage[]
 }
 ```
@@ -1035,10 +1037,10 @@ Reject a proposed step or replace the messages that enter it. Calling `next()` p
  * Scope-filtered dispatch (`@deepseek-ai/dsh-scope`): agent-scoped listeners receive only that agent.
  * @mode waterfall
  */
-'agent/pre-step'(this: Scoped<Agent>, payload: { agent: Agent; messages: UserMessage[]; turn: number; step: number; signal: AbortSignal; modelSelection: Readonly<ModelSelection> }, next: () => Promise<PreStepDecision>): Promise<PreStepDecision>
+'agent/pre-step'(this: Scoped<Agent>, payload: { agent: Agent; messages: UserMessage[]; surfaceIntents?: ReadonlyMap<MessageId, SurfaceIntent>; turn: number; step: number; signal: AbortSignal; modelSelection: Readonly<ModelSelection> }, next: () => Promise<PreStepDecision>): Promise<PreStepDecision>
 ```
 
-Types: [Scoped](scope.md) · [UserMessage](session.md)
+Types: [MessageId](llm-streaming.md) · [Scoped](scope.md) · [SurfaceIntent](session.md) · [UserMessage](session.md)
 
 Source: [`packages/core/agent/src/runtime-types.ts`](../../packages/core/agent/src/runtime-types.ts)
 

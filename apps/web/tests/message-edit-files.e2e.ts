@@ -43,7 +43,6 @@ describe.skipIf(webSnapshotMode() === 'record')('web e2e: edit a human message w
   let replayDir: string
   let file: FileAttachmentRef
   let originalText: string
-  let originalSeq: number
   let tripwire: ReturnType<typeof watchConsole>
 
   beforeAll(async () => {
@@ -56,7 +55,6 @@ describe.skipIf(webSnapshotMode() === 'record')('web e2e: edit a human message w
     const original = fixture.events.find(event => event.type === 'user/message' && event.data.source.kind === 'user')
     if (original?.type !== 'user/message') throw new Error('message-edit file seed lacks a human message')
     originalText = original.data.content.filter(part => part.type === 'text').map(part => part.text).join('')
-    originalSeq = original.seq
     const events = fixture.events.map(event => event === original
       ? { ...original, data: { ...original.data, content: [...original.data.content, { type: 'file' as const, attachment: file }] } }
       : event)
@@ -80,7 +78,7 @@ describe.skipIf(webSnapshotMode() === 'record')('web e2e: edit a human message w
     if (failures.length > 0) throw new AggregateError(failures, 'message-edit files e2e cleanup failed')
   })
 
-  it('keeps the attachment during cancellation, then sends the edited file message only to its child', async () => {
+  it('keeps the attachment during cancellation, then sends the edited file message in the original Session', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-message-edit-files'))
     const sourceBefore = await history(scaffold, SOURCE)
     const sessionCount = scaffold.ctx.sessions.list().length
@@ -99,32 +97,35 @@ describe.skipIf(webSnapshotMode() === 'record')('web e2e: edit a human message w
     await editor.fill(REPLACEMENT)
     const settled = scaffold.whenTurnSettled(60_000)
     await row.getByRole('button', { name: 'Save and send', exact: true }).click()
-    const childId = await settled
-    expect(childId).not.toBe(SOURCE)
+    const editedSessionId = await settled
+    expect(editedSessionId).toBe(SOURCE)
     await page.getByText(RESPONSE, { exact: true }).waitFor({ timeout: 15_000 })
     await page.getByText(file.name, { exact: true }).waitFor({ timeout: 15_000 })
-    const child = scaffold.ctx.sessions.get(childId)
-    if (child === undefined) throw new Error('edited file branch was not published')
-    expect(child.inheritedEventCount).toBe(originalSeq)
-    const users = (await history(scaffold, childId)).filter(event => event.type === 'user/message' && event.data.source.kind === 'user')
-    expect(users).toHaveLength(1)
-    expect(users[0]?.type === 'user/message' && users[0].data.content).toEqual([
+    const editedSession = scaffold.ctx.sessions.get(SOURCE)
+    if (editedSession === undefined) throw new Error('edited Session was detached')
+    const users = (await history(scaffold, SOURCE)).filter(event => event.type === 'user/message' && event.data.source.kind === 'user')
+    expect(users.length).toBeGreaterThan(1)
+    const lastUser = users.at(-1)
+    expect(lastUser?.type === 'user/message' ? lastUser.data.content : undefined).toEqual([
       { type: 'text', text: REPLACEMENT }, { type: 'file', attachment: file },
     ])
     const bytes: number[] = []
     for await (const chunk of scaffold.ctx.attachments.readFileStream(file)) bytes.push(...chunk)
     expect(bytes).toEqual([...BYTES])
-    expect(scaffold.ctx.sessions.list()).toHaveLength(sessionCount + 1)
-    expect(await history(scaffold, SOURCE)).toEqual(sourceBefore)
+    expect(scaffold.ctx.sessions.list()).toHaveLength(sessionCount)
+    const reloadedSource = await history(scaffold, SOURCE)
+    expect(reloadedSource.slice(0, sourceBefore.length)).toEqual(sourceBefore)
 
     await page.reload({ waitUntil: 'load' })
     await page.getByText(RESPONSE, { exact: true }).waitFor({ timeout: 15_000 })
     await page.getByText(file.name, { exact: true }).waitFor({ timeout: 15_000 })
     await page.locator(`[data-row-key="recent-session:${SOURCE}"]`).click()
-    await page.locator('[data-message-bubble]').filter({ hasText: originalText }).waitFor({ timeout: 15_000 })
+    await page.locator('[data-message-bubble]').filter({ hasText: REPLACEMENT }).waitFor({ timeout: 15_000 })
     await page.getByText(file.name, { exact: true }).waitFor({ timeout: 15_000 })
-    expect(await page.locator('[data-message-bubble]').filter({ hasText: REPLACEMENT }).count()).toBe(0)
-    expect(await history(scaffold, SOURCE)).toEqual(sourceBefore)
+    expect(await page.locator('[data-message-bubble]').filter({ hasText: originalText }).count()).toBe(0)
+    expect(await page.locator('[data-message-bubble]').filter({ hasText: REPLACEMENT }).count()).toBe(1)
+    const reloadedAfterRefresh = await history(scaffold, SOURCE)
+    expect(reloadedAfterRefresh.slice(0, sourceBefore.length)).toEqual(sourceBefore)
     expect(tripwire.pageErrors).toEqual([])
     expect(tripwire.warnings).toEqual([])
   }, 90_000)

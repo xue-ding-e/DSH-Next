@@ -310,26 +310,7 @@ export function apply(ctx: Context): void {
                 // Fork or child-title failure leaves the source view unchanged.
               })
           },
-          editUserMessage: message => createUserMessageEdit({
-            source: binding,
-            sessions: ctx.sessions,
-            readImage: async (attachment, signal) => {
-              signal.throwIfAborted()
-              const result = await ctx.remote.session.attachment({ sessionId, attachment })
-              signal.throwIfAborted()
-              if (!result.ok) throw result.error
-              return {
-                type: 'image', mediaType: result.value.attachment.mediaType, data: result.value.data,
-                ...attachment.name === undefined ? {} : { name: attachment.name },
-              }
-            },
-            stageFile: async (targetId, request, signal) => {
-              const result = await ctx.remote.fileUploads.stageHistory(targetId, request, signal)
-              if (!result.ok) throw result.error
-              return result.value
-            },
-            openSession: (childId) => { ctx.uiWorkspace.openSession(childId) },
-          }, message),
+          editUserMessage: message => createUserMessageEdit({ source: binding }, message),
         }
       },
     }, ChatView)

@@ -471,6 +471,9 @@ export type SurfaceOp =
   | 'append'
   | { op: 'replace'; startSeq: SessionSeq; endSeq: SessionSeq }
 
+/** Raw event range hidden from the current user-facing conversation generation. */
+export type ConversationOp = { op: 'replace'; start: SessionSeq; end: SessionSeq }
+
 /**
  * Surface placement and cited source-event seqs for {@link Session.append}. Required on
  * message-producing events and forbidden on log-only events.
@@ -483,7 +486,10 @@ export type SurfaceIntent<T extends SurfaceEventType = SurfaceEventType> = {
 } : {
   /** Complete non-empty set of known earlier source-event seqs. */
   sourceEventSeqs?: SessionSeq[]
-})
+}) & {
+  /** Optional user-facing conversation replacement committed with this message. */
+  conversationOp?: ConversationOp
+}
 
 /**
  * One immutable entry in the session log.
@@ -491,7 +497,7 @@ export type SurfaceIntent<T extends SurfaceEventType = SurfaceEventType> = {
  * A proper discriminated union over `type` (not independent `type`/`data`
  * unions), so `switch (event.type)` narrows `event.data` without casts.
  *
- * The {@link sourceEventSeqs} and {@link surfaceOp} fields are conditional:
+ * The {@link sourceEventSeqs}, {@link surfaceOp}, and {@link conversationOp} fields are conditional:
  * they only exist on {@link SurfaceEventType} variants (`system/message`, `user/message`,
  * `assistant/message`, `tool/result`).
  * Non-surface events (boundary markers, attempts, errors) never carry
@@ -520,6 +526,7 @@ export type SessionEvent<T extends SessionEventType = SessionEventType> = {
   } & (K extends SurfaceEventType ? SurfaceIntent<K> : {
     surfaceOp?: never
     sourceEventSeqs?: never
+    conversationOp?: never
   })
 }[T]
 

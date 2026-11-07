@@ -214,6 +214,8 @@ declare module '@deepseek-ai/dsh-typert-protocol' {
     'session/steer-unavailable': { readonly itemId: MessageId }
     'session/title-invalid': { readonly sessionId: SessionId }
     'session/fork-unavailable': { readonly sessionId: SessionId }
+    'session/edit-unavailable': { readonly sessionId: SessionId; readonly messageSeq: number }
+    'session/edit-stale': { readonly sessionId: SessionId; readonly messageSeq: number }
     'session/migration-required': { readonly sessionId: SessionId }
     'subagent/not-found': {
       readonly parentSessionId: SessionId
@@ -342,6 +344,22 @@ export interface SessionPromptRequest {
 /** Receipt after one prompt enters the target Agent inbox. */
 export interface SessionPromptValue {
   readonly accepted: true
+}
+
+/** Replace the latest current turn-opening user message and rerun from that point. */
+export interface SessionEditRequest {
+  readonly requestId: SessionRequestId
+  readonly sessionId: SessionId
+  readonly messageSeq: number
+  readonly expectedLastUserSeq: number
+  readonly text: string
+  readonly clientTimeZone?: string
+}
+
+/** Receipt after the replacement user message commits to the Session log. */
+export interface SessionEditValue {
+  readonly accepted: true
+  readonly messageSeq: number
 }
 
 /** Durable image read request. */
@@ -487,6 +505,8 @@ export interface SessionWireEvent {
   readonly sourceEventSeqs?: JsonValue
   /** Canonical placement on current surface events; opaque JSON on unknown ignorable events. */
   readonly surfaceOp?: JsonValue
+  /** Raw event range hidden from current conversation projections. */
+  readonly conversationOp?: JsonValue
 }
 
 /** One message-aligned backwards-history request. */

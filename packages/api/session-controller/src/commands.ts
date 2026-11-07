@@ -19,7 +19,7 @@ import type {} from '@deepseek-ai/dsh-client-file-upload'
 import {
   ReasoningEffortId, createUserMessage, freezeMessage,
 } from '@deepseek-ai/dsh-llm'
-import type { MessageId, MessageSource } from '@deepseek-ai/dsh-llm'
+import type { ContentBlock, MessageId, MessageSource } from '@deepseek-ai/dsh-llm'
 import { buildForkSeed } from '@deepseek-ai/dsh-session/fork'
 import { SessionLogOffset, SessionSeq } from '@deepseek-ai/dsh-session'
 import type { Session, SessionEvent, SessionHeader, SessionId, UserMessage } from '@deepseek-ai/dsh-session'
@@ -46,6 +46,8 @@ import type {
   SessionCreateValue,
   SessionForkRequest,
   SessionForkValue,
+  SessionEditRequest,
+  SessionEditValue,
   SessionPromptRequest,
   SessionPromptValue,
   SessionRenameRequest,
@@ -84,6 +86,24 @@ function latestCompletedPrefixBoundary(events: readonly SessionEvent[]): Session
     boundary = next.seq
   }
   return boundary
+}
+
+/** One admitted edit and the exact replacement event it is waiting to commit. */
+interface EditAdmission {
+  readonly committed: Promise<SessionEvent<'user/message'>>
+}
+
+/** Expected loss of an edit before its replacement message commits. */
+class EditAdmissionStale extends Error {}
+
+/** Preserve an Agent maintenance refusal as a retryable Session-domain failure. */
+function editMaintenanceBusy(agent: Agent, error: unknown): RemoteError<'session/agent-busy'> {
+  return new RemoteError(
+    'session/agent-busy',
+    `session "${agent.id}" is busy with another maintenance operation`,
+    { reason: String(error) },
+    { cause: error },
+  )
 }
 
 /** Implements Session business commands delegated by the Session Controller Remote service. */
@@ -393,6 +413,152 @@ export class SessionCommandController {
     return hasImage ? this.agents.serializeImageAdmission(agent, admit) : admit()
   }
 
+  /**
+   * Replace the latest editable human message inside the current Session.
+   * @param request - Session identity, message sequence, expected latest user sequence, and replacement text.
+   * @param signal - caller cancellation for validation and admission.
+   * @param clientTimeZone - canonical client time zone used by replacement source metadata.
+   * @returns acknowledgement containing the replaced message sequence.
+   */
+  async edit(
+    request: SessionEditRequest,
+    signal: AbortSignal,
+    clientTimeZone?: string,
+  ): Promise<SessionEditValue> {
+    if (!Number.isSafeInteger(request.messageSeq) || request.messageSeq < 0
+      || !Number.isSafeInteger(request.expectedLastUserSeq) || request.expectedLastUserSeq < 0) {
+      throw new RemoteError('gateway/bad-request', 'edit sequence values must be non-negative safe integers', {})
+    }
+    signal.throwIfAborted()
+    const agent = await this.resolveAgent(request.sessionId)
+    if (hasApiSessionSubagentOwner(agent.session)) throw apiSessionSubagentOwnershipError(request.sessionId)
+    const initialTarget = resolveEditTarget(agent.session, request)
+    replaceMessageText(initialTarget.event.data.content, request.text)
+    const hasImage = initialTarget.event.data.content.some(block => block.type === 'image')
+    const admit = async (): Promise<SessionEditValue> => {
+      signal.throwIfAborted()
+      if (hasImage) {
+        const current = agent.model.current()
+        if (current !== undefined) {
+          const model = await this.ctx.llm.resolveModelInfo(current.provider, current.model)
+          if (model.inputModalities !== undefined && !model.inputModalities.includes('image')) {
+            throw new RemoteError(
+              'session/attachment-invalid',
+              `Model "${current.model}" does not support image input.`,
+              { reason: 'MODEL_DOES_NOT_SUPPORT_IMAGES' },
+            )
+          }
+        }
+      }
+      try {
+        let admission: EditAdmission
+        if (agent.status === 'running') {
+          admission = await this.reserveMaintenanceAfterCancel(agent, signal, () => {
+            signal.throwIfAborted()
+            return Promise.resolve(this.admitEdit(agent, request, clientTimeZone))
+          })
+        } else {
+          try {
+            admission = await agent.runMaintenance((maintenanceSignal) => {
+              signal.throwIfAborted()
+              maintenanceSignal.throwIfAborted()
+              return Promise.resolve(this.admitEdit(agent, request, clientTimeZone))
+            })
+          } catch (error: unknown) {
+            throw editMaintenanceBusy(agent, error)
+          }
+        }
+        const committed = await admission.committed
+        return { accepted: true, messageSeq: committed.seq }
+      } catch (error: unknown) {
+        if (remoteErrorOf(error) !== undefined || signal.aborted) throw error
+        if (error instanceof EditAdmissionStale) {
+          throw new RemoteError(
+            'session/edit-stale',
+            `session "${request.sessionId}" changed before the edit could be admitted`,
+            { sessionId: request.sessionId, messageSeq: request.messageSeq },
+            { cause: error },
+          )
+        }
+        throw new RemoteError(
+          'gateway/internal',
+          `session "${request.sessionId}" edit admission failed: ${String(error)}`,
+          {},
+          { cause: error },
+        )
+      }
+    }
+    return hasImage ? this.agents.serializeImageAdmission(agent, admit) : admit()
+  }
+
+  /** Cancel a running turn and reserve maintenance at its idle transition. */
+  private reserveMaintenanceAfterCancel<Value>(
+    agent: Agent,
+    signal: AbortSignal,
+    operation: (signal: AbortSignal) => Promise<Value>,
+  ): Promise<Value> {
+    signal.throwIfAborted()
+    return new Promise<Value>((resolve, reject) => {
+      let settled = false
+      let dispose: () => void = () => {}
+      const finish = (result: Promise<Value>): void => {
+        if (settled) return
+        settled = true
+        dispose()
+        signal.removeEventListener('abort', abort)
+        result.then(resolve, reject)
+      }
+      const abort = (): void => {
+        const reason = signal.reason instanceof Error ? signal.reason : new Error('edit request aborted', { cause: signal.reason })
+        finish(Promise.reject(reason))
+      }
+      dispose = this.ctx.on('agent/status', ({ agent: subject, status }) => {
+        if (subject !== agent || status !== 'idle') return
+        try { finish(agent.runMaintenance(operation)) }
+        catch (error: unknown) { finish(Promise.reject(editMaintenanceBusy(agent, error))) }
+      }, { global: true })
+      signal.addEventListener('abort', abort, { once: true })
+      try { agent.cancel({ kind: 'user' }, { keepInbox: true }) }
+      catch (error: unknown) { finish(Promise.reject(error instanceof Error ? error : new Error('edit cancellation failed', { cause: error }))) }
+    })
+  }
+
+  /** Validate and enqueue one edit while maintenance owns the Agent. */
+  private admitEdit(
+    agent: Agent,
+    request: SessionEditRequest,
+    clientTimeZone: string | undefined,
+  ): EditAdmission {
+    const target = resolveEditTarget(agent.session, request)
+    const message = createUserMessage({
+      content: replaceMessageText(target.event.data.content, request.text),
+      source: {
+        kind: 'user', rpcId: request.requestId,
+        ...(clientTimeZone === undefined ? {} : { clientTimeZone }),
+      },
+    })
+    const followingMessages = target.preservedContexts.map(context => createUserMessage({
+      content: [...context.data.content],
+      source: context.data.source,
+    }))
+    const waiter = waitForEditedMessage(this.ctx, agent, message.id)
+    try {
+      agent.send(message, 'next-turn', true, {
+        position: 'front',
+        followingMessages,
+        surfaceIntent: {
+          surfaceOp: { op: 'replace', startSeq: target.surfaceStart, endSeq: target.surfaceEnd },
+          sourceEventSeqs: target.shadowedSurfaceSeqs,
+          conversationOp: { op: 'replace', start: target.turnStartSeq, end: target.rawEndSeq },
+        },
+      })
+    } catch (error: unknown) {
+      waiter.dispose()
+      throw error
+    }
+    return { committed: waiter.committed }
+  }
+
   /** Recover first input acceptance, including claimed or removed messages, from unseen log entries. */
   private hasPromptRequest(session: Session, requestId: SessionRequestId): boolean {
     let receipts = this.promptReceipts.get(session)
@@ -600,6 +766,152 @@ export class SessionCommandController {
     }
     return undefined
   }
+}
+
+interface EditTarget {
+  readonly event: SessionEvent<'user/message'>
+  readonly turnStartSeq: SessionSeq
+  readonly rawEndSeq: SessionSeq
+  readonly surfaceStart: SessionSeq
+  readonly surfaceEnd: SessionSeq
+  readonly shadowedSurfaceSeqs: SessionSeq[]
+  readonly preservedContexts: readonly SessionEvent<'user/message'>[]
+}
+
+/** Resolve the latest current human prompt and its replacement ranges. */
+function resolveEditTarget(session: Session, request: SessionEditRequest): EditTarget {
+  const events = session.snapshotEvents()
+  const latestUser = events.findLast(event => event.type === 'user/message' && event.data.source.kind === 'user')
+  if (latestUser?.seq !== request.expectedLastUserSeq) {
+    throw new RemoteError('session/edit-stale', 'the Session changed after edit mode opened', {
+      sessionId: request.sessionId, messageSeq: request.messageSeq,
+    })
+  }
+  const target = events[request.messageSeq]
+  if (target?.type !== 'user/message' || target.data.source.kind !== 'user'
+    || target.data.content.length === 0) {
+    throw new RemoteError('session/edit-unavailable', 'the selected event is not an editable human message', {
+      sessionId: request.sessionId, messageSeq: request.messageSeq,
+    })
+  }
+  if (target.seq !== latestUser.seq) {
+    throw editUnavailable(request, 'only the latest human message can be edited')
+  }
+  const currentSurface = session.surface.nodes
+  if (!currentSurface.includes(target.seq)) {
+    throw editUnavailable(request, 'the selected message is not in the current model context')
+  }
+  const turnStart = events.slice(0, target.seq + 1).findLast(event => event.type === 'turn/start')
+  if (turnStart?.type !== 'turn/start') {
+    throw editUnavailable(request, 'the selected message has no owning turn')
+  }
+  const firstStepStart = events.find(event => event.seq > turnStart.seq
+    && event.type === 'step/start' && event.data.turn === turnStart.data.turn)
+  if (firstStepStart?.type !== 'step/start' || firstStepStart.data.step !== 1) {
+    throw editUnavailable(request, 'the selected message has no first step')
+  }
+  const stepEndIndex = events.findIndex(event => event.seq > firstStepStart.seq
+    && event.type === 'step/end'
+    && event.data.turn === turnStart.data.turn
+    && event.data.step === firstStepStart.data.step)
+  const firstStepEnd = stepEndIndex === -1 ? events.length : stepEndIndex
+  const openingRangeStart = target.seq < firstStepStart.seq ? turnStart.seq + 1 : firstStepStart.seq + 1
+  const openingRangeEnd = target.seq < firstStepStart.seq ? firstStepStart.seq : firstStepEnd
+  const openingHuman = events.slice(openingRangeStart, openingRangeEnd).findLast(event =>
+    event.type === 'user/message' && event.data.source.kind === 'user')
+  if (openingHuman?.seq !== target.seq) {
+    throw editUnavailable(request, 'the selected message is steering rather than the turn-opening prompt')
+  }
+  const firstSurfaceIndex = currentSurface.indexOf(target.seq)
+  const surfaceEnd = currentSurface.at(-1)
+  if (firstSurfaceIndex < 0 || surfaceEnd === undefined) {
+    throw editUnavailable(request, 'the selected turn has no current model context')
+  }
+  const shadowedSurfaceSeqs = currentSurface.slice(firstSurfaceIndex)
+  return {
+    event: target,
+    turnStartSeq: turnStart.seq,
+    rawEndSeq: (events.at(-1) as SessionEvent).seq,
+    surfaceStart: shadowedSurfaceSeqs[0] as SessionSeq,
+    surfaceEnd,
+    shadowedSurfaceSeqs: [...shadowedSurfaceSeqs],
+    preservedContexts: events.slice(target.seq + 1, firstStepEnd).filter(isSessionReferenceContext),
+  }
+}
+
+/** Whether one recalled Session-reference message belongs to the edited opening prompt. */
+function isSessionReferenceContext(event: SessionEvent): event is SessionEvent<'user/message'> {
+  return event.type === 'user/message'
+    && String(Reflect.get(event.data.source, 'kind')) === 'session-reference'
+    && String(Reflect.get(event.data.source, 'form')) === 'recall'
+}
+
+/** Build the stable rejection for a message that cannot be edited. */
+function editUnavailable(request: SessionEditRequest, reason: string): RemoteError<'session/edit-unavailable'> {
+  return new RemoteError(
+    'session/edit-unavailable',
+    `session "${request.sessionId}" message ${String(request.messageSeq)} is not editable: ${reason}`,
+    { sessionId: request.sessionId, messageSeq: request.messageSeq },
+  )
+}
+
+/** Wait until the exact edit message commits, or its owning turn closes without it. */
+function waitForEditedMessage(
+  ctx: Context,
+  agent: Agent,
+  messageId: MessageId,
+): { readonly committed: Promise<SessionEvent<'user/message'>>; readonly dispose: () => void } {
+  let claimedTurn: number | undefined
+  const disposers: Array<() => void> = []
+  const dispose = (): void => {
+    for (const disposeListener of disposers.splice(0)) disposeListener()
+  }
+  const promise = new Promise<SessionEvent<'user/message'>>((resolve, reject) => {
+    const finish = (outcome: { event: SessionEvent<'user/message'> } | { error: Error }): void => {
+      dispose()
+      if ('event' in outcome) resolve(outcome.event)
+      else reject(outcome.error)
+    }
+    disposers.push(ctx.on('agent/inbox/claimed', ({ agent: subject, message, turn }) => {
+      if (subject === agent && message.id === messageId) claimedTurn = turn
+    }, { global: true }))
+    disposers.push(ctx.on('agent/inbox/discarded', ({ agent: subject, message }) => {
+      if (subject !== agent || message.id !== messageId) return
+      finish({ error: new EditAdmissionStale('edit message was discarded before it committed') })
+    }, { global: true }))
+    disposers.push(ctx.on('session/event', (session, event) => {
+      if (session !== agent.session) return
+      if (event.type === 'user/message' && event.data.id === messageId) {
+        finish({ event })
+        return
+      }
+      if (claimedTurn !== undefined && event.type === 'turn/end' && event.data.turn === claimedTurn) {
+        finish({ error: new EditAdmissionStale('edit turn ended before the replacement message committed') })
+      }
+    }, { global: true }))
+    disposers.push(ctx.on('agent/disposed', ({ agent: subject }) => {
+      if (subject === agent) finish({ error: new EditAdmissionStale('edit agent was disposed before the replacement message committed') })
+    }, { global: true }))
+  })
+  return { committed: promise.finally(dispose), dispose }
+}
+
+/** Replace text blocks while retaining durable non-text attachments. */
+function replaceMessageText(content: readonly ContentBlock[], text: string): ContentBlock[] {
+  const result: ContentBlock[] = []
+  let foundText = false
+  for (const block of content) {
+    if (block.type !== 'text') {
+      result.push(block)
+      continue
+    }
+    if (foundText) continue
+    foundText = true
+    if (text !== '') result.push({ type: 'text', text })
+  }
+  if (!foundText && text !== '') result.unshift({ type: 'text', text })
+  if (result.length === 0) throw new RemoteError('gateway/bad-request', 'edited message cannot be empty', {})
+  return result
 }
 
 /** Replace each file part with the file or image its staged receipt names. */

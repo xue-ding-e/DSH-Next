@@ -11,7 +11,7 @@ import type { Scoped } from '@deepseek-ai/dsh-scope'
 import type {
   LlmAttemptId, LlmCallConfig, LlmFailure, MessageId, ReasoningEffortId, ResolvedRetryPolicy, StreamChunk,
 } from '@deepseek-ai/dsh-llm'
-import type { AgentCancelCause, Session, SessionSeq, UserMessage } from '@deepseek-ai/dsh-session'
+import type { AgentCancelCause, Session, SessionSeq, SurfaceIntent, UserMessage } from '@deepseek-ai/dsh-session'
 export type { AgentCancelCause } from '@deepseek-ai/dsh-session'
 import type { Agent, InboxTarget, ModelSelection } from './types.ts'
 export type { Agent } from './types.ts'
@@ -51,6 +51,16 @@ export interface CancelOptions {
   keepInbox?: boolean | undefined
 }
 
+/** Optional routing and Session placement for one Agent inbox insertion. */
+export interface AgentSendOptions {
+  /** Insert before existing work at the resolved target instead of after it. */
+  position?: 'front' | 'back'
+  /** Non-default placement used when AgentLoop records this exact message. */
+  surfaceIntent?: SurfaceIntent
+  /** Messages recorded immediately after the identified message in the same step. */
+  followingMessages?: readonly UserMessage[]
+}
+
 /** Agent-owned access to the model choice for future steps. */
 export interface Model {
   /**
@@ -87,14 +97,14 @@ export interface Inbox {
    * @param target - pending list to extend.
    * @param message - message to append.
    */
-  append(target: InboxTarget, message: UserMessage): void
+  append(target: InboxTarget, message: UserMessage, surfaceIntent?: SurfaceIntent): void
 
   /**
    * Prepend one message to a pending list.
    * @param target - pending list to extend.
    * @param message - message to prepend.
    */
-  prepend(target: InboxTarget, message: UserMessage): void
+  prepend(target: InboxTarget, message: UserMessage, surfaceIntent?: SurfaceIntent): void
 
   /**
    * Replace one pending message in place.
@@ -132,6 +142,7 @@ export interface Inbox {
     start: number,
     deleteCount: number,
     inserted: UserMessage[],
+    admissions?: import('./types.ts').InboxAdmission[],
   ): UserMessage[]
 }
 
@@ -248,9 +259,10 @@ declare module './types.ts' {
    * claims ([driver wake convergence](../../agent-loop/src/agent.ts)).
    * @param message - identified content and the source that supplied it.
    * @param target - the preferred next-turn or next-step inbox boundary.
-   * @param wakeup - whether delivery may wake the driver.
+     * @param wakeup - whether delivery may wake the driver.
+     * @param options - optional queue position, Session placement, and companions.
    */
-    send(message: UserMessage, target: InboxTarget, wakeup: boolean): void
+    send(message: UserMessage, target: InboxTarget, wakeup: boolean, options?: AgentSendOptions): void
 
     /**
    * Queue an ordinary follow-up turn and wake the driver. The item becomes the
@@ -356,7 +368,7 @@ declare module '@deepseek-ai/cordis' {
      * Scope-filtered dispatch (`@deepseek-ai/dsh-scope`): agent-scoped listeners receive only that agent.
      * @mode waterfall
      */
-    'agent/pre-step'(this: Scoped<Agent>, payload: { agent: Agent; messages: UserMessage[]; turn: number; step: number; signal: AbortSignal; modelSelection: Readonly<ModelSelection> }, next: () => Promise<PreStepDecision>): Promise<PreStepDecision>
+    'agent/pre-step'(this: Scoped<Agent>, payload: { agent: Agent; messages: UserMessage[]; surfaceIntents?: ReadonlyMap<MessageId, SurfaceIntent>; turn: number; step: number; signal: AbortSignal; modelSelection: Readonly<ModelSelection> }, next: () => Promise<PreStepDecision>): Promise<PreStepDecision>
     /**
      * Replace the frozen call configuration. `await next()` yields the config
      * the machine would use (the step's model selection with agent options on

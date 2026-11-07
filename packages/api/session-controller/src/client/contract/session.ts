@@ -101,6 +101,13 @@ export interface ISession {
     signal?: AbortSignal,
     requestId?: SessionRequestId,
   ): Promise<RemoteResult<{ accepted: true }>>
+  /** Replace the latest editable human message inside this Session and rerun it. */
+  edit(
+    messageSeq: SessionSeq,
+    expectedLastUserSeq: SessionSeq,
+    text: string,
+    signal?: AbortSignal,
+  ): Promise<RemoteResult<{ accepted: true; messageSeq: number }>>
   /**
    * Resolve one stored image using this Session's gateway permission scope.
    * @param attachment - complete image reference from the folded session log.

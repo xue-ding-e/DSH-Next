@@ -310,6 +310,28 @@ export class Session implements SessionFace {
     return result
   }
 
+  /** Replace the latest editable human message without changing Session identity. */
+  async edit(
+    messageSeq: SessionSeq,
+    expectedLastUserSeq: SessionSeq,
+    text: string,
+    signal?: AbortSignal,
+  ): Promise<RemoteResult<{ accepted: true; messageSeq: number }>> {
+    if (this.address !== undefined) {
+      return { ok: false, error: new RemoteError('session/edit-unavailable', 'subagent Sessions cannot edit messages', {
+        sessionId: this.sessionId, messageSeq,
+      }) }
+    }
+    return this.remote.session.edit({
+      sessionId: this.sessionId,
+      requestId: randomUUID() as SessionRequestId,
+      messageSeq,
+      expectedLastUserSeq,
+      text,
+      clientTimeZone: resolvedClientTimeZone(),
+    }, signal)
+  }
+
   /**
    * Apply the Host's acceptance of one prompt: publish its echo, move a blank
    * Session to engaging, and tell the submitter. The prompt receipt and an

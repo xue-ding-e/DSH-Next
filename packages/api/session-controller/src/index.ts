@@ -54,6 +54,8 @@ import type {
   SessionProjectionFrame, SessionStateRequest, SessionState, SessionWaitRequest, SessionWaitValue,
   SessionPromptRequest,
   SessionPromptValue,
+  SessionEditRequest,
+  SessionEditValue,
   SessionRenameRequest,
   SessionRenameValue,
   SessionSearchRequest,
@@ -492,6 +494,26 @@ export class SessionController extends TypertRemoteService {
       ...(principal === undefined ? {} : { principal }),
     }
     return this.commands.prompt(request, source)
+  }
+
+  /**
+   * Replace the latest editable human message inside the same Session.
+   * @param request - Session identity, target message, expected latest user message, and replacement text.
+   * @param signal - caller cancellation for the remote operation.
+   * @returns acknowledgement containing the replaced message sequence.
+   */
+  @Remote('edit')
+  async edit(request: SessionEditRequest, signal: AbortSignal): Promise<SessionEditValue> {
+    signal.throwIfAborted()
+    const clientTimeZone = request.clientTimeZone === undefined
+      ? undefined
+      : canonicalClientTimeZone(request.clientTimeZone)
+    if (request.clientTimeZone !== undefined && clientTimeZone === undefined) {
+      throw new RemoteError('session/invalid-time-zone', 'clientTimeZone must be UTC or a valid IANA Area/Location name', {
+        value: request.clientTimeZone,
+      })
+    }
+    return this.commands.edit(request, signal, clientTimeZone)
   }
 
   /**

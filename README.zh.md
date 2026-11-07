@@ -6,7 +6,7 @@ DSH-Next 是基于 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-ha
 
 `main` 保持独立线性历史；`upstream-main` 原样保留官方 `master` 的完整历史。初始源码快照为 [source-import](https://github.com/xue-ding-e/DSH-Next/tree/source-import)，原始 [MIT 许可证](LICENSE)、[第三方声明](THIRD_PARTY_NOTICES.md)和作者归属均予以保留。
 
-Windows 安装包和更新通过本仓库的 [GitHub Releases](https://github.com/xue-ding-e/DSH-Next/releases) 发布。个人扩展由 [DSH-Next-Plugins](https://github.com/xue-ding-e/DSH-Next-Plugins) 独立维护，版本清单和安装入口由 [DSH-Next-Profile](https://github.com/xue-ding-e/DSH-Next-Profile) 管理。下方 npm 命令安装官方上游程序。Next 安装包使用独立的应用身份、更新源和数据目录。
+Windows 安装包和更新通过本仓库的 [GitHub Releases](https://github.com/xue-ding-e/DSH-Next/releases) 发布。个人扩展由 [DSH-Next-Plugins](https://github.com/xue-ding-e/DSH-Next-Plugins) 独立维护，版本清单和安装入口由 [DSH-Next-Profile](https://github.com/xue-ding-e/DSH-Next-Profile) 管理。下方 pnpm 命令安装官方上游程序。Next 安装包使用独立的应用身份、更新源和数据目录。
 
 DeepSeek Harness（`dsh`）是由 [DeepSeek AI](https://deepseek.com) 开发的开源 agent harness（智能体框架）。
 
@@ -29,7 +29,7 @@ DeepSeek Harness 处于 _开发者预览_ 阶段，正在快速迭代。**未来
 安装 `Node.js`，然后运行：
 
 ```sh
-npx @deepseek-ai/dsh web
+pnpm dlx @deepseek-ai/dsh web
 ```
 
 该命令默认会在 `http://127.0.0.1:3080` 启动 Web UI，本机启动时还会用默认浏览器打开页面。通过 SSH 启动时只打印宿主机 URL，因为本地转发地址由 SSH 客户端或编辑器持有。传入 `--no-open` 可仅运行服务器而不打开浏览器。详见 [Web UI 指南](docs/user/guide/index.zh.md)。
@@ -49,6 +49,16 @@ pnpm dsh web
 ```
 
 `pnpm run build` 会准备仓库产物。`pnpm dsh web` 会直接使用这些已构建产物，不会重新构建。
+
+### 安装个人扩展集合
+
+在 Windows 上安装 DSH Next 后，先完全退出应用，再安装锁定版本的个人扩展。Profile 包在源码仓库之外维护插件版本和哈希：
+
+```powershell
+pnpm dlx --package="https://github.com/xue-ding-e/DSH-Next-Profile/releases/download/v0.2.10/dsh-next-profile-0.2.10.tgz" dsh-next-profile install --host next --match-baseline
+```
+
+该命令会把外置插件集合安装到已有的 DSH Next Host 中，不会转移凭据、浏览器身份、会话或本地媒体。完整的功能分类和 Release 产物见 [DSH-Next-Profile](https://github.com/xue-ding-e/DSH-Next-Profile)。
 
 ## 社区与支持
 

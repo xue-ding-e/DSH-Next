@@ -143,7 +143,7 @@ Seams are why one provider swap changes the whole product. Filesystem and subpro
 
 ## Where new behavior goes
 
-New behavior attaches to a documented extension point. Changing the loop itself updates this map.
+Plugin-first: move a complete feature to an external plugin only when its low-level behavior, interaction, and GUI install without skeleton changes. Partial renderer, DOM, or backend extraction remains source-owned; private state and new Host capabilities stay here.
 
 | Goal | Mechanism |
 |---|---|

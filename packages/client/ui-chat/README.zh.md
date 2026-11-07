@@ -45,7 +45,7 @@ Session 作用域的 `conversation.chat.user.content` Factory 只渲染用户内
 
 `UserStyleBubble` 和[各来源包装层](src/client/chat/MessageItem.tsx) 保留用户行、key、pending／echo 标记、时间、复制控件及其他消息操作。内容 Factory 不读取来源专属模型或私有 Context，也不是全局用户内容替换入口。
 
-已记录的人工消息在原内容下方提供「编辑并重新发送」。取消只丢弃本地修改；保存并发送才会在原消息之前分支，并在子 Session 中发送替换消息。图片、普通文件及编辑文本中的序列化引用仍随提示词发送，附件保持原顺序。普通文件只在子 Session 创建后取得[按历史授权的凭证](../file-upload/README.zh.md#understand-the-implementation)。原日志与原对话的输入框草稿保持不变。失败时保留行内草稿，可重试或取消；发送回复丢失时锁定文本，并使用同一请求和凭证重试；分支结果未确认时须先查看最近对话再重新操作。离开编辑器会取消尚未执行的导航。
+已记录的人工消息在原内容下方提供「编辑并重新发送」。取消只丢弃本地修改；保存并发送会保留原 Session 身份，从编辑轮次开始替换当前对话代次，同时保留仅追加的源日志。图片、普通文件及编辑文本中的序列化引用会按原顺序保留在替换消息中。若编辑器打开后出现更新的人类消息，Host 会拒绝这次过期编辑。失败时保留行内草稿，可重试或取消；离开编辑器会取消尚未执行的请求。
 
 官方 user 与 steering 共用的渲染器在 `user` 注册项上声明 session-scoped `conversation.chat.user.before` chain slot，并在气泡上方直接通过 `renderSlotChain` 渲染；`steering` 注册项复用该渲染器但不拥有该槽位。owner props 携带 Session 记录的持久化消息 `source` 与行 `kind`；各条目的 `select` 匹配自己负责的来源，首个非 null 结果作为 `matched` 交给获选组件。无匹配时不显示内容。条目自行拥有标记和文案；Chat 不解析消息来源。
 

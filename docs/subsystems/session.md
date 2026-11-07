@@ -258,7 +258,7 @@ type OptionalSessionSeq = SessionSeq | null
  * A proper discriminated union over `type` (not independent `type`/`data`
  * unions), so `switch (event.type)` narrows `event.data` without casts.
  *
- * The {@link sourceEventSeqs} and {@link surfaceOp} fields are conditional:
+ * The {@link sourceEventSeqs}, {@link surfaceOp}, and {@link conversationOp} fields are conditional:
  * they only exist on {@link SurfaceEventType} variants (`system/message`, `user/message`,
  * `assistant/message`, `tool/result`).
  * Non-surface events (boundary markers, attempts, errors) never carry
@@ -287,6 +287,7 @@ type SessionEvent<T extends SessionEventType = SessionEventType> = {
   } & (K extends SurfaceEventType ? SurfaceIntent<K> : {
     surfaceOp?: never
     sourceEventSeqs?: never
+    conversationOp?: never
   })
 }[T]
 ```
@@ -354,7 +355,10 @@ type SurfaceIntent<T extends SurfaceEventType = SurfaceEventType> = {
 } : {
   /** Complete non-empty set of known earlier source-event seqs. */
   sourceEventSeqs?: SessionSeq[]
-})
+}) & {
+  /** Optional user-facing conversation replacement committed with this message. */
+  conversationOp?: ConversationOp
+}
 ```
 
 Required for `SurfaceEventType` events — every message-producing event must declare how it joins the surface, the sole source of derived model history. A human-facing transcript is the other projection and reads the log's append-origin events instead, because the surface deliberately shadows the ranges a replacement summarizes (`isAppendSurfaceEvent` in [dsh-session](../../packages/core/session/README.md)). Non-surface types reject it at compile time.
@@ -959,6 +963,14 @@ workspaceDesktop(): { name: string; available: boolean; fileManager: 'finder' | 
  * @returns acknowledgement that the Agent accepted the prompt.
  */
 @Remote('prompt') async prompt(request: SessionPromptRequest, signal: AbortSignal): Promise<SessionPromptValue>
+
+/**
+ * Replace the latest editable human message inside the same Session.
+ * @param request - Session identity, target message, expected latest user message, and replacement text.
+ * @param signal - caller cancellation for the remote operation.
+ * @returns acknowledgement containing the replaced message sequence.
+ */
+@Remote('edit') async edit(request: SessionEditRequest, signal: AbortSignal): Promise<SessionEditValue>
 
 /**
  * Read one image from the attachment store after gateway authorization.

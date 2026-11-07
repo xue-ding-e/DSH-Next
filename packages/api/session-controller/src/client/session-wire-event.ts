@@ -26,6 +26,7 @@ export function assertSessionWireEvent(value: unknown): asserts value is Session
       case 'ignorable':
       case 'surfaceOp':
       case 'sourceEventSeqs':
+      case 'conversationOp':
         break
       default:
         throw new Error(`${subject} has unexpected field ${key}`)

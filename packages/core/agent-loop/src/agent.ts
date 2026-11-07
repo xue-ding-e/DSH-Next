@@ -9,6 +9,7 @@ import type {
   AgentCancelCause,
   AgentEventDispatch,
   AgentOptions,
+  AgentSendOptions,
   AgentStatus,
   CancelOptions,
   ModelSelection,
@@ -19,7 +20,7 @@ import type {
   RequestErrorAction,
 } from '@deepseek-ai/dsh-agent'
 import { AgentModel, agentEvents, assembleContextFor } from '@deepseek-ai/dsh-agent'
-import type { GenerateOptions, LlmCallConfig, Message, PreparedLlmCall } from '@deepseek-ai/dsh-llm'
+import type { GenerateOptions, LlmCallConfig, Message, MessageId, PreparedLlmCall } from '@deepseek-ai/dsh-llm'
 import {
   LlmError,
   createAssistantMessage,
@@ -30,7 +31,7 @@ import {
 import { assertNever, deepFreeze } from '@deepseek-ai/dsh-util-values'
 import type { Scope } from '@deepseek-ai/dsh-scope'
 import { createScope } from '@deepseek-ai/dsh-scope'
-import type { EpochHeader, RequestContext, Session, SessionId, SessionSeq, TurnEndReason, UserMessage } from '@deepseek-ai/dsh-session'
+import type { EpochHeader, RequestContext, Session, SessionId, SessionSeq, SurfaceIntent, TurnEndReason, UserMessage } from '@deepseek-ai/dsh-session'
 import { canonicalHeader, headerEquals, ToolCallRecovery } from '@deepseek-ai/dsh-session'
 import { joinContextSections, renderContextSections, renderPrompt } from '@deepseek-ai/dsh-system-prompt'
 import type { PromptAssembly } from '@deepseek-ai/dsh-system-prompt'
@@ -67,6 +68,7 @@ type PreparedStep =
   | {
     kind: 'enter'
     messages: UserMessage[]
+    surfaceIntents: ReadonlyMap<MessageId, SurfaceIntent>
     startsRequestSeries?: true
     assembly: PromptAssembly
     selection: Readonly<ModelSelection>
@@ -167,12 +169,18 @@ export class ReactLoopAgent implements Agent {
     }
   }
 
-  send(message: UserMessage, target: InboxTarget, wakeup: boolean): void {
+  send(message: UserMessage, target: InboxTarget, wakeup: boolean, options: AgentSendOptions = {}): void {
     // Waking input cannot join an aborted activity, so it starts the next turn.
     // Captured before the insertion so a reentrant cancel from a splice observer cannot reclassify it.
     const wakingAfterAbort = wakeup && this.phase.kind !== 'idle' && this.phase.abort.signal.aborted
     const resolvedTarget = wakingAfterAbort ? 'next-turn' : target
-    this.inbox.splice(resolvedTarget, Infinity, 0, [message])
+    const start = options.position === 'front' ? 0 : Infinity
+    const followingMessages = options.followingMessages?.length === 0 ? undefined : options.followingMessages
+    const admissions = options.surfaceIntent === undefined && followingMessages === undefined
+      ? []
+      : [{ messageId: message.id, ...(options.surfaceIntent === undefined ? {} : { surfaceIntent: options.surfaceIntent }),
+        ...(followingMessages === undefined ? {} : { followingMessages }) }]
+    this.inbox.splice(resolvedTarget, start, 0, [message], admissions)
     if (wakeup) this.wakeDriver(wakingAfterAbort)
   }
 
@@ -284,7 +292,10 @@ export class ReactLoopAgent implements Agent {
     /* v8 ignore next -- private callers establish the running phase before proposing a step */
     if (this.phase.kind !== 'running') throw new Error(`agent "${this.id}": pre-step outside running phase`)
     const signal = this.phase.abort.signal
-    const claimed = this.inbox.claim(target, position.turn)
+    const claimed = this.inbox.claimWithIntents(target, position.turn)
+    const claimedMessages = claimed.map(entry => entry.message)
+    const claimedIntents = new Map<MessageId, SurfaceIntent>(claimed.flatMap(entry =>
+      entry.surfaceIntent === undefined ? [] : [[entry.message.id, entry.surfaceIntent] as const]))
     const selection = this.model.current()
     if (selection === undefined) {
       throw new Error(`agent "${this.id}" has no provider/model: set AgentOptions.provider and AgentOptions.model or record a model selection`)
@@ -294,13 +305,13 @@ export class ReactLoopAgent implements Agent {
       const assembly = await this.loopCtx.systemPrompt.assemble({ ...assembleContextFor(this, signal), modelSelection: selection, toolSet })
       signal.throwIfAborted()
       const decision = await this.dispatch.waterfall(
-        'agent/pre-step', { messages: claimed, ...position, signal, modelSelection: selection },
+        'agent/pre-step', { messages: claimedMessages, surfaceIntents: claimedIntents, ...position, signal, modelSelection: selection },
         (): Promise<PreStepDecision> => {
           const sections = renderContextSections(assembly)
           const context = this.runtimeContext.project(joinContextSections(sections), sections)
           return Promise.resolve<PreStepDecision>({
             kind: 'enter',
-            messages: context === undefined ? claimed : [...claimed, context],
+            messages: context === undefined ? claimedMessages : [...claimedMessages, context],
           })
         },
       )
@@ -309,7 +320,12 @@ export class ReactLoopAgent implements Agent {
         toolSet.dispose()
         return decision
       }
-      return { ...decision, assembly, selection, toolSet }
+      const surfaceIntents = new Map<MessageId, SurfaceIntent>()
+      for (const message of decision.messages) {
+        const intent = claimedIntents.get(message.id)
+        if (intent !== undefined) surfaceIntents.set(message.id, intent)
+      }
+      return { ...decision, surfaceIntents, assembly, selection, toolSet }
     } catch (error: unknown) {
       toolSet.dispose()
       throw error
@@ -468,7 +484,7 @@ export class ReactLoopAgent implements Agent {
               contextAdmitted = true
             }
           } else {
-            this.session.append('user/message', message, { surfaceOp: 'append' })
+            this.session.append('user/message', message, decision.surfaceIntents.get(message.id) ?? { surfaceOp: 'append' })
           }
         }
       }

@@ -39,7 +39,6 @@ describe.skipIf(webSnapshotMode() === 'record')('web e2e: edit and resend a prev
   let page: Page
   let replayDir: string
   let originalText: string
-  let originalSeq: number
   let tripwire: ReturnType<typeof watchConsole>
 
   beforeAll(async () => {
@@ -51,7 +50,6 @@ describe.skipIf(webSnapshotMode() === 'record')('web e2e: edit and resend a prev
     const original = parseSeedFixture(fixture).events.find(event => event.type === 'user/message' && event.data.source.kind === 'user')
     if (original?.type !== 'user/message') throw new Error('message-edit seed lacks a human message')
     originalText = original.data.content.filter(part => part.type === 'text').map(part => part.text).join('')
-    originalSeq = original.seq
     await seedSession(scaffold, fixture, SOURCE)
     browser = await chromium.launch()
     page = await newEnglishPage(browser)
@@ -72,7 +70,7 @@ describe.skipIf(webSnapshotMode() === 'record')('web e2e: edit and resend a prev
     if (failures.length > 0) throw new AggregateError(failures, 'message-edit e2e cleanup failed')
   })
 
-  it('cancels locally, then confirms one replacement in a new branch', async () => {
+  it('cancels locally, then confirms one replacement in the original Session', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-message-edit'))
     const sourceBefore = await readSource(scaffold)
     const sessionCount = scaffold.ctx.sessions.list().length
@@ -95,20 +93,22 @@ describe.skipIf(webSnapshotMode() === 'record')('web e2e: edit and resend a prev
     await editor.fill(REPLACEMENT)
     const settled = scaffold.whenTurnSettled(60_000)
     await row.getByRole('button', { name: 'Save and send', exact: true }).click()
-    const childId = await settled
-    expect(childId).not.toBe(SOURCE)
+    const editedSessionId = await settled
+    expect(editedSessionId).toBe(SOURCE)
     await page.getByText(RESPONSE, { exact: true }).waitFor({ timeout: 15_000 })
     await page.locator('[data-message-bubble]').filter({ hasText: REPLACEMENT }).waitFor({ timeout: 15_000 })
     expect(await page.locator('[data-message-bubble]').filter({ hasText: originalText }).count()).toBe(0)
 
-    const child = scaffold.ctx.sessions.get(childId)
-    if (child === undefined) throw new Error('edited branch was not published')
-    expect(child.inheritedEventCount).toBe(originalSeq)
-    const users = child.snapshotEvents().filter(event => event.type === 'user/message' && event.data.source.kind === 'user')
-    expect(users).toHaveLength(1)
-    expect(users[0]?.type === 'user/message' && users[0].data.content).toEqual([{ type: 'text', text: REPLACEMENT }])
-    expect(scaffold.ctx.sessions.list()).toHaveLength(sessionCount + 1)
-    expect(await readSource(scaffold)).toEqual(sourceBefore)
+    const editedSession = scaffold.ctx.sessions.get(SOURCE)
+    if (editedSession === undefined) throw new Error('edited Session was detached')
+    const users = editedSession.snapshotEvents().filter(event => event.type === 'user/message' && event.data.source.kind === 'user')
+    expect(users.length).toBeGreaterThan(1)
+    const lastUser = users.at(-1)
+    expect(lastUser?.type === 'user/message' ? lastUser.data.content : undefined)
+      .toEqual([{ type: 'text', text: REPLACEMENT }])
+    expect(scaffold.ctx.sessions.list()).toHaveLength(sessionCount)
+    const sourceAfter = await readSource(scaffold)
+    expect(sourceAfter.slice(0, sourceBefore.length)).toEqual(sourceBefore)
     expect(tripwire.pageErrors).toEqual([])
     expect(tripwire.warnings).toEqual([])
   }, 90_000)

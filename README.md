@@ -6,7 +6,7 @@ DSH-Next is an independent community-maintained source repository based on [Deep
 
 `main` has independent linear history; `upstream-main` preserves the complete official `master` history without changes. The [source-import tag](https://github.com/xue-ding-e/DSH-Next/tree/source-import) preserves the initial source snapshot and its upstream attribution. The original [MIT license](LICENSE), [third-party notices](THIRD_PARTY_NOTICES.md), and author attribution are preserved.
 
-Windows installers and updates are published through this repository's [GitHub Releases](https://github.com/xue-ding-e/DSH-Next/releases). Personal extensions are maintained in [DSH-Next-Plugins](https://github.com/xue-ding-e/DSH-Next-Plugins), with versions and installation managed by [DSH-Next-Profile](https://github.com/xue-ding-e/DSH-Next-Profile). The npm command below installs the official upstream program. The Next installer uses its own application identity, update feed and data directory.
+Windows installers and updates are published through this repository's [GitHub Releases](https://github.com/xue-ding-e/DSH-Next/releases). Personal extensions are maintained in [DSH-Next-Plugins](https://github.com/xue-ding-e/DSH-Next-Plugins), with versions and installation managed by [DSH-Next-Profile](https://github.com/xue-ding-e/DSH-Next-Profile). The pnpm command below installs the official upstream program. The Next installer uses its own application identity, update feed and data directory.
 
 DeepSeek Harness (`dsh`) is an open-source agent harness developed by [DeepSeek AI](https://deepseek.com).
 
@@ -27,7 +27,7 @@ Review the [safety notice](SAFETY.md) before running the project.
 Install `Node.js`, then run:
 
 ```sh
-npx @deepseek-ai/dsh web
+pnpm dlx @deepseek-ai/dsh web
 ```
 
 The command starts the Web UI at `http://127.0.0.1:3080` by default and opens it in the default browser for a local launch. An SSH launch only prints the host URL because the SSH client or editor owns the local forwarded address. Pass `--no-open` to run the server without opening a browser. See [Web UI guide](docs/user/guide/index.md).
@@ -45,6 +45,16 @@ pnpm dsh web
 ```
 
 `pnpm run build` prepares the repository artifacts. `pnpm dsh web` uses those built artifacts without rebuilding.
+
+### Install the personal extension collection
+
+After installing DSH Next on Windows, fully quit it before installing the locked personal extensions. The Profile package keeps plugin versions and hashes outside this source repository:
+
+```powershell
+pnpm dlx --package="https://github.com/xue-ding-e/DSH-Next-Profile/releases/download/v0.2.10/dsh-next-profile-0.2.10.tgz" dsh-next-profile install --host next --match-baseline
+```
+
+This installs the external plugin collection into the existing DSH Next Host. It does not transfer credentials, browser identity, Sessions, or local media. See [DSH-Next-Profile](https://github.com/xue-ding-e/DSH-Next-Profile) for the locked feature classification and release assets.
 
 ## Community and support
 

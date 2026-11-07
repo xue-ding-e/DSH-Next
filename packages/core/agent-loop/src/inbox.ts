@@ -10,6 +10,7 @@ import type { ProjectionDefinition } from '@deepseek-ai/dsh-session-projection'
 import type { Session, SessionEventMap, UserMessage } from '@deepseek-ai/dsh-session'
 import type {
   AgentEventDispatch,
+  InboxAdmission,
   Inbox as InboxContract,
   InboxState,
   InboxTarget,
@@ -72,11 +73,15 @@ export const inboxProjectionDefinition = {
  * @param dispatch - agent-scoped notifications for Inbox lifecycle events.
  */
 export class ReactLoopInbox implements InboxContract {
+  private readonly admissions = new Map<MessageId, Omit<InboxAdmission, 'messageId'>>()
+
   constructor(
     private readonly readState: () => InboxState,
     private readonly session: Session,
     private readonly dispatch: AgentEventDispatch,
-  ) {}
+  ) {
+    this.restoreAdmissions()
+  }
 
   /** Prompts awaiting individual turns. */
   get nextTurn(): readonly UserMessage[] {
@@ -107,10 +112,32 @@ export class ReactLoopInbox implements InboxContract {
    * @returns next-step input followed by the queued turn, when requested.
    */
   claim(target: InboxTarget, turn: number): UserMessage[] {
+    return this.claimWithIntents(target, turn).map(entry => entry.message)
+  }
+
+  /** Remove the complete batch while retaining non-default Session placement. */
+  claimWithIntents(target: InboxTarget, turn: number): Array<{ readonly message: UserMessage; readonly surfaceIntent?: InboxAdmission['surfaceIntent'] }> {
+    const claimedAdmissions = new Map<MessageId, Omit<InboxAdmission, 'messageId'>>()
+    for (const message of this.nextStep) {
+      const admission = this.admissions.get(message.id)
+      if (admission !== undefined) claimedAdmissions.set(message.id, admission)
+    }
+    if (target === 'next-turn') {
+      const message = this.nextTurn[0]
+      const admission = message === undefined ? undefined : this.admissions.get(message.id)
+      if (message !== undefined && admission !== undefined) claimedAdmissions.set(message.id, admission)
+    }
     const claimed = this.mutate('next-step', 0, this.nextStep.length, [], false)
     if (target === 'next-turn') claimed.push(...this.mutate('next-turn', 0, 1, [], false))
-    for (const message of claimed) this.dispatch.emit('agent/inbox/claimed', { message, turn })
-    return claimed
+    const entries = claimed.flatMap((message): Array<{ readonly message: UserMessage; readonly surfaceIntent?: InboxAdmission['surfaceIntent'] }> => {
+      const admission = claimedAdmissions.get(message.id)
+      return [
+        { message, ...(admission?.surfaceIntent === undefined ? {} : { surfaceIntent: admission.surfaceIntent }) },
+        ...(admission?.followingMessages ?? []).map(following => ({ message: following })),
+      ]
+    })
+    for (const { message } of entries) this.dispatch.emit('agent/inbox/claimed', { message, turn })
+    return entries
   }
 
   /**
@@ -118,8 +145,9 @@ export class ReactLoopInbox implements InboxContract {
    * @param target - pending list to extend.
    * @param message - message to append.
    */
-  append(target: InboxTarget, message: UserMessage): void {
-    this.splice(target, this.readState()[target].length, 0, [message])
+  append(target: InboxTarget, message: UserMessage, surfaceIntent?: InboxAdmission['surfaceIntent']): void {
+    const admissions = surfaceIntent === undefined ? [] : [{ messageId: message.id, surfaceIntent }]
+    this.splice(target, this.readState()[target].length, 0, [message], admissions)
   }
 
   /**
@@ -127,8 +155,9 @@ export class ReactLoopInbox implements InboxContract {
    * @param target - pending list to extend.
    * @param message - message to prepend.
    */
-  prepend(target: InboxTarget, message: UserMessage): void {
-    this.splice(target, 0, 0, [message])
+  prepend(target: InboxTarget, message: UserMessage, surfaceIntent?: InboxAdmission['surfaceIntent']): void {
+    const admissions = surfaceIntent === undefined ? [] : [{ messageId: message.id, surfaceIntent }]
+    this.splice(target, 0, 0, [message], admissions)
   }
 
   /**
@@ -182,8 +211,9 @@ export class ReactLoopInbox implements InboxContract {
     start: number,
     deleteCount: number,
     inserted: UserMessage[],
+    admissions: InboxAdmission[] = [],
   ): UserMessage[] {
-    return this.mutate(target, start, deleteCount, inserted, true)
+    return this.mutate(target, start, deleteCount, inserted, true, undefined, admissions)
   }
 
   /** Locate one pending identity across both owned lists. */
@@ -204,6 +234,7 @@ export class ReactLoopInbox implements InboxContract {
     inserted: UserMessage[],
     discardRemoved: boolean,
     recallId?: Branded<'session-request-id'>,
+    admissions: InboxAdmission[] = [],
   ): UserMessage[] {
     const state = this.readState()
     const inbox = state[target]
@@ -234,10 +265,14 @@ export class ReactLoopInbox implements InboxContract {
       start: actualStart,
       ...(actualDeleteCount === 0 ? {} : { removedCount: actualDeleteCount }),
       inserted,
+      ...(admissions.length === 0 ? {} : { admissions }),
       ...(outcome === undefined ? {} : { outcome }),
       ...(recallId === undefined || recalled === undefined ? {} : { recall: { requestId: recallId, message: recalled } }),
     }
+    this.validateAdmissions(splice)
     const event = this.session.append('agent/inbox/spliced', splice)
+    for (const message of removed) this.admissions.delete(message.id)
+    for (const { messageId, ...admission } of event.data.admissions ?? []) this.admissions.set(messageId, admission)
     if (discardRemoved) {
       for (const message of removed) this.dispatch.emit('agent/inbox/discarded', { message })
     }
@@ -245,5 +280,31 @@ export class ReactLoopInbox implements InboxContract {
       this.dispatch.emit('agent/inbox/inserted', { message })
     }
     return removed
+  }
+
+  private restoreAdmissions(): void {
+    const pending: Record<InboxTarget, UserMessage[]> = { 'next-turn': [], 'next-step': [] }
+    for (const event of this.session.snapshotEvents()) {
+      if (event.type !== 'agent/inbox/spliced') continue
+      const splice = event.data
+      const list = pending[splice.target]
+      const removed = list.splice(splice.start, splice.removedCount ?? 0, ...splice.inserted)
+      for (const message of removed) this.admissions.delete(message.id)
+      for (const { messageId, ...admission } of splice.admissions ?? []) this.admissions.set(messageId, admission)
+    }
+  }
+
+  private validateAdmissions(splice: SessionEventMap['agent/inbox/spliced']): void {
+    const insertedIds = new Set(splice.inserted.map(message => message.id))
+    const seen = new Set<MessageId>()
+    for (const entry of splice.admissions ?? []) {
+      if (!insertedIds.has(entry.messageId) || seen.has(entry.messageId)) {
+        throw new Error(`invalid inbox admission for message "${entry.messageId}"`)
+      }
+      if (entry.surfaceIntent === undefined && (entry.followingMessages?.length ?? 0) === 0) {
+        throw new Error(`inbox admission for message "${entry.messageId}" carries no metadata`)
+      }
+      seen.add(entry.messageId)
+    }
   }
 }
