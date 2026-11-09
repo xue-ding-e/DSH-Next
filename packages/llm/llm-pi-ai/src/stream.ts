@@ -31,6 +31,13 @@ export function mapUsage(usage: PiUsage): TokenUsage {
   }
 }
 
+// pi-ai's SDK-backed providers render an HTTP failure as `<status> <body>`
+// (Anthropic and OpenAI SDK `APIError`, pi-messages `<status> <statusText>: …`).
+// The body can quote another hop's status, such as a gateway 500 that embeds its
+// upstream's 401, so when a message leads with a status the status rules read
+// only that status; other wordings scan the whole message.
+const LEADING_HTTP_STATUS = /^[45]\d\d\b/
+
 // XXX(pi-ai upstream): pi-ai flattens the caught error to `error.message`
 // (api/anthropic-messages.js: `errorMessage = error instanceof Error ?
 // error.message : JSON.stringify(error)`), discarding the original Error and its
@@ -40,21 +47,24 @@ export function mapUsage(usage: PiUsage): TokenUsage {
 // If pi-ai ever forwards the original Error (or a fetch/dispatcher hook that lets
 // us capture the cause ourselves), classify on `code`/`cause` instead of text.
 function classifyPiAiError(message: string): BuiltinLlmFailureCode {
-  if (/\b(?:401|403)\b/.test(message)) return 'AUTH'
+  const leadingStatus = LEADING_HTTP_STATUS.exec(message)?.[0]
+  const statusSource = leadingStatus ?? message
+  if (/\b(?:401|403)\b/.test(statusSource)) return 'AUTH'
   if (isQuotaExceededError(message)) return QUOTA_EXCEEDED_CODE
-  if (/\b429\b|rate.?limit/i.test(message)) return 'RATE_LIMIT'
+  if (/\b429\b/.test(statusSource) || /rate.?limit/i.test(message)) return 'RATE_LIMIT'
   // An oversized encoded body is recoverable, but only by a *smaller* request:
   // a gateway size cap can sit far below the model's context window and be
   // blown by image payloads the token meter prices cheaply, so classifying it
   // as a plain invalid request strands the session on a request that retries
   // identically forever. `compaction-basic` and `compaction-image-offload`
   // both handle this code by shrinking the request before retrying.
-  if (isRequestTooLargeError(message)) return REQUEST_TOO_LARGE_CODE
-  // Any other rejected request body: resending the same request cannot succeed,
-  // so it is invalid, not transient.
-  if (/\b413\b|payload too large|request body too large/i.test(message)) return 'INVALID_REQUEST'
-  if (/\b400\b|invalid.?request/i.test(message)) return 'INVALID_REQUEST'
-  if (/\b5\d\d\b/.test(message)) return 'SERVER'
+  // A leading response status owns the failure; a gateway body may quote an
+  // upstream size error without making this response a rejected request body.
+  if (leadingStatus === '413' || ((leadingStatus === undefined || leadingStatus === '400')
+    && isRequestTooLargeError(message))) return REQUEST_TOO_LARGE_CODE
+  if (/\b413\b/.test(statusSource)) return 'INVALID_REQUEST'
+  if (/\b400\b/.test(statusSource) || /invalid.?request/i.test(message)) return 'INVALID_REQUEST'
+  if (/\b5\d\d\b/.test(statusSource)) return 'SERVER'
   if (/\btime(?:d)?\s*out\b|timeout/i.test(message)) return 'TIMEOUT'
   // A stream truncated before the provider's terminal event: each pi-ai provider
   // throws its own wording when the wire closes mid-response without a terminal
