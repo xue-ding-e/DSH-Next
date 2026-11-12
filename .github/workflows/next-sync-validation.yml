@@ -37,8 +37,8 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - name: Build artifacts and verify aggregate types serially
         run: |
-          pnpm run build:artifacts -- --serial
-          pnpm run build:check -- --serial
+          pnpm run build:artifacts --serial
+          pnpm run build:check --serial
       - name: Verify retained Next behavior with synthetic fixtures
         run: >-
           pnpm exec vitest run
