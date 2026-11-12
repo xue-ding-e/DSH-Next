@@ -1,8 +1,7 @@
 name: DSH Next · Build and release
 
+# Release only by explicit manual dispatch; source sync must not publish.
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
 
 permissions:
