@@ -1,4 +1,6 @@
 // @vitest-environment jsdom
+import { createMenuStore } from '../../ui-context-menu/src/client/store.ts'
+import { MenuOverlay } from '../../ui-context-menu/src/client/View.tsx'
 import { contextMenuHook } from '@deepseek-ai/dsh-client-test-runtime'
 import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
 import type { GlobalStandardProps } from '@deepseek-ai/dsh-client-ui-slots'
@@ -1487,26 +1489,38 @@ describe('WorkspaceBrowser', () => {
     const preferences = createWorkspaceViewStore().create()
     preferences.actions.setGroupBy(mode === 'flat' ? 'flat' : 'workspace')
     preferences.actions.setGroupExpanded(mode === 'ungrouped' ? UNGROUPED_KEY : 'alpha', true)
+    const menu = createMenuStore().create()
+    const openMenu = vi.fn(menu.actions.open)
     const b = mount({
+      useStore: bindSnapshotSelector(preferences),
+      actions: preferences.actions,
+      useContextMenu: contextMenuHook(openMenu),
+
       useSessions: hook(sessionState([
         summary('draft', 2, { blank: true, title: 'Unsent draft', displayTitle: 'Unsent draft' }),
         summary('started', 1, { title: '新会话', displayTitle: '新会话' }),
       ], { main: sid('draft') })),
       useWorkspaces: hook(workspaceState(mode === 'ungrouped' ? [] : [workspace('alpha', ['draft', 'started'])])),
-      renderSlot: (name: string) => name === 'sidebar.workspaces.session.menu.item'
-        ? <button role="menuitem">Inspect session</button>
-        : null,
     })
+    render(<MenuOverlay t={key => key === 'back' ? 'Back' : 'Failed'}
+      useCatalog={select => select([])} useStore={bindSnapshotSelector(menu)} actions={menu.actions}
+      close={() => { menu.actions.close() }} select={vi.fn()}
+      renderSlot={(_name, owner) => {
+        expect(owner).toMatchObject({ target: { kind: 'session', value: { sessionId: sid('started'), displayTitle: '新会话' } } })
+        return <button role="menuitem">Inspect session</button>
+      }} />)
     expect(screen.queryByText('Unsent draft')).toBeNull()
     const row = screen.getByText('新会话').closest('[role="treeitem"]') as HTMLElement
     fireEvent.contextMenu(row, { clientX: 40, clientY: 60 })
     expect(screen.getByRole('menuitem', { name: 'Inspect session' })).toBeTruthy()
+    expect(openMenu.mock.calls.at(-1)?.[0]).toMatchObject({ kind: 'session', value: { sessionId: sid('started'), displayTitle: '新会话' } })
     expect(b.props.open).not.toHaveBeenCalled()
     fireEvent.keyDown(document, { key: 'Escape' })
     expect(screen.queryByRole('menuitem')).toBeNull()
     row.focus()
     fireEvent.keyDown(row, { key: 'F10', shiftKey: true })
     expect(screen.getByRole('menuitem', { name: 'Inspect session' })).toBeTruthy()
+    expect(openMenu.mock.calls.at(-1)?.[0]).toMatchObject({ kind: 'session', value: { sessionId: sid('started'), displayTitle: '新会话' } })
     expect(b.props.open).not.toHaveBeenCalled()
   })
 
