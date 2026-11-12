@@ -1,0 +1,67 @@
+name: Next source synchronization validation
+
+# Credential-free validation only. Packaging and publication remain manual.
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: next-sync-validation-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  linux:
+    if: github.repository == 'xue-ding-e/DSH-Next'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    env:
+      DSH_TELEMETRY_DISABLED: '1'
+      DSH_GATE_CONCURRENCY: '1'
+      DSH_OXLINT_THREADS: '2'
+      NODE_OPTIONS: --max-old-space-size=4096
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320
+        with:
+          version: 11.28.5
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: 24.22.1
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Build artifacts and verify aggregate types serially
+        run: |
+          pnpm run build:artifacts -- --serial
+          pnpm run build:check -- --serial
+      - name: Verify retained Next behavior with synthetic fixtures
+        run: >-
+          pnpm exec vitest run
+          packages/core/session/tests/append.spec.ts
+          packages/core/session/tests/conversation.spec.ts
+          packages/core/session/tests/conversation-append.spec.ts
+          packages/llm/llm-pi-ai/tests/convert.spec.ts
+          packages/llm/llm-pi-ai/tests/leading-status-body-cap.spec.ts
+          packages/api/session-controller/tests/session-edit.host.spec.ts
+          packages/api/session-controller/tests/queue-recall-transaction.host.spec.ts
+          packages/api/session-controller/tests/queue-recall-replay.host.spec.ts
+          packages/api/session-controller/tests/queue-recall-jsonl.host.spec.ts
+          packages/sandbox/sandbox-policy/tests
+          packages/session/working-directory/tests
+          packages/client/ui-conversation/tests/input-bar.client.spec.tsx
+          packages/client/ui-chat/tests/chat-view.client.spec.tsx
+          packages/client/ui-workspace/tests/rows.client.spec.tsx
+          packages/client/ui-workspace/tests/workspace-browser.client.spec.tsx
+          packages/client/ui-settings-account/tests/apply.client.spec.ts
+          packages/client/ui-settings-account/tests/account.client.spec.tsx
+          packages/experimental/liveshare/tests/viewer-access-policy.spec.ts
+          --maxWorkers=1
+      - name: Verify paired documentation and Next identity
+        run: |
+          pnpm run test:docs
+          node --test apps/desktop/tests/desktop-build-identity.test.mjs apps/desktop/tests/next-uninstall-protocol.test.mjs
