@@ -5,7 +5,7 @@ import { contextMenuHook } from '@deepseek-ai/dsh-client-test-runtime'
 import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
 import type { GlobalStandardProps } from '@deepseek-ai/dsh-client-ui-slots'
 import { Profiler } from 'react'
-import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, createEvent, fireEvent, render, screen as pageScreen, waitFor, within } from '@testing-library/react'
 import { allowAllAccess, bindSnapshotSelector, makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
 import type { SessionListState, SessionSummary } from '@deepseek-ai/dsh-api-session-controller/client'
@@ -23,7 +23,6 @@ import { createWorkspaceShortcutControls } from '../src/client/shortcuts.ts'
 import { createWorkspaceViewStore, FLAT_SESSION_ORDER_KEY } from '../src/client/stores.ts'
 import { UNGROUPED_KEY } from '../src/client/tree.ts'
 import { WorkspaceBrowser } from '../src/client/rows/WorkspaceBrowser.tsx'
-import { RecentSessions } from '../src/client/RecentSessions.tsx'
 import type { SidebarSectionRequest } from '../src/client/contract/slots.ts'
 import { renderMenuButton } from './menu-button.tsx'
 import rowCss from '../src/client/rows/Rows.module.css'
@@ -349,31 +348,32 @@ describe('WorkspaceBrowser', () => {
     expect(names()).toEqual(['newer', 'older'])
   })
 
-  it('opens recent Session shortcuts in last-use order without changing the Workspace tree', () => {
+  it('opens recent Session shortcuts in update order without changing the Workspace tree', () => {
     const b = mount({
       useSessions: hook(sessionState([summary('older', 10), summary('newer', 20)])),
-      useWorkspaces: hook(workspaceState([workspace('alpha', ['older', 'newer'])], [], [sid('older')])),
+      useWorkspaces: hook(workspaceState([workspace('alpha', ['older', 'newer'])])),
     })
     fireEvent.click(within(b.view.container).getByText('alpha'))
     const treeRows = () => within(b.view.container).getAllByRole('treeitem').map(row => row.textContent)
     const workspaceRows = treeRows()
     expect(workspaceRows).toEqual([
-      expect.stringContaining('alpha'), expect.stringContaining('older'), expect.stringContaining('newer'),
+      expect.stringContaining('alpha'), expect.stringContaining('newer'), expect.stringContaining('older'),
     ])
     const manualOrder = b.store.getSnapshot().sessionOrderByAccount
-    const view = render(<RecentSessions {...b.props} />)
-    const recent = within(view.container).getByRole('button', { name: 'newer' })
-    expect(within(view.container).getAllByRole('button').map(button => button.textContent)).toEqual(['newer', 'older'])
-    expect(within(view.container).getByRole('button', { name: 'older' })).toBeTruthy()
+    const section = within(b.view.container.querySelector('[data-sidebar-recent]') as HTMLElement)
+    const names = () => section.getAllByRole('listitem').map(row => row.textContent)
+    const recent = section.getByRole('button', { name: 'newer' })
+    expect(names()).toEqual(['newer', 'older'])
+    expect(section.getByRole('button', { name: 'older' })).toBeTruthy()
     fireEvent.click(recent)
     expect(b.props.open).toHaveBeenCalledWith(sid('newer'))
     act(() => { b.store.actions.recordOpened(sid('older'), 30) })
-    expect(within(view.container).getAllByRole('button').map(button => button.textContent)).toEqual(['older', 'newer'])
+    expect(names()).toEqual(['newer', 'older'])
     expect(treeRows()).toEqual(workspaceRows)
     expect(b.store.getSnapshot().sessionOrderByAccount).toEqual(manualOrder)
   })
 
-  it('keeps the five recent conversations independent of tree filters, pins and manual positions', () => {
+  it('keeps recent conversations separate from pins and tree order while honoring the archive filter', () => {
     const summaries = [
       ...['one', 'two', 'three', 'four', 'five', 'six'].map((id, index) => summary(id, index + 1)),
       summary('archived', 100), summary('blank', 200, { blank: true }),
@@ -385,36 +385,39 @@ describe('WorkspaceBrowser', () => {
         workspace('alpha', summaries.map(session => session.id)),
       ], [sid('archived')], [sid('one')])),
     })
-    const view = render(<RecentSessions {...b.props} />)
-    const names = () => within(view.container).getAllByRole('button').map(button => button.textContent)
+    const section = within(b.view.container.querySelector('[data-sidebar-recent]') as HTMLElement)
+    const names = () => section.getAllByRole('listitem').map(row => row.textContent)
     expect(names()).toEqual(['six', 'five', 'four', 'three', 'two'])
     act(() => {
       b.store.actions.setGroupBy('flat')
       b.store.actions.setSessionOrder(FLAT_SESSION_ORDER_KEY, ['one', 'two', 'three', 'four', 'five', 'six'], {})
       b.store.actions.setArchivedFilter('only')
     })
-    expect(names()).toEqual(['six', 'five', 'four', 'three', 'two'])
+    expect(names()).toEqual(['archived'])
     act(() => { b.store.actions.recordOpened(sid('one'), 20) })
-    expect(names()).toEqual(['one', 'six', 'five', 'four', 'three'])
-    view.rerender(<RecentSessions {...b.props} useSessions={hook(sessionState(
+    expect(names()).toEqual(['archived'])
+    act(() => { b.store.actions.setArchivedFilter('default') })
+    expect(names()).toEqual(['six', 'five', 'four', 'three', 'two'])
+    rerender(b, { useSessions: hook(sessionState(
       summaries.map(session => session.id === sid('two') ? { ...session, updatedAt: 30 } : session),
       { main: sid('blank') },
-    ))} />)
-    expect(names()).toEqual(['two', 'one', 'six', 'five', 'four'])
+    )) })
+    expect(names()).toEqual(['two', 'six', 'five', 'four', 'three'])
   })
 
   it('drags a recent conversation as a composer reference with its complete title', () => {
     const b = mount({ useSessions: hook(sessionState([summary('s1', 1, { title: 'Design ] review' })])) })
-    const view = render(<RecentSessions {...b.props} />)
-    const recent = within(view.container).getByRole('button', { name: 'Design ] review' })
+    const section = within(b.view.container.querySelector('[data-sidebar-recent]') as HTMLElement)
+    const recent = section.getByRole('button', { name: 'Design ] review' }).closest('[role="listitem"]') as HTMLElement
     const transfer = dragData()
     const manualOrder = b.store.getSnapshot().sessionOrderByAccount
     fireEvent.dragStart(recent, { dataTransfer: transfer })
     expect(recent.draggable).toBe(true)
-    expect(transfer.effectAllowed).toBe('copy')
-    expect(transfer.setData).toHaveBeenCalledExactlyOnceWith('application/x-dsh-session-reference', JSON.stringify({
+    expect(transfer.effectAllowed).toBe('copyMove')
+    expect(transfer.setData).toHaveBeenCalledWith('application/x-dsh-session-reference', JSON.stringify({
       sessionId: 's1', label: 'Design ] review', mention: '@[Design \\] review](dsh-session:InMxIg)',
     }))
+    expect(transfer.setData).toHaveBeenCalledWith('application/x-dsh-sidebar-session', JSON.stringify({ sessionId: 's1', source: 'recent' }))
     fireEvent.dragEnd(recent, { dataTransfer: transfer })
     expect(b.props.open).not.toHaveBeenCalled()
     expect(b.store.getSnapshot().sessionOrderByAccount).toEqual(manualOrder)

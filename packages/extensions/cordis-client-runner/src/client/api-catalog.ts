@@ -1045,7 +1045,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'StartSessionOptions',
-    declaration: 'export interface StartSessionOptions extends DraftInitializationOptions {\n    readonly agentPreset?: string;\n}',
+    declaration: 'export interface StartSessionOptions extends DraftInitializationOptions {\n    readonly agentPreset?: string;\n    readonly beforeOpen?: (sessionId: SessionId) => void;\n}',
   },
   {
     name: 'StoreDecl',
