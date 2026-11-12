@@ -5,6 +5,7 @@ import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { Menu, MenuItemButton, type MenuEntry } from '../src/Menu.tsx'
 import { POINTER_GRACE_MS } from '../src/pointer-grace.ts'
+import css from '../src/Menu.module.css'
 
 let panel: DOMRect
 let row: DOMRect
@@ -87,6 +88,21 @@ function childMenu() {
 }
 
 describe('Menu submenus', () => {
+  it.each(['check', 'fill'] as const)('keeps live %s selection on child choices', (selection) => {
+    const props = { open: true, anchor: null, items: entries, onClose: vi.fn(), selection }
+    const view = render(<Menu {...props} selectedId="first" />)
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Applications' }))
+    const first = screen.getByRole('menuitem', { name: 'First app' })
+    const second = screen.getByRole('menuitem', { name: 'Second app' })
+    const selectedClass = (selection === 'check' ? css.selected : css.selectedFill) as string
+    expect(first.classList.contains(selectedClass)).toBe(true)
+    expect(second.classList.contains(selectedClass)).toBe(false)
+    view.rerender(<Menu {...props} selectedIds={['second']} />)
+    expect(screen.getByRole('menuitem', { name: 'Second app' })).toBe(second)
+    expect(first.classList.contains(selectedClass)).toBe(false)
+    expect(second.classList.contains(selectedClass)).toBe(true)
+  })
+
   it('dismisses a non-contextual menu when an external marked trigger is pressed', () => {
     const close = vi.fn()
     render(<>

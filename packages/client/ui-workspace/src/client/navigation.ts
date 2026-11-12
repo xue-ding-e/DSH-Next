@@ -34,6 +34,12 @@ interface MainSelection {
 export interface StartSessionOptions extends DraftInitializationOptions {
   /** Agent preset the Session runs; the Host default when omitted. */
   readonly agentPreset?: string
+  /**
+   * Prepare the actual created or reused Session after draft initialization and before selection.
+   * Skipped after supersession, creation or draft failure, and when no Workspace can be selected.
+   * A throw aborts selection and releases the new reference, as with `openWorkspace`.
+   */
+  readonly beforeOpen?: (sessionId: SessionId) => void
 }
 
 /** Workspace archive and directory operations consumed by Client UI domains. */
@@ -335,7 +341,7 @@ class UiWorkspaceService extends Service implements UiWorkspace {
   }
 
   startSession(workspaceId?: WorkspaceId, options?: StartSessionOptions): void {
-    const { agentPreset, ...draft } = options ?? {}
+    const { agentPreset, beforeOpen, ...draft } = options ?? {}
     const draftOptions = options === undefined ? undefined : draft
     const initializeDraft = draftOptions !== undefined && (draftOptions.prompt !== undefined
       || (draftOptions.whenDraftExists ?? (draftOptions.clearPreviousDraft === true ? 'replace' : 'keep')) === 'replace')
@@ -357,10 +363,13 @@ class UiWorkspaceService extends Service implements UiWorkspace {
       this.clearMain()
       return
     }
-    const opening = this.openWorkspace(target, initializeDraft ? (id) => {
-      const binding = this.sessions.binding(id)
-      if (binding === undefined) this.draftPreparationFailed()
-      this.prepareDraft(binding, draftOptions)
+    const opening = this.openWorkspace(target, initializeDraft || beforeOpen !== undefined ? (id) => {
+      if (initializeDraft) {
+        const binding = this.sessions.binding(id)
+        if (binding === undefined) this.draftPreparationFailed()
+        this.prepareDraft(binding, draftOptions)
+      }
+      beforeOpen?.(id)
     } : undefined, agentPreset === undefined ? {} : { agentPreset })
     void opening.catch(
       (reason: unknown) => { console.warn('new session failed:', reason) },

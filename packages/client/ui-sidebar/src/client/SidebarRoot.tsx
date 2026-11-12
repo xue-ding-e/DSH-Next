@@ -439,7 +439,6 @@ export function SidebarRoot({
               )}
             </nav>
           )}
-          {renderSlot('sidebar.recent', { wide, expandSidebar: () => { if (collapsed) toggleSidebar() } })}
           <div className={css.regionArea}>
             {renderSlot('sidebar.workspaces', {
               wide,

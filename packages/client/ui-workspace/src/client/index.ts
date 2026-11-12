@@ -44,11 +44,12 @@ import {
   type SessionArchiveConfirmInjected, type SessionArchiveConfirmRequest,
   type RenameSessionInjected, type RowToast, type RowToastInjected, type RowToastState, type SessionRenameDialogInjected,
   type WorkspaceActionRequest, type SessionIdInjected, type WorkspaceBrowserInjected, type WorkspacePickerInjected,
+  type SidebarSectionRequest,
 } from './contract/slots.ts'
 import { createWorkspaceShortcutControls, installWorkspaceShortcuts } from './shortcuts.ts'
 import { UiWorkspaceService } from './navigation.ts'
 import { createWorkspaceViewStore } from './stores.ts'
-import { RecentSessions } from './RecentSessions.tsx'
+import { sidebarOrganizationOf } from './sidebar-organization.ts'
 import { WorkspaceBrowser } from './rows/WorkspaceBrowser.tsx'
 import { ArchiveSessionRowButton, SessionArchiveConfirmDialog } from './session-actions/ArchiveSession.tsx'
 import { derive } from './session-actions/derived.ts'
@@ -152,6 +153,11 @@ export function apply(ctx: Context): void {
   const viewHandle = createWorkspaceViewStore()
   const viewInstance = viewHandle.create()
   const viewStore: typeof viewHandle = { ...viewHandle, create: () => viewInstance }
+  const sidebarSectionRequest = createSnapshotStore<SidebarSectionRequest | null>(null)
+  let sidebarSectionSequence = 0
+  const requestSidebarSection = (sessionId?: SessionId): void => {
+    sidebarSectionRequest.set({ ...(sessionId === undefined ? {} : { sessionId }), sequence: ++sidebarSectionSequence })
+  }
   const rowToast = createSnapshotStore<RowToastState | null>(null)
   let toastSeq = 0
   const notify = (toast: RowToast): void => { rowToast.set({ ...toast, seq: ++toastSeq }) }
@@ -332,15 +338,10 @@ export function apply(ctx: Context): void {
       'workspace.fork': IconBranchOutlineRegular, 'workspace.copy': IconCopyOutlineRegular,
     })) yield ctx.slots.register({ name: 'contextMenu.icon', key }, Icon)
   })
-  ctx.effect(() => ctx.remoteAccess.whenAccess('session/openWorkspacePath', () =>
-    ctx.remoteAccess.whenAccess('session/canOpenWorkspacePath', () => ctx.contextMenus.register({
-      id: 'workspace.openFolder', target: 'workspace', order: 50,
-      observe: () => [ctx.workspaces.list, ctx.locale],
-      resolve: ({ workspaceId }) => [{
-        id: 'openFolder', label: ctx.locale.bind(NS)('open.workspaceFolder'), icon: { key: 'workspace.openFolder' },
-        run: () => { openWorkspaceFolder(workspaceId) },
-      }],
-    }))), 'workspace: open primary folder menu action')
+  // The official ui-open-in-app package owns the workspace "Show in folder"
+  // context-menu action. Keep this guarded opener on the Workspace service face
+  // for callers that need its workspace-id validation and cancellation, but do
+  // not register a second visible action for the same target.
   ctx.effect(() => ctx.contextMenus.register({
     id: 'workspace.rename', target: 'workspace', order: 100,
     resolve: ({ workspaceId, displayTitle }) => ctx.remoteAccess.source('workspace', workspaceId, 'workspace/rename').getSnapshot()
@@ -372,15 +373,15 @@ export function apply(ctx: Context): void {
     unarchiveSession: async (sessionId) => { await uiWorkspace.unarchiveSession(sessionId) },
     createWorkspace: input => workspaces.create(input),
     requestSearch: shortcutControls.search,
+    requestSidebarSection,
+    closeSidebarSectionRequest: () => { sidebarSectionRequest.set(null) },
     requestAddWorkspace: shortcutControls.add,
     closeAddWorkspace: shortcutControls.closeAdd,
     setDirectoryBusy: shortcutControls.directoryBusy,
-    hooks: { workspaceActionRequest, contextMenuTarget: ctx.contextMenus.active, directoryFlow: browserFlowSource, hostInfo,
+    hooks: { workspaceActionRequest, sidebarSectionRequest, contextMenuTarget: ctx.contextMenus.active,
+      directoryFlow: browserFlowSource, hostInfo,
       workspaceShortcuts: shortcutControls.state, shortcuts: ctx.shortcuts.catalog },
   })
-  ctx.slots.inject('sidebar.recent', () => ctx.slots.register({
-    name: 'sidebar.recent', store: viewStore, locale: NS, inject: () => ({ open: openSession }),
-  }, RecentSessions))
   const pickerInjected = (): WorkspacePickerInjected => ({
     createWorkspace: input => workspaces.create(input),
     hooks: { directoryFlow: pickerFlowSource },
@@ -412,6 +413,30 @@ export function apply(ctx: Context): void {
   registerSessionMenus(ctx, {
     ...pinInjected(), ...archiveInjected(), ...renameInjected(), ...forkInjected(), ...sessionIdInjected(),
   })
+  ctx.effect(() => ctx.contextMenus.register({
+    id: 'workspace.sidebar-section', target: 'session', order: 250,
+    observe: () => [viewInstance, ctx.locale, sessions.list, workspaces.list],
+    resolve: ({ sessionId }) => {
+      const session = sessions.list.getSnapshot().byId[sessionId]
+      if (session === undefined || session.blank || session.origin === 'subagent'
+        || workspaces.list.getSnapshot().archivedSessionIds.includes(sessionId)) return []
+      const t = ctx.locale.bind(NS)
+      const organization = sidebarOrganizationOf(viewInstance.getSnapshot())
+      const assigned = organization.sections.find(section => section.sessionIds.includes(sessionId))
+      return [{
+        id: 'move', label: t('sidebar.moveToSection'), children: [
+          ...organization.sections.map(section => ({
+            id: section.id, label: section.title, disabled: section.id === assigned?.id,
+            run: () => { viewInstance.actions.moveSessionToSidebarSection(sessionId, section.id) },
+          })),
+          { id: 'recent', label: t('section.recent'), disabled: assigned === undefined,
+            run: () => { viewInstance.actions.moveSessionToSidebarSection(sessionId) } },
+          { id: 'new', label: t('sidebar.newSection'), separatorBefore: true,
+            run: () => { requestSidebarSection(sessionId) } },
+        ],
+      }]
+    },
+  }), 'workspace: sidebar section assignment')
   ctx.slots.inject('sidebar.workspaces.session.row.action', function* () {
     yield ctx.slots.register({ name: 'sidebar.workspaces.session.row.action', id: 'archive', order: 100, locale: NS, inject: archiveInjected }, ArchiveSessionRowButton)
     yield ctx.slots.register({ name: 'sidebar.workspaces.session.row.action', id: 'pin', order: 200, locale: NS, inject: pinInjected }, PinSessionRowButton)

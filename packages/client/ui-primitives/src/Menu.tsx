@@ -547,6 +547,7 @@ export function Menu({ open, anchor, items = [], children, submenuBackLabel, sel
       {portal ? (list !== false && createPortal(list, document.body)) : list}
       {open && exiting === undefined && submenu.entry !== undefined && <SubmenuPanel key={submenu.entry.id}
         entry={submenu.entry} submenu={submenu} compact={compact} dense={dense} contextual={contextual}
+        selectedId={selectedId} selectedIds={selectedIds} selection={selection}
         backLabel={submenuBackLabel ?? submenu.entry.label} onSelect={onSelect} onClose={onClose} afterSelection={refocusAfterSelection} />}
     </span>
   )

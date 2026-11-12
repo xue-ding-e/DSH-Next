@@ -5,8 +5,8 @@ import { contextMenuHook } from '@deepseek-ai/dsh-client-test-runtime'
 import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
 import type { GlobalStandardProps } from '@deepseek-ai/dsh-client-ui-slots'
 import { Profiler } from 'react'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { act, cleanup, createEvent, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest'
+import { act, cleanup, createEvent, fireEvent, render, screen as pageScreen, waitFor, within } from '@testing-library/react'
 import { allowAllAccess, bindSnapshotSelector, makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
 import type { SessionListState, SessionSummary } from '@deepseek-ai/dsh-api-session-controller/client'
 import type {
@@ -24,6 +24,7 @@ import { createWorkspaceViewStore, FLAT_SESSION_ORDER_KEY } from '../src/client/
 import { UNGROUPED_KEY } from '../src/client/tree.ts'
 import { WorkspaceBrowser } from '../src/client/rows/WorkspaceBrowser.tsx'
 import { RecentSessions } from '../src/client/RecentSessions.tsx'
+import type { SidebarSectionRequest } from '../src/client/contract/slots.ts'
 import { renderMenuButton } from './menu-button.tsx'
 import rowCss from '../src/client/rows/Rows.module.css'
 import { zh } from '../src/client/locales.ts'
@@ -31,6 +32,18 @@ import { zh } from '../src/client/locales.ts'
 // Every fixture carries the resource hook the resources plugin merges into GlobalStandardProps.
 const useResource = (() => ({ status: 'none' as const, value: undefined, failure: undefined, reload: () => {} })) as GlobalStandardProps['useResource']
 const usePanelInfo: GlobalStandardProps['usePanelInfo'] = selector => selector({ activePanelId: null })
+
+// Tree/search assertions exclude the independent shortcuts, which can repeat
+// Session titles even when that Session's Workspace is collapsed or filtered.
+const screen = {
+  ...pageScreen,
+  getByText(...[text, options]: Parameters<typeof pageScreen.getByText>) {
+    return pageScreen.getByText(text, { ...options, ignore: 'script, style, [data-sidebar-section] *' })
+  },
+  queryByText(...[text, options]: Parameters<typeof pageScreen.queryByText>) {
+    return pageScreen.queryByText(text, { ...options, ignore: 'script, style, [data-sidebar-section] *' })
+  },
+}
 
 afterEach(cleanup)
 const scrollIntoView = vi.fn()
@@ -118,9 +131,16 @@ const SECTION_SCROLLER = { bindScrollerRef: () => {} }
 function mount(overrides: Partial<WorkspaceBrowserProps> = {}) {
   const controls = createWorkspaceShortcutControls()
   const request = createSnapshotStore<WorkspaceActionRequest | null>(null)
+  const sectionRequest = createSnapshotStore<SidebarSectionRequest | null>(null)
+  let sectionRequestSequence = 0
   const store = createWorkspaceViewStore().create()
   const props: WorkspaceBrowserProps = {
     useWorkspaceActionRequest: bindSnapshotSelector(request),
+    useSidebarSectionRequest: bindSnapshotSelector(sectionRequest),
+    requestSidebarSection: (sessionId) => {
+      sectionRequest.set({ ...(sessionId === undefined ? {} : { sessionId }), sequence: ++sectionRequestSequence })
+    },
+    closeSidebarSectionRequest: () => { sectionRequest.set(null) },
     settleWorkspaceAction: () => { request.set(null) },
     requestWorkspaceEdit: (workspaceId, displayTitle) => {
       const storedTitle = props.useWorkspaces(state => state.items.find(row => row.workspaceId === workspaceId)?.title ?? displayTitle)
@@ -179,6 +199,82 @@ function rerender(b: ReturnType<typeof mount>, overrides: Partial<WorkspaceBrows
 }
 
 describe('WorkspaceBrowser', () => {
+  it('places the Projects checkbox directly below a non-interactive Show label', () => {
+    const b = mount()
+    const openOptions = () => {
+      fireEvent.click(screen.getByRole('button', { name: '分区“最近”的操作' }))
+    }
+    openOptions()
+    const menu = screen.getByRole('menuitem', { name: '整理侧边栏' }).closest('[role="menu"]')!
+    expect(Array.from(menu.querySelectorAll<HTMLElement>('[role="menuitem"], [role="separator"], [role="presentation"]'))
+      .filter(node => node.getAttribute('role') !== 'presentation' || node.childElementCount === 0)
+      .map(node => ({
+        role: node.getAttribute('role'),
+        text: node.textContent,
+        submenu: node.getAttribute('aria-haspopup') === 'menu',
+      }))).toMatchInlineSnapshot(`
+        [
+          {
+            "role": "menuitem",
+            "submenu": true,
+            "text": "整理侧边栏",
+          },
+          {
+            "role": "menuitem",
+            "submenu": true,
+            "text": "聊天排序",
+          },
+          {
+            "role": "presentation",
+            "submenu": false,
+            "text": "显示",
+          },
+          {
+            "role": "menuitem",
+            "submenu": false,
+            "text": "项目",
+          },
+          {
+            "role": "separator",
+            "submenu": false,
+            "text": "",
+          },
+          {
+            "role": "menuitem",
+            "submenu": false,
+            "text": "新建分区",
+          },
+        ]
+      `)
+    expect(screen.getByText('显示')).toBeTruthy()
+    expect(screen.queryByRole('menuitem', { name: '显示' })).toBeNull()
+    const projects = screen.getByRole('menuitem', { name: '项目' })
+    expect(projects.hasAttribute('aria-haspopup')).toBe(false)
+    expect(b.store.getSnapshot().sidebar?.showProjects ?? true).toBe(true)
+    fireEvent.click(projects)
+    expect(b.store.getSnapshot().sidebar?.showProjects).toBe(false)
+    openOptions()
+    fireEvent.click(screen.getByRole('menuitem', { name: '项目' }))
+    expect(b.store.getSnapshot().sidebar?.showProjects).toBe(true)
+  })
+
+  it('creates a section for the captured Session while Projects are hidden', () => {
+    const b = mount({ useSessions: hook(sessionState([summary('captured', 10)])) })
+    act(() => {
+      b.store.actions.setShowProjects(false)
+      b.props.requestSidebarSection(sid('captured'))
+    })
+    const dialog = screen.getByRole('dialog')
+    const input = within(dialog).getByRole('textbox')
+    fireEvent.change(input, { target: { value: 'Planning' } })
+    fireEvent.keyDown(input, { key: 'Enter' })
+    const section = b.store.getSnapshot().sidebar?.sections[0]
+    expect(section).toMatchObject({ title: 'Planning', sessionIds: ['captured'] })
+    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(b.props.createWorkspace).not.toHaveBeenCalled()
+    expect(b.props.open).not.toHaveBeenCalled()
+  })
+
   it.each(['workspace', 'flat', 'ungrouped'] as const)('passes the standard menu factory through the %s list', (mode) => {
     const preferences = createWorkspaceViewStore().create()
     preferences.actions.setGroupBy(mode === 'flat' ? 'flat' : 'workspace')
@@ -2035,6 +2131,46 @@ describe('WorkspaceBrowser', () => {
     }
   })
 
+  it.each([false, true])('keeps sidebar sections mounted when empty search opens (Recent collapsed: %s)', (collapsed) => {
+    const items = Array.from({ length: 24 }, (_, index) => summary(`recent-${index}`, 100 - index))
+    const b = mount({
+      useSessions: hook(sessionState(items)),
+      useWorkspaces: hook(workspaceState([], [], [sid('recent-0')])),
+    })
+    act(() => {
+      b.store.actions.createSidebarSection('saved', 'Saved chats')
+      b.store.actions.moveSessionToSidebarSection(sid('recent-1'), 'saved')
+    })
+    const recent = pageScreen.getByRole('region', { name: '最近' })
+    const pinned = pageScreen.getByRole('region', { name: '置顶' })
+    const saved = pageScreen.getByRole('region', { name: 'Saved chats' })
+    fireEvent.click(within(recent).getByRole('button', { name: '显示更多' }))
+    expect(recent.querySelectorAll('[data-row-key^="recent-session:"]')).toHaveLength(22)
+    const heading = within(recent).getByRole('button', { name: '最近' })
+    if (collapsed) fireEvent.click(heading)
+
+    fireEvent.click(within(recent).getByRole('button', { name: '搜索聊天' }))
+    const input = screen.getByPlaceholderText<HTMLInputElement>('搜索会话名称')
+    expect(document.activeElement).toBe(input)
+    expect(pageScreen.getByRole('region', { name: '最近' })).toBe(recent)
+    expect(pageScreen.getByRole('region', { name: '置顶' })).toBe(pinned)
+    expect(pageScreen.getByRole('region', { name: 'Saved chats' })).toBe(saved)
+    expect(heading.getAttribute('aria-expanded')).toBe(String(!collapsed))
+    expect(recent.querySelectorAll('[data-row-key^="recent-session:"]')).toHaveLength(22)
+    fireEvent.change(input, { target: { value: '   ' } })
+    expect(pageScreen.getByRole('region', { name: '最近' })).toBe(recent)
+    expect(b.props.searchSessions).not.toHaveBeenCalled()
+
+    fireEvent.change(input, { target: { value: 'recent-23' } })
+    expect(pageScreen.queryByRole('region', { name: '最近' })).toBeNull()
+    expect(screen.getByRole('tree', { name: '搜索结果' })).toBeTruthy()
+    fireEvent.change(input, { target: { value: '' } })
+    expect(pageScreen.getByRole('region', { name: '最近' })
+      .querySelector('[aria-expanded]')?.getAttribute('aria-expanded')).toBe(String(!collapsed))
+    fireEvent.keyDown(input, { key: 'Escape' })
+    expect(pageScreen.getByRole('region', { name: '最近' })).toBeTruthy()
+  })
+
   it.each(['clear', 'escape', 'outside'] as const)('animates %s search dismissal without carrying spacing motion through the rail', (dismissal) => {
     vi.useFakeTimers()
     try {
@@ -2425,7 +2561,7 @@ describe('WorkspaceBrowser', () => {
     rerender(b, {
       useWorkspaces: hook(workspaceState([workspace('alpha', ['one', 'two', 'three'])], [], [sid('one')])),
     })
-    fireEvent.dragEnd(within(b.view.container).getByText('one').closest('[role="treeitem"]') as HTMLElement)
+    fireEvent.dragEnd(within(screen.getByRole('tree')).getByText('one').closest('[role="treeitem"]') as HTMLElement)
     expect(b.store.getSnapshot().sessionOrderByAccount.alpha).toEqual(before)
 
     // The source unpins in flight.
@@ -2440,7 +2576,7 @@ describe('WorkspaceBrowser', () => {
     rerender(b, {
       useWorkspaces: hook(workspaceState([workspace('alpha', ['one', 'two', 'three'])], [], [sid('two')])),
     })
-    fireEvent.dragEnd(within(b.view.container).getByText('one').closest('[role="treeitem"]') as HTMLElement)
+    fireEvent.dragEnd(within(screen.getByRole('tree')).getByText('one').closest('[role="treeitem"]') as HTMLElement)
     expect(b.store.getSnapshot().sessionOrderByAccount.alpha).toEqual(before)
   })
 
@@ -2618,7 +2754,7 @@ describe('WorkspaceBrowser', () => {
     await waitFor(() => { expect(screen.queryByRole('dialog', { name: t('workspace.edit') })).toBeNull() })
     expect(b.props.startSession).not.toHaveBeenCalled()
     expect(b.props.open).not.toHaveBeenCalled()
-    expect(within(b.view.container).getByText('current')).toBeTruthy()
+    expect(within(screen.getByRole('tree')).getByText('current')).toBeTruthy()
     expect(project.path).toBe('/projects/alpha')
     expect(project.sessionIds).toEqual([sid('current')])
   })

@@ -1,6 +1,6 @@
 ---
 name: dsh-client-ui-ux
-description: Design and review DeepSeek Harness user-visible UI changes: visual tokens, reusable components, Lexical editor focus, alignment, spacing, geometry, interaction, conversation drag feedback, native desktop notifications, overlay and menu safety, platform adaptation, loading states, and error placement. Use before changing UI in client, experimental, or app packages; verify affected rendered results before handoff.
+description: Design and review DeepSeek Harness user-visible UI changes: visual tokens, reusable components, Lexical editor focus, alignment, spacing, geometry, interaction, conversation drag feedback, native desktop notifications, overlay and menu safety, platform adaptation, loading states, error placement, and packaged Desktop build identity. Use before changing UI in client, experimental, or app packages; verify affected rendered results before handoff.
 ---
 
 # DeepSeek Harness UI development
@@ -29,7 +29,13 @@ These checks apply even to small changes; optional documentation does not make i
 
 If a required scene is unavailable, state what was not checked, why and how it can be verified; a labeled production-component fixture can provide partial evidence, not an actual-page pass. Do not claim verification complete while required checks remain missing. Run the original applicable tests; source inspection and passing tests alone do not establish the rendered result.
 
+For packaged Desktop changes, verify the active process's executable path and the installed `resources/app.asar` before visual acceptance. Read its manifest with `@electron/asar.extractFile(asarPath, 'package.json')`, compare its version and SHA-256 with the selected packaged artifact, and repeat after restarting the application. In this pnpm workspace, run from `apps/desktop`: `createRequire(import.meta.url)` resolves `electron-builder/package.json`; a require based on that path resolves `app-builder-lib/package.json`; a require based on that path loads `@electron/asar`. The root has no direct dependency on these packages. With the installed ASAR 3.4.1 on Windows, construct nested archive entry names with `node:path.join`; forward-slash entry names were not resolved. Activate the native window before capturing it: an occluded-window capture can retain an older frame. When the installed identity differs, update that installation and establish its identity before assessing the rendered change. A matching artifact establishes which bytes run; the screenshot and interaction checks establish their behavior.
+
+On Windows, `pnpm --dir apps/desktop exec electron-builder --config electron-builder.config.mjs --prepackaged <win-unpacked> --win nsis --x64 --publish never` can create an installer from a validated directory build. This bypasses `doPack()` and its `beforeBuild`, `beforePack` and `afterPack` hooks: require the normal directory package and packaged runtime smoke to pass first, retain its distribution/version/commit environment, and compare the ASAR hash before and after. If the active installation and Windows registration point to different directories, use NSIS to reconcile them. Its preflight requires an empty new target or the registered application directory; an unregistered nonempty target exits with code 2 before extraction. Preserve such a target by a same-volume rename, install with `/S` and an absolute `/D=...` as the final argument, then verify private installation registration, Uninstall metadata and DSH shortcuts. [InstallerPreflight](../../../apps/desktop/installer/path.nsh) and the [directory adapter](../../../apps/desktop/scripts/windows-directory-installer.mjs) own this behavior; keep their safety checks.
+
 Read unchanged owners once; consult examples for uncertain judgments. Inspect relevant states and actual usage sizes, not a fixed screenshot count or every width × theme × state combination. Batch related edits and reuse a current application instance and valid evidence. Documentation-only changes and refactors with evidence of unchanged rendering need no new UI captures; state that basis.
+
+Web E2E tests using `launchWebScaffold` belong to the Host program. Register a new file beside the existing cases in `apps/web/tsconfig.json`'s explicit exclusions and `tsconfig.host.json`'s includes; the Client program must not compile the scaffold's Host Context merges. Check both owners with `pnpm exec tsc -p apps/web/tsconfig.json --noEmit --pretty false` and `pnpm exec tsc -b tsconfig.host.json --pretty false`. A mistaken Client inclusion can emit `.js`, `.d.ts` and maps alongside imported test-support sources despite `rootDir` errors. Match such untracked files to the failed compiler's exact paths and timestamps before cleaning them; retain authored source and correct program ownership before rebuilding.
 
 When a before/after comparison is needed, preserve the actual starting implementation, including uncommitted work, and use comparable capture conditions. Never recreate a missing before image and present it as an original. Protect existing work regardless of whether extra evidence is needed.
 
@@ -123,6 +129,10 @@ Verify the invitation while a native browser drag is still held, then release on
 - Failed operations retain visible data; failed deletion keeps the row.
 - Surface-owned failures use in-place notices: query failure with Retry or field validation. Keep a compact notice beside populated content; only empty panels center a full error state.
 - Use short plain-language errors, preferably one sentence, without internal jargon except necessary diagnostic codes. Chinese notices of at most two sentences omit the trailing 句号（。）. Reserve space or overlay notices so neighbors do not shift.
+
+### Sidebar search
+
+Distinguish opening or focusing the field from entering a nonempty query. Keep navigation sections mounted while the trimmed query is empty, including whitespace-only input. Verify opening search from Recent preserves its heading, collapse state, expanded rows, and focus; exercise typing, clearing, Escape, and opening a retained conversation in the assembled page, with pins and custom sections present.
 
 ### Loading states
 

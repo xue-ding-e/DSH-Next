@@ -12,7 +12,7 @@ import type { SessionProjectionSnapshot } from '@deepseek-ai/dsh-api-session-con
 import {
   type ArchivedFilter,
   deriveFlat, deriveGroups, deriveSearchResults, orderByRecency, owningGroupKey, owningParentFolder,
-  pinCurrentBlank, recentSessionIds, reconcileManualOrder, sessionMemberIds, visibleSessionIds, workspaceLabel, UNGROUPED_KEY,
+  pinCurrentBlank, reconcileManualOrder, sessionMemberIds, visibleSessionIds, workspaceLabel, UNGROUPED_KEY,
 } from '../src/client/tree.ts'
 import { createWorkspaceViewStore } from '../src/client/stores.ts'
 
@@ -135,11 +135,6 @@ describe('Session ordering', () => {
       [sid('unknown'), sid('tie-b'), sid('older'), sid('tie-a')],
       summaries,
     )).toEqual([sid('tie-a'), sid('tie-b'), sid('older')])
-  })
-
-  it('orders equally recent conversations by stable Session identity', () => {
-    const sessions = list(summary('tie-b', 20), summary('tie-a', 20))
-    expect(recentSessionIds(sessions, [], 5)).toEqual([sid('tie-a'), sid('tie-b')])
   })
 
   it('orders each partition strictly by Session recency, independent of pin-array order', () => {
@@ -265,12 +260,11 @@ describe('deriveGroups', () => {
     expect(deriveGroups(sessions, [], noRows, noAttention, view([UNGROUPED_KEY]))).toEqual([])
   })
 
-  it.each(['新会话', 'New Session'])('keeps a started conversation titled %s visible in lists, recent and search', (title) => {
+  it.each(['新会话', 'New Session'])('keeps a started conversation titled %s visible in lists and search', (title) => {
     const started = { ...summary('started', 1), title, displayTitle: title }
     const draft = { ...summary('draft', 2), title, displayTitle: title, blank: true }
     const sessions = withMain(list(started, draft), draft.id)
     expect(visibleSessionIds(sessions, [], 'default')).toEqual([started.id])
-    expect(recentSessionIds(sessions, [], 5)).toEqual([started.id])
     expect(deriveFlat(sessions, sessions.ids, noRows, noAttention)).toMatchObject([{ id: started.id, title }])
     expect(deriveSearchResults(
       sessions, [workspace('alpha', ['started', 'draft'])], title, [], 'default', noAttention,

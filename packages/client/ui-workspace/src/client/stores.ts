@@ -9,6 +9,7 @@ import { defineStore, type EngineStoreHandle } from '@deepseek-ai/dsh-client-sto
 import type { SessionListState } from '@deepseek-ai/dsh-api-session-controller/client'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import { reconcileManualOrder, type ArchivedFilter, type SessionRowState } from './tree.ts'
+import { sidebarOrganizationOf, type SidebarOrganization } from './sidebar-organization.ts'
 
 /** Browser-local order account for the hierarchy-free flat Session list. */
 export const FLAT_SESSION_ORDER_KEY = '__flat_session_order__'
@@ -30,6 +31,8 @@ type WorkspaceViewState = {
   archivedFilter?: ArchivedFilter
   /** Latest navigation time per Session, retained across reloads on this device. */
   openedAt?: Record<string, number>
+  /** Sidebar-only organization; absent in historical v5 snapshots. */
+  sidebar?: SidebarOrganization
 }
 
 type SessionOrderSource = {
@@ -69,6 +72,20 @@ type WorkspaceViewActions = {
   ) => void
   setArchivedFilter: (draft: WorkspaceViewState, filter: ArchivedFilter) => void
   recordOpened: (draft: WorkspaceViewState, sessionId: SessionId, time: number) => void
+  setRecentCollapsed: (draft: WorkspaceViewState, collapsed: boolean) => void
+  setPinnedCollapsed: (draft: WorkspaceViewState, collapsed: boolean) => void
+  setProjectsCollapsed: (draft: WorkspaceViewState, collapsed: boolean) => void
+  setShowProjects: (draft: WorkspaceViewState, show: boolean) => void
+  setRecentSort: (draft: WorkspaceViewState, mode: SidebarOrganization['recentSort'], initialOrder: readonly string[]) => void
+  setRecentOrder: (draft: WorkspaceViewState, order: readonly string[]) => void
+  setSidebarPinnedOrder: (draft: WorkspaceViewState, order: readonly string[]) => void
+  createSidebarSection: (draft: WorkspaceViewState, id: string, title: string) => void
+  renameSidebarSection: (draft: WorkspaceViewState, id: string, title: string) => void
+  deleteSidebarSection: (draft: WorkspaceViewState, id: string) => void
+  setSidebarSectionCollapsed: (draft: WorkspaceViewState, id: string, collapsed: boolean) => void
+  insertSidebarSectionBefore: (draft: WorkspaceViewState, id: string, beforeId?: string) => void
+  moveSessionToSidebarSection: (draft: WorkspaceViewState, sessionId: SessionId, sectionId?: string, beforeSessionId?: SessionId) => void
+  setSidebarSectionOrder: (draft: WorkspaceViewState, id: string, order: readonly string[]) => void
 }
 
 /** Copy read-only projections into the persisted mutable store representation. */
@@ -76,6 +93,18 @@ function copySessionOrders(
   orders: Readonly<Record<string, readonly string[]>>,
 ): Record<string, string[]> {
   return Object.fromEntries(Object.entries(orders).map(([key, order]) => [key, [...order]]))
+}
+
+/** Create mutable defaults only when an action first changes a historical snapshot. */
+function ensureSidebar(draft: WorkspaceViewState): SidebarOrganization {
+  return draft.sidebar ??= {
+    ...sidebarOrganizationOf(draft), recentOrder: [], pinnedOrder: [], sections: [],
+  }
+}
+
+/** A visible reorder preserves references absent from the current catalog. */
+function preserveSidebarOrder(order: readonly string[], saved: readonly string[]): string[] {
+  return [...new Set([...order, ...saved])]
 }
 
 /**
@@ -129,6 +158,73 @@ export function createWorkspaceViewStore(): EngineStoreHandle<WorkspaceViewState
       },
       setArchivedFilter: (d, filter: ArchivedFilter) => { d.archivedFilter = filter },
       recordOpened: (d, sessionId, time) => { (d.openedAt ??= {})[sessionId] = time },
+      setRecentCollapsed: (d, collapsed) => { ensureSidebar(d).recentCollapsed = collapsed },
+      setPinnedCollapsed: (d, collapsed) => { ensureSidebar(d).pinnedCollapsed = collapsed },
+      setProjectsCollapsed: (d, collapsed) => { ensureSidebar(d).projectsCollapsed = collapsed },
+      setShowProjects: (d, show) => { ensureSidebar(d).showProjects = show },
+      setRecentSort: (d, mode, initialOrder) => {
+        const sidebar = ensureSidebar(d)
+        if (mode === sidebar.recentSort) return
+        if (mode === 'manual') sidebar.recentOrder = preserveSidebarOrder(initialOrder, sidebar.recentOrder)
+        sidebar.recentSort = mode
+      },
+      setRecentOrder: (d, order) => {
+        const sidebar = ensureSidebar(d)
+        sidebar.recentSort = 'manual'
+        sidebar.recentOrder = preserveSidebarOrder(order, sidebar.recentOrder)
+      },
+      setSidebarPinnedOrder: (d, order) => {
+        const sidebar = ensureSidebar(d)
+        sidebar.pinnedOrder = preserveSidebarOrder(order, sidebar.pinnedOrder)
+      },
+      createSidebarSection: (d, id, title) => {
+        const sidebar = ensureSidebar(d)
+        if (sidebar.sections.some(section => section.id === id)) return
+        sidebar.sections.push({ id, title, collapsed: false, sessionIds: [] })
+      },
+      renameSidebarSection: (d, id, title) => {
+        const section = d.sidebar?.sections.find(section => section.id === id)
+        if (section !== undefined) section.title = title
+      },
+      deleteSidebarSection: (d, id) => {
+        const sections = d.sidebar?.sections
+        const index = sections?.findIndex(section => section.id === id)
+        if (sections !== undefined && index !== undefined && index !== -1) sections.splice(index, 1)
+      },
+      setSidebarSectionCollapsed: (d, id, collapsed) => {
+        const section = d.sidebar?.sections.find(section => section.id === id)
+        if (section !== undefined) section.collapsed = collapsed
+      },
+      insertSidebarSectionBefore: (d, id, beforeId) => {
+        const sidebar = d.sidebar
+        if (sidebar === undefined) return
+        const sections = sidebar.sections
+        const section = sections.find(section => section.id === id)
+        if (section === undefined || id === beforeId) return
+        if (beforeId !== undefined && !sections.some(section => section.id === beforeId)) return
+        const rest = sections.filter(section => section.id !== id)
+        rest.splice(beforeId === undefined ? rest.length : rest.findIndex(section => section.id === beforeId), 0, section)
+        sidebar.sections = rest
+      },
+      moveSessionToSidebarSection: (d, sessionId, sectionId, beforeSessionId) => {
+        const sidebar = d.sidebar
+        if (sidebar === undefined || sessionId === beforeSessionId) return
+        const destination = sectionId === undefined ? undefined : sidebar.sections.find(section => section.id === sectionId)
+        if (sectionId !== undefined && destination === undefined) return
+        const order = destination?.sessionIds ?? sidebar.recentOrder
+        if (beforeSessionId !== undefined && !order.includes(beforeSessionId)) return
+        const next = order.filter(id => id !== sessionId)
+        next.splice(beforeSessionId === undefined ? next.length : next.indexOf(beforeSessionId), 0, sessionId)
+        for (const section of sidebar.sections) section.sessionIds = section.sessionIds.filter(id => id !== sessionId)
+        if (destination === undefined) sidebar.recentOrder = next
+        else destination.sessionIds = next
+      },
+      setSidebarSectionOrder: (d, id, order) => {
+        const section = d.sidebar?.sections.find(section => section.id === id)
+        if (section === undefined) return
+        const members = new Set(section.sessionIds)
+        section.sessionIds = preserveSidebarOrder(order.filter(id => members.has(id)), section.sessionIds)
+      },
     },
   })
 }

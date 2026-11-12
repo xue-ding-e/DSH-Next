@@ -240,6 +240,41 @@ function viewInstance(slots: SlotRegistry) {
 const settled = (): Promise<void> => new Promise((resolve) => { setTimeout(resolve, 0) })
 
 describe('ui-workspace apply', () => {
+  it('moves the captured Session between sidebar sections and keeps section creation attached to that Session', async () => {
+    const b = await bench()
+    declare(b.slots, 'sidebar.workspaces')
+    await b.ctx.plugin({ inject, apply }).await()
+    b.setSessions(sessionState([summary('source', 20), summary('other', 10)]))
+    const store = viewInstance(b.slots)
+    store.actions.createSidebarSection('section-one', 'First section')
+    const createWorkspace = vi.spyOn(b.ctx.workspaces, 'create')
+    const target = { kind: 'session' as const, value: { sessionId: sid('source'), displayTitle: 'source' } }
+    const menu = b.ctx.contextMenus.resolve(target)
+    onTestFinished(() => { menu.dispose() })
+    await menu.ready
+    const move = menu.source.getSnapshot().find(action => action.label === '移至分区')!
+    const destination = move.children!.find(action => action.label === 'First section')!
+    menu.select(destination.id)
+    expect(store.getSnapshot().sidebar?.sections[0]?.sessionIds).toEqual(['source'])
+
+    const next = b.ctx.contextMenus.resolve(target)
+    onTestFinished(() => { next.dispose() })
+    await next.ready
+    const choices = next.source.getSnapshot().find(action => action.label === '移至分区')!.children!
+    expect(choices.find(action => action.label === 'First section')?.disabled).toBe(true)
+    next.select(choices.find(action => action.label === '最近')!.id)
+    expect(store.getSnapshot().sidebar?.sections[0]?.sessionIds).toEqual([])
+
+    const create = b.ctx.contextMenus.resolve(target)
+    onTestFinished(() => { create.dispose() })
+    await create.ready
+    create.select(create.source.getSnapshot().find(action => action.label === '移至分区')!
+      .children!.find(action => action.label === '新建分区')!.id)
+    const browser = faceOf(b.slots.entries('sidebar.workspaces')[0]!) as WorkspaceBrowserInjected
+    expect(browser.hooks.sidebarSectionRequest.getSnapshot()?.sessionId).toBe(sid('source'))
+    expect(createWorkspace).not.toHaveBeenCalled()
+  })
+
   it('keeps the host Loader entry inert', () => {
     expect(hostApply).not.toThrow()
   })
@@ -1031,7 +1066,7 @@ it('captures Workspace menu requests, rechecks mutable access, and withdraws reg
   expect(pending.source.getSnapshot()).toEqual([])
 })
 
-it.each(['fake', 'static'] as const)('offers primary-folder opening only with global native permissions (%s)', async (access) => {
+it.each(['fake', 'static'] as const)('leaves workspace folder opening to the official open-in-app menu (%s)', async (access) => {
   const b = await bench(access)
   const project = { ...workspace('alpha', []), sourcePaths: ['/sources/primary', '/projects/alpha'] }
   b.setWorkspaces(workspaceState([project]))
@@ -1044,12 +1079,6 @@ it.each(['fake', 'static'] as const)('offers primary-folder opening only with gl
   } })
   onTestFinished(() => { menu.dispose() })
   await menu.ready
-  expect(menu.source.getSnapshot().some(item => item.id === 'workspace.openFolder/openFolder')).toBe(access === 'static')
-  if (access === 'static') {
-    menu.select('workspace.openFolder/openFolder')
-    await settled()
-    expect(b.folderRemote.openWorkspacePath).toHaveBeenCalledWith({ path: '/sources/primary' }, expect.any(AbortSignal))
-  } else {
-    expect(b.folderRemote.openWorkspacePath).not.toHaveBeenCalled()
-  }
+  expect(menu.source.getSnapshot().some(item => item.id === 'workspace.openFolder/openFolder')).toBe(false)
+  expect(b.folderRemote.openWorkspacePath).not.toHaveBeenCalled()
 })

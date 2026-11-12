@@ -17,13 +17,17 @@ function anchors(submenu: ReturnType<typeof useMenuSubmenu>, hidden: boolean): C
  * @param props - active entry, submenu operations, and shared row presentation options.
  * @returns a body portal that preserves child DOM identity across placement changes.
  */
-export function SubmenuPanel({ entry, submenu, compact, dense, contextual, backLabel, onSelect, onClose, afterSelection }: {
+export function SubmenuPanel({ entry, submenu, compact, dense, contextual, backLabel, selectedId, selectedIds, selection,
+  onSelect, onClose, afterSelection }: {
   entry: NonNullable<ReturnType<typeof useMenuSubmenu>['entry']>
   submenu: ReturnType<typeof useMenuSubmenu>
   compact: boolean
   dense: boolean
   contextual: boolean
   backLabel: ReactNode
+  selectedId: string | undefined
+  selectedIds: readonly string[] | undefined
+  selection: 'check' | 'fill'
   onSelect: ((id: string) => void) | undefined
   onClose: () => void
   afterSelection: () => void
@@ -45,6 +49,7 @@ export function SubmenuPanel({ entry, submenu, compact, dense, contextual, backL
     <div className={css.viewport} role="presentation">
       {entry.submenu.map(sub => 'type' in sub ? renderMenuDecoration(sub)
         : <MenuRow key={sub.id} icon={sub.icon} reserveIcon={columns.has(sub)} disabled={sub.disabled}
+          selected={sub.id === selectedId || selectedIds?.includes(sub.id) === true} selection={selection}
           danger={sub.danger} shortcut={sub.shortcut} onClick={() => { onSelect?.(sub.id) }}>{sub.label}</MenuRow>)}
     </div>
   </MenuSurface>, document.body)

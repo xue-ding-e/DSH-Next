@@ -9,9 +9,9 @@
   box-sizing: border-box;
 }
 
-/* The expanded section is at most one shell viewport tall: once the shell has
-   scrolled the navigation away, the toolbar sits at the top and the list below
-   it scrolls on its own. A section that fits leaves the shell nothing to scroll.
+/* The expanded section is at most one shell viewport tall. Pinned chats,
+   custom sections, projects and recent chats share one content scroller.
+   A section that fits leaves the shell nothing to scroll.
    `flex: none` keeps the size; the parent column has no definite height, so a
    percentage flex basis would size it to content. */
 .root:not(.rail) {
@@ -64,6 +64,10 @@
 /* Section header: title, an inline search control, and the two trailing
    actions. Expanding search collapses the action cluster and takes its room. */
 .sectionHeader {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--dsw-specific-sidebar-fill);
   flex: none;
   display: flex;
   align-items: center;
@@ -76,6 +80,37 @@
   border-radius: var(--dsw-radius-md);
   overflow: hidden;
   color: var(--dsw-alias-label-tertiary);
+}
+
+.root:not(.rail) .sectionHeader.sectionHeaderHidden {
+  display: none;
+}
+
+.sectionDisclosure {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  padding: 0;
+  cursor: pointer;
+  text-align: left;
+}
+
+.sectionTitle {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.projectChevron {
+  flex: none;
+}
+
+.projectChevronCollapsed {
+  transform: rotate(-90deg);
 }
 
 .root:not(.rail) .sectionHeader.searchSpacingMotion {
@@ -333,7 +368,7 @@
   }
 }
 
-/* List seat: always mounted so the shell foot never moves. */
+/* One bounded list seat for all sidebar conversation sections. */
 .listArea {
   flex: 1;
   min-height: 0;
@@ -349,6 +384,7 @@
    sidebar's inline padding. */
 .root:not(.rail) .listArea {
   display: block;
+  scroll-padding-top: var(--workspace-toolbar-height);
   margin-left: -4px;
   margin-right: calc(2px - var(--dsh-sidebar-inline-padding));
   padding-left: 4px;
@@ -361,7 +397,7 @@
 .recentSection {
   flex: none;
   min-height: 0;
-  margin: 0 0 8px;
+  margin: 8px 0 16px;
 }
 
 .recentLabel {
@@ -372,9 +408,9 @@
 }
 
 .recentList {
-  max-height: 180px;
-  overflow-y: auto;
-  scrollbar-width: thin;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
 
 /* While the sidebar viewport can still scroll down, the seat does not take user

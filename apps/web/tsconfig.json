@@ -176,6 +176,7 @@
     "tests/stats-paged-history.e2e.ts",
     "tests/stats-truncated-tooltip.e2e.ts",
     "tests/sidebar-scrollbar.e2e.ts",
+    "tests/sidebar-organization.e2e.ts",
     "tests/sidebar-alignment.e2e.ts",
     "tests/sidebar-title-hover-scroll.e2e.ts",
     "tests/rail-search-expand.e2e.ts",

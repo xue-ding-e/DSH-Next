@@ -97,6 +97,8 @@ If post-sync evidence fails, leave the lease-protected published heads in place,
 
 ## Handle failures
 
+For Windows Desktop packaging with a native-fetch version of `@electron/get`, diagnose an Electron checksum download separately from compilation. Compare a bounded fetch of the same official `SHASUMS256.txt` URL with the existing Windows proxy returned by `[System.Net.WebRequest]::GetSystemWebProxy().GetProxy([uri]$url)`. When the proxy request succeeds and direct fetching times out, use process-local `HTTP_PROXY`, `HTTPS_PROXY`, and `NODE_USE_ENV_PROXY=1` with a Node version exposing `--use-env-proxy`; preserve loopback exclusions in `NO_PROXY`. Keep archive checksum validation and the system proxy settings. Confirm the packaging process identity before stopping a stuck attempt, then verify the replacement's runtime smoke and final package result. The proxy comparison was exercised on Node 26.13.0; recheck flag support for another build runtime.
+
 If a relevant check fails before an ordinary push, stop and fix or explain the blocker. Do not push and hope CI differs. For the post-sync exception, block the merge and follow the repair procedure above.
 
 If a failure looks environment-specific, prove it:

@@ -68,6 +68,12 @@ export type WorkspaceActionRequest = {
   readonly storedTitle: string
 }
 
+/** Captured conversation, when a sidebar section is created from its menu. */
+export interface SidebarSectionRequest {
+  readonly sessionId?: SessionId
+  readonly sequence: number
+}
+
 /**
  * Owner share of the directory-flow holes: the complete conversation between
  * the trigger surface and the picking interaction. The occupant reads `open`
@@ -245,6 +251,7 @@ export type WorkspaceBrowserInjected = {
   settleWorkspaceAction: () => void
   hooks: DirectoryPickingInjected['hooks'] & {
     workspaceActionRequest: HostObservable<WorkspaceActionRequest | null>
+    sidebarSectionRequest: HostObservable<SidebarSectionRequest | null>
     contextMenuTarget: HostObservable<ContextMenuTarget | null>
     /**
      * Fixed Host facts, reached through a hook rather than injected as values:
@@ -258,6 +265,10 @@ export type WorkspaceBrowserInjected = {
   }
   /** Open the browser search and focus its input. */
   requestSearch: () => void
+  /** Open the section-name form, optionally moving the captured Session after creation. */
+  requestSidebarSection: (sessionId?: SessionId) => void
+  /** Dismiss the sidebar section-name form without changing its captured Session. */
+  closeSidebarSectionRequest: () => void
   /** Request the existing directory picker. */
   requestAddWorkspace: () => void
   /** Consume the directory-picker opening request. */

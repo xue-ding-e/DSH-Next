@@ -81,7 +81,7 @@ describe('WorkspaceBrowser.module.css list', () => {
     expect(expanded?.get('max-height')).toBe('100cqh')
     expect(expanded?.get('height')).toBeUndefined()
     expect(declarations('.root:not(.rail):has(.searchExpanded)')?.get('height')).toBe('100cqh')
-    expect(declarations('.sectionHeader')?.get('background')).toBeUndefined()
+    expect(declarations('.sectionHeader')?.get('background')).toBe('var(--dsw-specific-sidebar-fill)')
     expect(root?.get('--workspace-toolbar-height')).toBe('36px')
     expect(root?.get('--workspace-toolbar-gap')).toBe('0px')
     expect(declarations('.sectionHeader')?.get('height')).toBe('var(--workspace-toolbar-height)')

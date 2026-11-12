@@ -62,8 +62,6 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
       hookContext: SidebarSectionHookContext
       inject: SidebarSectionInjected
     }
-    /** Recent conversation shortcuts, independent of Workspace grouping and ordering. */
-    'sidebar.recent': { kind: 'single'; scope: 'root'; owner: SidebarSectionOwnerProps }
     /**
      * The settings seat at the sidebar foot. Declared by this package's
      * 'sidebar' entry; ui-settings registers its trigger row + modal panel.
@@ -238,7 +236,6 @@ export type SidebarRootComponentProps =
     | 'sidebar.toggle.badge'
     | 'sidebar.panellist.actions'
     | 'sidebar.workspaces'
-    | 'sidebar.recent'
     | 'sidebar.settings'
     | 'sidebar.footer.action'
   >

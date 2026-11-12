@@ -123,12 +123,12 @@ describe('session rename through the assembled browser', () => {
     registerAction('last', 700, -2, 'Last action')
     const view = runtime.renderRoot()
 
-    const row = (await view.findByText('Persisted title')).closest('[role="treeitem"]')!
+    const row = (await within(await view.findByRole('tree')).findByText('Persisted title')).closest('[role="treeitem"]')!
     const trigger = within(row as HTMLElement).getByLabelText('会话“Persisted title”的操作')
     fireEvent.click(trigger)
     await view.findByRole('menuitem', { name: '置顶会话' })
     expect(view.getAllByRole('menuitem').map(item => item.textContent)).toEqual([
-      '置顶会话', '重命名', '分叉会话', 'Export action', 'Last action', '归档会话', '复制 Session ID',
+      '置顶会话', '重命名', '移至分区', '分叉会话', 'Export action', 'Last action', '归档会话', '复制 Session ID',
     ])
     expect(view.getAllByRole('separator')).toHaveLength(3)
     const last = view.getByRole('menuitem', { name: 'Last action' })
@@ -183,7 +183,8 @@ describe('session rename through the assembled browser', () => {
     const view = runtime.renderRoot()
 
     // The current session's group auto-expands; open the row's action menu.
-    const row = (await view.findByText('旧标题')).closest('[role="treeitem"]')!
+    const tree = within(await view.findByRole('tree'))
+    const row = (await tree.findByText('旧标题')).closest('[role="treeitem"]')!
     fireEvent.click(within(row as HTMLElement).getByLabelText('会话“旧标题”的操作'))
     fireEvent.click(await view.findByRole('menuitem', { name: '重命名' }))
     // The rename row dismissed the menu; the dialog lives in the overlay list.
@@ -203,7 +204,7 @@ describe('session rename through the assembled browser', () => {
     // The manager lands the unary echo in the list store (its own package
     // tests own that hop); the row re-labels from list state alone.
     await runtime.sessions.updateSummary(SID, { displayTitle: '分叉 实验记录', title: '分叉 实验记录' })
-    await view.findByText('分叉 实验记录')
+    await tree.findByText('分叉 实验记录')
     expect(view.queryByText('旧标题')).toBeNull()
     await runtime.dispose()
   })
@@ -225,7 +226,8 @@ describe('session rename through the assembled browser', () => {
     const view = runtime.renderRoot()
     await runtime.flush()
 
-    const row = (await view.findByText('旧标题')).closest('[role="treeitem"]')!
+    const tree = within(await view.findByRole('tree'))
+    const row = (await tree.findByText('旧标题')).closest('[role="treeitem"]')!
     fireEvent.click(within(row as HTMLElement).getByLabelText('会话“旧标题”的操作'))
     fireEvent.click(await view.findByRole('menuitem', { name: '重命名' }))
     const input = await view.findByLabelText('会话名称')
@@ -237,7 +239,7 @@ describe('session rename through the assembled browser', () => {
     const alert = await view.findByRole('alert')
     expect(alert.textContent).toContain('title write failed')
     expect(view.getByLabelText('会话名称')).toBeTruthy()
-    expect(view.getByText('旧标题')).toBeTruthy()
+    expect(tree.getByText('旧标题')).toBeTruthy()
     await runtime.dispose()
   })
 })

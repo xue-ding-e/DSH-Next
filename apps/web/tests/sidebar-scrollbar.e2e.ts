@@ -318,6 +318,44 @@ async function resetNestedScroll(page: Page): Promise<void> {
   await page.locator('[data-sidebar-scrollport]').evaluate((el) => { el.scrollTop = 0 })
 }
 
+/** Read the actual recent section's position and clipping within the composed sidebar. */
+function recentGeometry(page: Page) {
+  return page.getByRole('region', { name: 'Recent', exact: true }).evaluate((recent) => {
+    const list = document.querySelector<HTMLElement>('[data-sidebar-list-area]')!
+    const viewport = document.querySelector<HTMLElement>('[data-sidebar-scrollport]')!
+    const tree = list.querySelector('[role="tree"]')!
+    const column = viewport.closest('[class*="sidebarCol"]')!
+    const heading = document.getElementById(recent.getAttribute('aria-labelledby')!)!
+    const label = heading.querySelector('[class*="headingText"]') ?? heading
+    const recentRows = recent.querySelectorAll('[data-row-key^="recent-session:"] > button')
+    const lastRow = recentRows[recentRows.length - 1]!
+    const labelRange = document.createRange()
+    labelRange.selectNodeContents(label)
+    const recentBox = recent.getBoundingClientRect()
+    const listBox = list.getBoundingClientRect()
+    const lastBox = lastRow.getBoundingClientRect()
+    const hit = document.elementFromPoint(lastBox.left + lastBox.width / 2, lastBox.top + lastBox.height / 2)
+    return {
+      inList: list.contains(recent),
+      afterTree: Boolean(tree.compareDocumentPosition(recent) & Node.DOCUMENT_POSITION_FOLLOWING),
+      treeBottom: tree.getBoundingClientRect().bottom,
+      recentTop: recentBox.top,
+      recentLeft: recentBox.left,
+      recentWidth: recentBox.width,
+      listLeft: listBox.left,
+      listWidth: list.clientWidth,
+      labelLines: new Set([...labelRange.getClientRects()].map(rect => Math.round(rect.top))).size,
+      navBottom: column.querySelector('nav')!.getBoundingClientRect().bottom,
+      viewportBottom: viewport.getBoundingClientRect().bottom,
+      footerTop: column.querySelector('[class*="footArea"]')!.getBoundingClientRect().top,
+      lastTop: lastBox.top,
+      lastBottom: lastBox.bottom,
+      lastReceivesInput: hit !== null && lastRow.contains(hit),
+      listScroll: list.scrollTop,
+    }
+  })
+}
+
 /**
  * Park the pointer at the center of the first element matching `selector`.
  * @param page - the page under test.
@@ -413,20 +451,27 @@ describe('web e2e: sidebar session list scrollbar (reserved gutter / themed thum
     expect(tripwire.pageErrors).toEqual([])
   }, 60_000)
 
-  it('removes both scroll ranges without moving row edges when grouped content fits', async () => {
+  it('removes both scroll ranges without moving row edges when all sections fit', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-sidebar-scrollbar-stable-inset'))
     const viewport = page.locator('[data-sidebar-list-area]')
     const height = await viewport.evaluate(el => el.scrollHeight)
+    const recentHeading = page.getByRole('region', { name: 'Recent', exact: true })
+      .getByRole('button', { name: 'Recent', exact: true })
     expect(await measureRowInset(page)).toEqual({ overflows: true, rowEdgeInset: 8, rowPaintInset: 11 })
     const bucket = page.getByText('Ungrouped', { exact: true }).locator('..').locator('..')
     await bucket.click()
     try {
       await expect.poll(async () => viewport.evaluate(el => el.scrollHeight)).toBeLessThan(height)
+      // Recent has its own twenty-row body. Collapsing only the workspace
+      // leaves that real content scrollable with the same reserved gutter.
+      expect(await measureRowInset(page)).toEqual({ overflows: true, rowEdgeInset: 8, rowPaintInset: 11 })
+      await recentHeading.click()
       await expect.poll(async () => (await measureRowInset(page)).overflows).toBe(false)
       expect(await measureRowInset(page)).toEqual({ overflows: false, rowEdgeInset: 8, rowPaintInset: 11 })
       // A section that fits leaves the sidebar viewport nothing to scroll, so the navigation stays.
       expect((await nestedScrollGeometry(page)).viewportRange).toBe(0)
     } finally {
+      if (await recentHeading.getAttribute('aria-expanded') === 'false') await recentHeading.click()
       await expandSeededSessions(page)
       await viewport.evaluate((el) => { el.scrollTop = 0 })
     }
@@ -512,6 +557,68 @@ describe('web e2e: sidebar session list scrollbar (reserved gutter / themed thum
       await resetNestedScroll(page)
     }
     expect(tripwire.pageErrors).toEqual([])
+  }, 60_000)
+
+  it('keeps Recent below the workspace tree and reachable above the footer after collapsing', async () => {
+    // Collapse unmounts the wide browser and its transient group expansion;
+    // use an isolated page so this gesture cannot alter the scrollbar golden.
+    const page = await newEnglishPage(browser, 800)
+    const recentTripwire = watchConsole(page)
+    const recent = page.getByRole('region', { name: 'Recent', exact: true })
+    try {
+      await page.goto(scaffold.authenticatedUrl, { waitUntil: 'load' })
+      await page.waitForSelector('[class*="frame"]', { timeout: 30_000 })
+      await expandSeededSessions(page)
+      // Stay above the frame's 1024px auto-collapse breakpoint while testing
+      // the independently resizable sidebar at its narrow clamp.
+      await page.setViewportSize({ width: 1100, height: 500 })
+      const resize = await page.locator('[data-side="sidebar"]').boundingBox()
+      if (resize === null) throw new Error('sidebar resize handle has no layout box')
+      await page.mouse.move(resize.x + resize.width / 2, resize.y + resize.height / 2)
+      await page.mouse.down()
+      await page.mouse.move(resize.x - 100, resize.y + resize.height / 2)
+      await page.mouse.up()
+      await resetNestedScroll(page)
+      await recent.waitFor({ state: 'attached' })
+      expect(await recent.locator('[data-row-key^="recent-session:"]').count()).toBe(20)
+      const before = await recentGeometry(page)
+      expect(before.inList).toBe(true)
+      expect(before.afterTree).toBe(true)
+      expect(before.recentTop).toBeGreaterThanOrEqual(before.treeBottom)
+      expect(before.recentTop).toBeGreaterThanOrEqual(before.navBottom)
+      expect(before.recentWidth).toBeGreaterThan(before.listWidth * 0.8)
+      expect(before.recentLeft).toBeGreaterThanOrEqual(before.listLeft)
+      expect(before.labelLines).toBe(1)
+
+      // Wheel through the real handoff; the recent rows share the same content
+      // scroller and must remain clickable above the fixed footer.
+      await pointInto(page, '[data-sidebar-list-area] [role="treeitem"]')
+      await page.mouse.wheel(0, 5000)
+      await expect.poll(async () => (await recentGeometry(page)).lastReceivesInput).toBe(true)
+      const bottom = await recentGeometry(page)
+      expect(bottom.listScroll).toBeGreaterThan(0)
+      expect(bottom.lastBottom).toBeLessThanOrEqual(bottom.viewportBottom + 1)
+      expect(bottom.lastBottom).toBeLessThanOrEqual(bottom.footerTop + 1)
+      expect(bottom.labelLines).toBe(1)
+
+      await page.locator('[data-sidebar-toggle]').click()
+      await expect.poll(async () => recent.count()).toBe(0)
+      await page.locator('[data-sidebar-toggle]').click()
+      await recent.waitFor({ state: 'attached' })
+      await resetNestedScroll(page)
+      const expanded = await recentGeometry(page)
+      expect(expanded.inList).toBe(true)
+      expect(expanded.afterTree).toBe(true)
+      expect(expanded.recentTop).toBeGreaterThanOrEqual(expanded.treeBottom)
+      expect(expanded.labelLines).toBe(1)
+      expect(expanded.recentWidth).toBeGreaterThan(expanded.listWidth * 0.8)
+      expect(recentTripwire.pageErrors).toEqual([])
+    } catch (error) {
+      await saveFailureShot(page, 'web-e2e-sidebar-recent-layout')
+      throw error
+    } finally {
+      await page.context().close()
+    }
   }, 60_000)
 
   it('renders the themed thumb through the WebKit path in both palettes', async () => {

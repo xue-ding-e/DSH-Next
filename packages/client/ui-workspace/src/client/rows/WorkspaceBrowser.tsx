@@ -19,7 +19,7 @@ import clsx from 'clsx'
 import { WorkspaceDialogs } from './WorkspaceDialogs.tsx'
 import {
   AnimatedRows, HoverCardGroup, IconArchiveCheckOutlineRegular, IconArchiveOffOutlineRegular, IconArchiveOutlineRegular,
-  IconChevronsUpDownOutlineRegular, IconClockOutlineRegular, IconCloseFillRegular,
+  IconChevronsUpDownOutlineRegular, IconClockOutlineRegular, IconCloseFillRegular, IconChevronDownOutlineRegular,
   IconFlatListOutlineRegular, IconFolderCloseRegular, IconProjectAddOutlineRegular,
   IconQueueOutlineRegular, IconSearchOutlineRegular, IconSlidersTwoOutlineRegular,
   IconWorkspaceTreeOutlineRegular, Menu, Tooltip,
@@ -40,6 +40,9 @@ import {
 import { ProjectRowItem, SearchResultItem, SessionNodeItem } from './Rows.tsx'
 import { FLAT_SESSION_ORDER_KEY, type SessionGroupBy } from '../stores.ts'
 import { WorkspacePickFlow } from '../WorkspacePicker.tsx'
+import { RecentSessions, SidebarSectionCreateDialog } from '../RecentSessions.tsx'
+import { PinnedSessions, SidebarCustomSections } from '../SidebarSections.tsx'
+import { sidebarOrganizationOf } from '../sidebar-organization.ts'
 import css from './WorkspaceBrowser.module.css'
 
 /**
@@ -913,6 +916,7 @@ export function WorkspaceBrowser({
   useShortcuts,
   useWorkspaceShortcuts,
   requestSearch,
+  requestSidebarSection, closeSidebarSectionRequest, useSidebarSectionRequest,
   requestAddWorkspace,
   closeAddWorkspace,
   setDirectoryBusy,
@@ -951,6 +955,7 @@ export function WorkspaceBrowser({
   const archivedFilter = useStore(s => s.archivedFilter ?? 'default')
   const groupExpansion = useStore(s => s.groupExpansion)
   const sessionOrderByAccount = useStore(s => s.sessionOrderByAccount)
+  const sidebarOrganization = useStore(sidebarOrganizationOf)
   // Archived sessions are not openable: the row stays visible under the
   // filter but a click explains instead of navigating.
   const guardedOpen = (sessionId: SessionId): void => {
@@ -1158,6 +1163,7 @@ export function WorkspaceBrowser({
     if (!wide || !searchExpanded || searchOnExpand) return
     const onClick = (event: MouseEvent): void => {
       if (!(event.target instanceof Node) || searchRoot.current?.contains(event.target) === true) return
+      if (event.target instanceof Element && event.target.closest('[data-sidebar-search-trigger]') !== null) return
       searchInput.current?.blur()
       if (normalizedQuery !== '') return
       changeSearchExpanded(false)
@@ -1210,143 +1216,153 @@ export function WorkspaceBrowser({
       console.warn('session unarchive rejected:', reason)
     })
   }
+  const sidebarProps = {
+    wide, useSessions, useWorkspaces, useSessionStatus, usePanelInfo, useStore, actions, open: guardedOpen, t,
+    useContextMenu, useContextMenuTarget, renderSlot, renderFactorySlot, startSession,
+    useSidebarSectionRequest, requestSidebarSection, closeSidebarSectionRequest, requestSearch,
+  }
   return (
     <div className={clsx(css.root, !wide && css.rail)}>
-      <div className={clsx(css.sectionHeader, wide && searchSpacingMotionEnabled && css.searchSpacingMotion)} data-sidebar-workspace-header="">
-        {wide && (
-          <span className={clsx(css.sectionLabel, css.wide, searchExpanded && css.sectionLabelHidden)}>
-            {groupBy === 'flat' ? t('section.sessions') : t('section.workspaces')}
-          </span>
-        )}
-        {wide && (
-          <div className={clsx(css.searchSlot, searchExpanded && css.searchSlotExpanded)}>
-            <div
-              ref={searchRoot}
-              className={clsx(css.search, searchExpanded && css.searchExpanded)}
-              onClick={() => {
-                closeAddWorkspace()
-                changeSearchExpanded(true)
-                focusSearch()
-              }}
-            >
-              <Tooltip label={t('search')} shortcutKeys={searchShortcut?.keys} side="bottom" delayMs={500} disabled={searchExpanded} portal>
-                <button
-                  type="button"
-                  className={css.searchButton}
-                  aria-label={t('search.sessions.aria')}
-                  aria-keyshortcuts={searchShortcut?.aria}
-                  aria-expanded={searchExpanded}
-                  onClick={() => {
-                    requestSearch()
-                  }}
-                >
-                  <IconSearchOutlineRegular size={searchExpanded ? 11 : 14} />
-                </button>
-              </Tooltip>
-              <input
-                ref={searchInput}
-                className={css.searchInput}
-                type="text"
-                placeholder={t('search.placeholder')}
-                maxLength={SEARCH_QUERY_MAX_CODE_UNITS}
-                value={query}
-                tabIndex={searchExpanded ? 0 : -1}
-                onChange={(e) => { setQuery(sanitizeSearchQuery(e.target.value)) }}
-                onKeyDown={(e) => {
-                  if (e.key !== 'Escape') return
-                  setQuery('')
-                  changeSearchExpanded(false)
+      <div ref={wide ? bindScrollerRef : undefined} className={css.listArea} data-sidebar-list-area="">
+        {wide && normalizedQuery === '' && <PinnedSessions {...sidebarProps} />}
+        {wide && normalizedQuery === '' && <SidebarCustomSections {...sidebarProps} />}
+        <div className={clsx(css.sectionHeader, wide && searchSpacingMotionEnabled && css.searchSpacingMotion,
+          wide && !sidebarOrganization.showProjects && !searchExpanded && css.sectionHeaderHidden)} data-sidebar-workspace-header="">
+          {wide && (
+            <button type="button" className={clsx(css.sectionLabel, css.sectionDisclosure, css.wide, searchExpanded && css.sectionLabelHidden)}
+              aria-expanded={!sidebarOrganization.projectsCollapsed}
+              onClick={() => { actions.setProjectsCollapsed(!sidebarOrganization.projectsCollapsed) }}>
+              <span className={css.sectionTitle}>{groupBy === 'flat' ? t('section.sessions') : t('section.workspaces')}</span>
+              <IconChevronDownOutlineRegular size={12}
+                className={clsx(css.projectChevron, sidebarOrganization.projectsCollapsed && css.projectChevronCollapsed)} />
+            </button>
+          )}
+          {wide && (
+            <div className={clsx(css.searchSlot, searchExpanded && css.searchSlotExpanded)}>
+              <div
+                ref={searchRoot}
+                className={clsx(css.search, searchExpanded && css.searchExpanded)}
+                onClick={() => {
+                  closeAddWorkspace()
+                  changeSearchExpanded(true)
+                  focusSearch()
                 }}
-              />
-              {searchExpanded && (
-                <button
-                  type="button"
-                  className={css.clearButton}
-                  aria-label={t('search.clear')}
-                  onClick={(e) => {
-                    e.stopPropagation()
+              >
+                <Tooltip label={t('search')} shortcutKeys={searchShortcut?.keys} side="bottom" delayMs={500} disabled={searchExpanded} portal>
+                  <button
+                    type="button"
+                    className={css.searchButton}
+                    aria-label={t('search.sessions.aria')}
+                    aria-keyshortcuts={searchShortcut?.aria}
+                    aria-expanded={searchExpanded}
+                    onClick={() => {
+                      requestSearch()
+                    }}
+                  >
+                    <IconSearchOutlineRegular size={searchExpanded ? 11 : 14} />
+                  </button>
+                </Tooltip>
+                <input
+                  ref={searchInput}
+                  className={css.searchInput}
+                  type="text"
+                  placeholder={t('search.placeholder')}
+                  maxLength={SEARCH_QUERY_MAX_CODE_UNITS}
+                  value={query}
+                  tabIndex={searchExpanded ? 0 : -1}
+                  onChange={(e) => { setQuery(sanitizeSearchQuery(e.target.value)) }}
+                  onKeyDown={(e) => {
+                    if (e.key !== 'Escape') return
                     setQuery('')
                     changeSearchExpanded(false)
                   }}
-                >
-                  <IconCloseFillRegular />
-                </button>
-              )}
+                />
+                {searchExpanded && (
+                  <button
+                    type="button"
+                    className={css.clearButton}
+                    aria-label={t('search.clear')}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      setQuery('')
+                      changeSearchExpanded(false)
+                    }}
+                  >
+                    <IconCloseFillRegular />
+                  </button>
+                )}
+              </div>
             </div>
-          </div>
-        )}
-        <div className={clsx(css.headerActions, wide && searchExpanded && css.headerActionsHidden)}>
-          {wide && (
-            <ViewOptionsMenu
-              groupBy={groupBy}
-              orderBy={orderBy}
-              archivedFilter={archivedFilter}
-              onGroupPick={actions.setGroupBy}
-              onOrderPick={(mode) => { actions.setOrderBy(mode, activeSessionOrders) }}
-              onArchivedFilterPick={actions.setArchivedFilter}
-              t={t}
-            />
           )}
-          {/* Adding is the button's one action, so a composition with no
+          <div className={clsx(css.headerActions, wide && searchExpanded && css.headerActionsHidden)}>
+            {wide && (
+              <ViewOptionsMenu
+                groupBy={groupBy}
+                orderBy={orderBy}
+                archivedFilter={archivedFilter}
+                onGroupPick={actions.setGroupBy}
+                onOrderPick={(mode) => { actions.setOrderBy(mode, activeSessionOrders) }}
+                onArchivedFilterPick={actions.setArchivedFilter}
+                t={t}
+              />
+            )}
+            {/* Adding is the button's one action, so a composition with no
               picking affordance has nothing to offer here: the region hides the
               button rather than leaving a dead one in the header. */}
-          {directoryFlowAvailable && (
-            <Tooltip label={t('workspace.add')} shortcutKeys={addShortcut?.keys} side="bottom" delayMs={500} portal>
-              <button
-                ref={wsPlusRef}
-                type="button"
-                className={css.iconButton}
-                aria-label={t('workspace.add')}
-                aria-keyshortcuts={addShortcut?.aria}
-                onClick={() => {
-                  requestAddWorkspace()
-                }}
-              >
-                <IconProjectAddOutlineRegular size={wide ? 16 : 18} />
-              </button>
-            </Tooltip>
-          )}
-        </div>
-        {/* Add flow + its error dialog (same package — direct composition). */}
-        <WorkspacePickFlow
-          t={t}
-          open={wsPickerOpen}
-          anchorRef={wsPlusRef}
-          useWorkspaces={useWorkspaces}
-          createWorkspace={createWorkspace}
-          useDirectoryFlow={useDirectoryFlow}
-          renderDirectoryFlow={owner => renderSlot('sidebar.workspaces.directoryFlow', owner)}
-          addOnly
-          onBusyChange={setDirectoryBusy}
-          side="right"
-          onPick={(workspaceId) => {
-            closeAddWorkspace()
-            startSession(workspaceId, { clearPreviousDraft: false })
-          }}
-          onClose={() => { closeAddWorkspace() }}
-        />
-      </div>
-
-      {/* The collapsed rail keeps search as its own 36px control. */}
-      {!wide && <div className={css.search}>
-        <Tooltip label={t('search')} shortcutKeys={searchShortcut?.keys} portal>
-          <button
-            type="button"
-            className={css.searchButton}
-            aria-label={t('search.sessions.aria')}
-            aria-keyshortcuts={searchShortcut?.aria}
-            onClick={() => {
-              requestSearch()
+            {directoryFlowAvailable && (
+              <Tooltip label={t('workspace.add')} shortcutKeys={addShortcut?.keys} side="bottom" delayMs={500} portal>
+                <button
+                  ref={wsPlusRef}
+                  type="button"
+                  className={css.iconButton}
+                  aria-label={t('workspace.add')}
+                  aria-keyshortcuts={addShortcut?.aria}
+                  onClick={() => {
+                    requestAddWorkspace()
+                  }}
+                >
+                  <IconProjectAddOutlineRegular size={wide ? 16 : 18} />
+                </button>
+              </Tooltip>
+            )}
+          </div>
+          {/* Add flow + its error dialog (same package — direct composition). */}
+          <WorkspacePickFlow
+            t={t}
+            open={wsPickerOpen}
+            anchorRef={wsPlusRef}
+            useWorkspaces={useWorkspaces}
+            createWorkspace={createWorkspace}
+            useDirectoryFlow={useDirectoryFlow}
+            renderDirectoryFlow={owner => renderSlot('sidebar.workspaces.directoryFlow', owner)}
+            addOnly
+            onBusyChange={setDirectoryBusy}
+            side="right"
+            onPick={(workspaceId) => {
+              closeAddWorkspace()
+              startSession(workspaceId, { clearPreviousDraft: false })
             }}
-          >
-            <IconSearchOutlineRegular size={18} />
-          </button>
-        </Tooltip>
-      </div>}
+            onClose={() => { closeAddWorkspace() }}
+          />
+        </div>
 
-      {/* Always-mounted seat keeps the region's flex slot while the list
-          itself is wide-only. */}
-      <div ref={wide ? bindScrollerRef : undefined} className={css.listArea} data-sidebar-list-area="">
+        {/* The collapsed rail keeps search as its own 36px control. */}
+        {!wide && <div className={css.search}>
+          <Tooltip label={t('search')} shortcutKeys={searchShortcut?.keys} portal>
+            <button
+              type="button"
+              className={css.searchButton}
+              aria-label={t('search.sessions.aria')}
+              aria-keyshortcuts={searchShortcut?.aria}
+              onClick={() => {
+                requestSearch()
+              }}
+            >
+              <IconSearchOutlineRegular size={18} />
+            </button>
+          </Tooltip>
+        </div>}
+
         {wide && (normalizedQuery !== ''
           ? (
             <SearchResults
@@ -1365,64 +1381,67 @@ export function WorkspaceBrowser({
               t={t}
             />
           )
-          : groupBy === 'flat'
-            ? (
-              <FlatList
-                useSessionAccess={useSessionAccess}
-                usePanelInfo={usePanelInfo}
-                list={list}
-                sessionIds={orderedFlatSessionIds}
-                rowState={rowState}
-                onLeaveArchivedOnly={leaveArchivedOnly}
-                workspaceReady={workspaceReady}
-                animationResetKey={`${groupBy}/${orderBy}/${archivedFilter}`}
-                useSessionStatus={useSessionStatus}
-                open={guardedOpen}
-                onSessionRenameRequest={requestSessionRename}
-                renderSlot={renderSlot}
-                renderFactorySlot={renderFactorySlot} useContextMenu={useContextMenu}
-                useContextMenuTarget={useContextMenuTarget}
-                setSessionOrder={saveSessionOrder}
-                revealSessionId={revealSessionId}
-                onSessionRevealed={acknowledgeSessionReveal}
-                home={home}
-                t={t}
-              />
-            )
-            : (
-              <SessionTree
-                useSessionAccess={useSessionAccess}
-                useWorkspaceAccess={useWorkspaceAccess}
-                usePanelInfo={usePanelInfo}
-                list={list}
-                shortcuts={shortcuts}
-                useSessionStatus={useSessionStatus}
-                onSessionRenameRequest={requestSessionRename}
-                renderSlot={renderSlot}
-                renderFactorySlot={renderFactorySlot} useContextMenu={useContextMenu}
-                useContextMenuTarget={useContextMenuTarget}
-                workspaces={orderedWorkspaces}
-                ungroupedSessionIds={orderedUngroupedSessionIds}
-                workspaceReady={workspaceReady}
-                nestWorkspaces={groupBy === 'workspace-tree'}
-                animationResetKey={`${groupBy}/${orderBy}/${archivedFilter}`}
-                groupExpansion={groupExpansion}
-                setGroupExpanded={actions.setGroupExpanded}
-                setSessionOrder={saveSessionOrder}
-                rowState={rowState}
-                onLeaveArchivedOnly={leaveArchivedOnly}
-                startSession={startSession}
-                open={guardedOpen}
-                insertWorkspaceBefore={insertWorkspaceBefore}
-                requestWorkspaceEdit={requestWorkspaceEdit}
-                revealSessionId={revealSessionId}
-                onSessionRevealed={acknowledgeSessionReveal}
-                home={home}
-                t={t}
-              />
-            ))}
+          : !sidebarOrganization.showProjects || sidebarOrganization.projectsCollapsed ? null
+            : groupBy === 'flat'
+              ? (
+                <FlatList
+                  useSessionAccess={useSessionAccess}
+                  usePanelInfo={usePanelInfo}
+                  list={list}
+                  sessionIds={orderedFlatSessionIds}
+                  rowState={rowState}
+                  onLeaveArchivedOnly={leaveArchivedOnly}
+                  workspaceReady={workspaceReady}
+                  animationResetKey={`${groupBy}/${orderBy}/${archivedFilter}`}
+                  useSessionStatus={useSessionStatus}
+                  open={guardedOpen}
+                  onSessionRenameRequest={requestSessionRename}
+                  renderSlot={renderSlot}
+                  renderFactorySlot={renderFactorySlot} useContextMenu={useContextMenu}
+                  useContextMenuTarget={useContextMenuTarget}
+                  setSessionOrder={saveSessionOrder}
+                  revealSessionId={revealSessionId}
+                  onSessionRevealed={acknowledgeSessionReveal}
+                  home={home}
+                  t={t}
+                />
+              )
+              : (
+                <SessionTree
+                  useSessionAccess={useSessionAccess}
+                  useWorkspaceAccess={useWorkspaceAccess}
+                  usePanelInfo={usePanelInfo}
+                  list={list}
+                  shortcuts={shortcuts}
+                  useSessionStatus={useSessionStatus}
+                  onSessionRenameRequest={requestSessionRename}
+                  renderSlot={renderSlot}
+                  renderFactorySlot={renderFactorySlot} useContextMenu={useContextMenu}
+                  useContextMenuTarget={useContextMenuTarget}
+                  workspaces={orderedWorkspaces}
+                  ungroupedSessionIds={orderedUngroupedSessionIds}
+                  workspaceReady={workspaceReady}
+                  nestWorkspaces={groupBy === 'workspace-tree'}
+                  animationResetKey={`${groupBy}/${orderBy}/${archivedFilter}`}
+                  groupExpansion={groupExpansion}
+                  setGroupExpanded={actions.setGroupExpanded}
+                  setSessionOrder={saveSessionOrder}
+                  rowState={rowState}
+                  onLeaveArchivedOnly={leaveArchivedOnly}
+                  startSession={startSession}
+                  open={guardedOpen}
+                  insertWorkspaceBefore={insertWorkspaceBefore}
+                  requestWorkspaceEdit={requestWorkspaceEdit}
+                  revealSessionId={revealSessionId}
+                  onSessionRevealed={acknowledgeSessionReveal}
+                  home={home}
+                  t={t}
+                />
+              ))}
+        {wide && normalizedQuery === '' && <RecentSessions {...sidebarProps} />}
       </div>
 
+      <SidebarSectionCreateDialog {...sidebarProps} />
       {workspaceActionRequest !== null && <WorkspaceDialogs key={`${workspaceActionRequest.action}/${workspaceActionRequest.workspaceId}`}
         request={workspaceActionRequest} workspaces={workspaces} renameWorkspace={renameWorkspace} deleteWorkspace={deleteWorkspace}
         settleWorkspaceAction={settleWorkspaceAction} renderSlot={renderSlot} t={t} />}

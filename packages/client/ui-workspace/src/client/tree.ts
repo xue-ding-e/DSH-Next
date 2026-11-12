@@ -165,37 +165,6 @@ export function orderByRecency(
 }
 
 /**
- * Select sidebar shortcuts by latest navigation or Session update, independently of pin order.
- * @param list - loaded Session catalog.
- * @param archivedSessionIds - Sessions excluded from shortcuts.
- * @param limit - maximum number of shortcuts.
- * @param openedAt - device-local navigation timestamps.
- * @returns nonblank ordinary Session ids, most recently used first.
- */
-export function recentSessionIds(
-  list: SessionListState,
-  archivedSessionIds: readonly SessionId[],
-  limit: number,
-  openedAt: Readonly<Record<string, number>> = {},
-): SessionId[] {
-  const archived = new Set(archivedSessionIds)
-  return [...new Set(list.ids)]
-    .flatMap((id) => {
-      const session = list.byId[id]
-      return session !== undefined
-        && sessionVisible(session, archived, 'default')
-        ? [session]
-        : []
-    })
-    .sort((a, b) => {
-      const rank = (session: SessionSummary): number => Math.max(openedAt[session.id] ?? 0, session.updatedAt)
-      return rank(b) - rank(a) || a.id.localeCompare(b.id)
-    })
-    .slice(0, limit)
-    .map(session => session.id)
-}
-
-/**
  * Reconcile a browser-local manual order with current account membership.
  * Saved entries retain their relative order; new ordinary members follow them by recency.
  * @param memberIds - authoritative account membership.

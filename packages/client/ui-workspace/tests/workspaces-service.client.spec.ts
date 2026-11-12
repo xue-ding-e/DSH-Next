@@ -806,6 +806,103 @@ describe('UiWorkspaceService', () => {
     expect(b.selectPanel).toHaveBeenCalledWith(null)
   })
 
+  describe('startSession beforeOpen preparation', () => {
+    it.each(['fresh', 'reused', 'replaced'] as const)('passes the actual %s Session before selection', async (kind) => {
+      const blank = sid('blank')
+      const actual = kind === 'reused' ? blank : sid('host-selected')
+      const b = bench({
+        sessions: sessionState(kind === 'fresh' ? [] : [summary('blank', { blank: true, cwd: '/w/a' })], 'pending'),
+        workspaces: workspaceState([workspace('a', kind === 'fresh' ? [] : [blank])]),
+      })
+      b.sessions.create.mockResolvedValueOnce(actual)
+      const beforeOpen = vi.fn<(id: SessionId) => void>(() => {
+        expect(b.sessions.retained.at(-1)?.reference.sessionId).toBe(actual)
+        expect(b.selectPanel).not.toHaveBeenCalled()
+      })
+      const opening = vi.spyOn(b.uiWorkspace, 'openWorkspace')
+      b.uiWorkspace.startSession(wid('a'), { beforeOpen })
+      await lastOpening(opening)
+      expect(beforeOpen).toHaveBeenCalledExactlyOnceWith(actual)
+      expect(b.sessions.create).toHaveBeenCalledExactlyOnceWith({
+        workspaceId: wid('a'), ...(kind === 'fresh' ? {} : { sessionId: blank }),
+      })
+      expect(b.requestDraftInitialization).not.toHaveBeenCalled()
+      expect(b.selectPanel).toHaveBeenCalledExactlyOnceWith(null)
+    })
+
+    it('prepares the draft before invoking the callback and keeps the callback out of draft options', async () => {
+      const b = bench({ workspaces: workspaceState([workspace('a')]) })
+      const order: string[] = []
+      b.requestDraftInitialization.mockImplementation(() => { order.push('draft'); return 'applied' })
+      const beforeOpen = vi.fn<(id: SessionId) => void>(() => { order.push('beforeOpen') })
+      const opening = vi.spyOn(b.uiWorkspace, 'openWorkspace')
+      b.uiWorkspace.startSession(wid('a'), { prompt: 'new draft', beforeOpen })
+      await lastOpening(opening)
+      expect(order).toEqual(['draft', 'beforeOpen'])
+      expect(beforeOpen).toHaveBeenCalledExactlyOnceWith(sid('created-a'))
+      expect(b.requestDraftInitialization).toHaveBeenCalledExactlyOnceWith(
+        b.sessions.retained[0]!.reference.binding, { prompt: 'new draft' },
+      )
+    })
+
+    it.each(['panel', 'Session', 'disposal'] as const)('skips a pending callback superseded by %s', async (kind) => {
+      const b = bench({ workspaces: workspaceState([workspace('a')]) })
+      const gate = Promise.withResolvers<SessionId>()
+      b.sessions.create.mockReturnValueOnce(gate.promise)
+      const beforeOpen = vi.fn<(id: SessionId) => void>()
+      const opening = vi.spyOn(b.uiWorkspace, 'openWorkspace')
+      b.uiWorkspace.startSession(wid('a'), { beforeOpen })
+      const completion = lastOpening(opening)
+      if (kind === 'panel') b.layout.selectPanel('other' as MainPanelId)
+      else if (kind === 'Session') b.uiWorkspace.openSession(sid('chosen'))
+      else await b.ctx.fiber.dispose()
+      gate.resolve(sid('late'))
+      await completion
+      expect(beforeOpen).not.toHaveBeenCalled()
+      expect(b.sessions.retain.mock.calls.some(([target]) => target === sid('late'))).toBe(false)
+    })
+
+    it.each(['creation', 'draft'] as const)('skips the callback after %s failure', async (kind) => {
+      vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+      const b = bench({ workspaces: workspaceState([workspace('a')]) })
+      if (kind === 'creation') b.sessions.create.mockRejectedValueOnce(new Error('creation refused'))
+      else b.requestDraftInitialization.mockReturnValueOnce('blocked')
+      const beforeOpen = vi.fn<(id: SessionId) => void>()
+      const opening = vi.spyOn(b.uiWorkspace, 'openWorkspace')
+      b.uiWorkspace.startSession(wid('a'), { beforeOpen, prompt: 'draft' })
+      await expect(lastOpening(opening)).rejects.toThrow()
+      expect(beforeOpen).not.toHaveBeenCalled()
+      expect(b.selectPanel).not.toHaveBeenCalled()
+      if (kind === 'draft') expect(b.sessions.retained[0]!.release).toHaveBeenCalledOnce()
+    })
+
+    it('releases the prepared reference and preserves the previous selection when the callback throws', async () => {
+      vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+      const b = bench({ workspaces: workspaceState([workspace('a')]) })
+      b.uiWorkspace.openSession(sid('chosen'))
+      b.selectPanel.mockClear()
+      const beforeOpen = vi.fn<(id: SessionId) => void>(() => { throw new Error('section preparation failed') })
+      const opening = vi.spyOn(b.uiWorkspace, 'openWorkspace')
+      b.uiWorkspace.startSession(wid('a'), { beforeOpen })
+      await expect(lastOpening(opening)).rejects.toThrow('section preparation failed')
+      expect(b.sessions.retained[0]!.release).not.toHaveBeenCalled()
+      expect(b.sessions.retained[1]!.release).toHaveBeenCalledOnce()
+      expect(b.selectPanel).not.toHaveBeenCalled()
+    })
+
+    it('clears the main selection without invoking the callback when no Workspace is available', () => {
+      const b = bench()
+      b.uiWorkspace.openSession(sid('chosen'))
+      const beforeOpen = vi.fn<(id: SessionId) => void>()
+      const opening = vi.spyOn(b.uiWorkspace, 'openWorkspace')
+      b.uiWorkspace.startSession(undefined, { beforeOpen })
+      expect(opening).not.toHaveBeenCalled()
+      expect(beforeOpen).not.toHaveBeenCalled()
+      expect(b.sessions.retained[0]!.release).toHaveBeenCalledOnce()
+      expect(b.sessions.create).not.toHaveBeenCalled()
+    })
+  })
+
   describe('startSession draft initialization', () => {
     it.each<{ name: string; options: DraftInitializationOptions }>([
       { name: 'plain text', options: { prompt: '草稿 🧭\nsecond line', clearPreviousDraft: true } },
