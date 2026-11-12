@@ -31,8 +31,6 @@ kind: "package-reference"
 
 `session.edit` 会在原 Session 中替换当前轮次最新的人类消息。它会在 Agent 进入 idle maintenance 时取消活跃工作，保留待处理 Queue，将替换消息及 surface／对话代次元数据写入日志，并继续保留被替换的原始事件范围。Host 会拒绝过期目标、不支持的消息、subagent Session，以及无法安全准入的编辑。
 
-`session.edit` 会在原 Session 中替换当前轮次最新的人类消息。它会在 Agent 进入 idle maintenance 时取消活跃工作，保留待处理 Queue，将替换消息及 surface／对话代次元数据写入日志，并继续保留被替换的原始事件范围。Host 会拒绝过期目标、不支持的消息、subagent Session，以及无法安全准入的编辑。
-
 队列撤回在移除一条待处理用户消息前比较完整的预期内容。请求身份和被移除的消息在同一次 inbox splice 中提交，不改变模型输入准入。恢复只读取当前 Session 所有的已提交操作，排除分叉继承事件，并保留原消息块顺序。可继续的子会话仍须具有现有所有者。
 
 控制器通过可选服务方法 `agentPresets.presetForSession(session)` 读取 Session 已记录的预设。null 结果表示未记录预设；服务缺席表示控制器无法获知预设身份。

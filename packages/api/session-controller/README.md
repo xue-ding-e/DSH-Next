@@ -31,8 +31,6 @@ Prompt retries use the request identity in the first committed inbox insertion, 
 
 `session.edit` replaces the latest current turn-opening human message inside the original Session. It cancels active work at an idle maintenance boundary, retains pending Queue work, records a replacement message with surface and conversation-generation metadata, and leaves the replaced raw event range in the append-only log. The Host rejects stale targets, unsupported messages, subagent Sessions, and edits that cannot be admitted safely.
 
-`session.edit` replaces the latest current turn-opening human message inside the original Session. It cancels active work at an idle maintenance boundary, retains pending Queue work, records a replacement message with surface and conversation-generation metadata, and leaves the replaced raw event range in the append-only log. The Host rejects stale targets, unsupported messages, subagent Sessions, and edits that cannot be admitted safely.
-
 Queue recall compares the complete expected content before removing one pending user occurrence. Its request identity and removed message commit together in one inbox splice without changing model admission. Recovery reads only committed operations owned by the current Session, excludes inherited fork events, and preserves the original message block order. A continuable child must still have its existing owner.
 
 The controller reads a Session's recorded preset through the optional `agentPresets.presetForSession(session)` service method. A null result means no preset was recorded; an absent service means preset identity is unavailable to the controller.
