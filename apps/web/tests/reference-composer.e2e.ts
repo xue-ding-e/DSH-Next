@@ -251,6 +251,15 @@ describe.skipIf(MODE === 'record')('web e2e: file and session references through
     await expect.poll(() => chip.count()).toBe(1)
     expect(await chip.textContent()).toBe('Untitled')
     expect(await input.textContent()).toContain('Keep this draft.')
+    if (origin === 'search') {
+      await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2)
+      await page.mouse.down()
+      await page.mouse.move(destination.x + destination.width / 2, destination.y + destination.height / 3, { steps: 10 })
+      await invitation.waitFor({ state: 'visible' })
+      await page.mouse.up()
+      await invitation.waitFor({ state: 'hidden' })
+      expect(await chip.count()).toBe(1)
+    }
     await page.keyboard.insertText('Continue typing')
     expect(await input.textContent()).toContain('Continue typing')
     expect(await page.evaluate(() => localStorage.getItem('dsh.workspace.view.v5'))).toBe(order)

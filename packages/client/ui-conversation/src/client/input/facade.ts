@@ -16,6 +16,7 @@ import {
 import type { LexicalEditor } from 'lexical'
 import { $getRoot } from 'lexical'
 import type { QuoteSummary } from '@deepseek-ai/dsh-client-ui-primitives'
+import { parseSessionReferenceText } from '@deepseek-ai/dsh-session-reference/uri'
 import type {
   CommandClaim, ConsumeTokenRequest, DraftAttachmentId, DraftInitializationOptions, DraftInitializationResult,
   InputActions, InputEffect, InputNotice, InputState, InputTriggerController, PickOutcome,
@@ -419,6 +420,14 @@ export class SessionInputShell implements SessionInput {
    */
   insertReferenceAtCaret(reference: ReferenceInsert): boolean {
     if (this.disposed) return false
+    if (reference.appearance === 'session') {
+      const id = parseSessionReferenceText(reference.ref).references[0]?.sessionId
+      if (id !== undefined && this.snapshot.occurrences.some(item => item.appearance === 'session'
+        && parseSessionReferenceText(item.ref).references[0]?.sessionId === id)) {
+        this.focus()
+        return true
+      }
+    }
     const selection = this.caretSpan()
     const applied = this.insertReference(reference, { start: selection.end, end: selection.end, draftRev: this.rev })
     if (applied) this.focus()
