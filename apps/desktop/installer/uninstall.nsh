@@ -21,6 +21,8 @@ FunctionEnd
   SetRegView lastused
 !macroend
 
+!ifdef APP_PACKAGE_NAME
+!if "${APP_PACKAGE_NAME}" == "dsh-next-desktop"
 Function un.RemoveOwnedNextProtocol
   Push $0
   Push $1
@@ -40,6 +42,8 @@ Function un.RemoveOwnedNextProtocol
   Pop $1
   Pop $0
 FunctionEnd
+!endif
+!endif
 
 Function un.CleanData
   !ifdef APP_PACKAGE_NAME

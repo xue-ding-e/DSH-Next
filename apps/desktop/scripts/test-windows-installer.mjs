@@ -96,7 +96,7 @@ try {
 RequestExecutionLevel user
 ManifestDPIAware true
 Name "${productName}"
-OutFile "${join(payload, `${productName}.exe`)}"
+OutFile "payload\\${productName}.exe"
 SilentInstall silent
 Section
   FileOpen $0 "$EXEDIR\\launched.txt" w
@@ -106,7 +106,7 @@ Section
 SectionEnd
 `)
   const compiler = await getMakeNsisPath()
-  await execute(compiler.path, ['/V2', payloadSource], { ...childOptions, env: { ...childOptions.env, ...compiler.env } })
+  await execute(compiler.path, ['/V2', 'payload.nsi'], { ...childOptions, cwd: output, env: { ...childOptions.env, ...compiler.env } })
   if (sign) await sign({ path: join(payload, `${productName}.exe`), hash: 'sha256', isNest: false })
   if (!uninstallOnly && !process.argv.includes('--compile-only')) {
     const owner = join(output, 'restart-status-owner.exe')
