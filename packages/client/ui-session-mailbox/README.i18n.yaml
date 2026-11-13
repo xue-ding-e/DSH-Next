@@ -1,0 +1,34 @@
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write packages/client/ui-session-mailbox/README.md
+/:
+  en: 025a8ee46b8d1754
+  zh: 9b67eb178973042d
+/session-mailbox-ui:
+  en: ef01643c854cf053
+  zh: e56b8c22a2d13a05
+/session-mailbox-ui/summary:
+  en: 924e0ab64a8df432
+  zh: 4c54e9259fa7a472
+/session-mailbox-ui/table-of-contents:
+  en: f5268edfa0fff885
+  zh: 96efe89491609780
+/session-mailbox-ui/explicit-interaction:
+  en: ec67906ddbc48d47
+  zh: 9495fd462029f3f1
+/session-mailbox-ui/browser-ownership:
+  en: 5fa14affee5b08f1
+  zh: f6f1ec1de497bea7
+/session-mailbox-ui/model-experience:
+  en: 951738ae90aefc6b
+  zh: fa286c272e3aeab2
+/session-mailbox-ui/model-experience/kv-cache-effect:
+  en: e0a2560e0bf4449e
+  zh: 444da8077e16298e
+/session-mailbox-ui/known-limitations-and-deferred-work:
+  en: ff2debee583046dd
+  zh: 2ea1e83020434a2d
+/session-mailbox-ui/known-limitations-and-deferred-work/dev-note:
+  en: 0a1253c6f7b5e8b9
+  zh: 9f56528562c7c914

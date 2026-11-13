@@ -52,6 +52,9 @@ jobs:
           packages/api/session-controller/tests/queue-recall-replay.host.spec.ts
           packages/api/session-controller/tests/queue-recall-jsonl.host.spec.ts
           packages/context/session-reference/tests
+          packages/api/session-mailbox-controller/tests
+          packages/client/ui-session-mailbox/tests
+          packages/interaction/session-mailbox/tests
           packages/sandbox/sandbox-policy/tests
           packages/session/session-persistence-jsonl/tests/zstd.spec.ts
           packages/session/working-directory/tests
@@ -71,9 +74,9 @@ jobs:
           node --test apps/desktop/tests/desktop-build-identity.test.mjs apps/desktop/tests/next-uninstall-protocol.test.mjs
       - name: Install browser engines for workspace regressions
         run: pnpm --filter @deepseek-ai/dsh-web-frontend exec playwright install --with-deps chromium webkit
-      - name: Verify sidebar order and sending without folder selection
+      - name: Verify sidebar order, default workspace, and mailbox delivery
         env:
           DSH_SNAPSHOT: replay
-        run: pnpm run test:web:built apps/web/tests/default-workspace.e2e.ts apps/web/tests/sidebar-organization.e2e.ts
+        run: pnpm run test:web:built apps/web/tests/default-workspace.e2e.ts apps/web/tests/sidebar-organization.e2e.ts apps/web/tests/session-mailbox.e2e.ts
       - name: Verify session storage and workspace startup
         run: pnpm run test:expected apps/cli/tests/profiles/web/tests/session-artifact-startup.expected.e2e.ts

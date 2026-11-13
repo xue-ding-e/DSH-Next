@@ -117,6 +117,12 @@
     - id: session-controller
       name: '@deepseek-ai/dsh-api-session-controller'
 
+    - id: session-mailbox-controller
+      name: '@deepseek-ai/dsh-api-session-mailbox-controller'
+      disabled: !!js "!ctx.get('profileContext')"
+      config:
+        privateRoot: !!js "ctx.get('profileContext').dir + '/session-mailbox'"
+
     # One background job's observation record streamed over Typert Remote;
     # the roster rides the session control stream above.
     - id: job-controller
@@ -275,6 +281,9 @@
 
     - id: ui-session
       name: '@deepseek-ai/dsh-client-ui-session'
+
+    - id: ui-session-mailbox
+      name: '@deepseek-ai/dsh-client-ui-session-mailbox'
 
     # Unified resource model: protocol providers behind the useResource hook.
     - id: resources

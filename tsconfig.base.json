@@ -28,6 +28,8 @@
     // not declaration path aliases, keep each package/vendor source compiled
     // under its own tsconfig boundary.
     "paths": {
+      "@deepseek-ai/dsh-session-mailbox": ["./packages/interaction/session-mailbox/src/index.ts"],
+      "@deepseek-ai/dsh-session-mailbox/host": ["./packages/interaction/session-mailbox/src/host-adapter.ts"],
       "@deepseek-ai/dsh-client-ui-file-actions": ["./packages/client/ui-file-actions/src/index.ts"],
       "@deepseek-ai/dsh-client-ui-file-actions/client": ["./packages/client/ui-file-actions/src/client/index.ts"],
       "@deepseek-ai/dsh-client-ui-file-actions/types": ["./packages/client/ui-file-actions/src/types.ts"],
@@ -147,6 +149,8 @@
       "@deepseek-ai/dsh-api-job-controller/client": ["./packages/api/job-controller/src/client/index.ts"],
       "@deepseek-ai/dsh-api-job-controller/types": ["./packages/api/job-controller/src/types.ts"],
       "@deepseek-ai/dsh-api-session-controller": ["./packages/api/session-controller/src/index.ts"],
+      "@deepseek-ai/dsh-api-session-mailbox-controller": ["./packages/api/session-mailbox-controller/src/index.ts"],
+      "@deepseek-ai/dsh-api-session-mailbox-controller/types": ["./packages/api/session-mailbox-controller/src/types.ts"],
       "@deepseek-ai/dsh-api-session-controller/client": ["./packages/api/session-controller/src/client/index.ts"],
       "@deepseek-ai/dsh-api-session-controller/types": ["./packages/api/session-controller/src/types.ts"],
       "@deepseek-ai/dsh-api-session-controller/remote-events": ["./packages/api/session-controller/src/remote-events.ts"],
@@ -292,6 +296,8 @@
       "@deepseek-ai/dsh-client-ui-renderer": ["./packages/client/ui-renderer/src"],
       "@deepseek-ai/dsh-client-ui-renderer/client": ["./packages/client/ui-renderer/src/client"],
       "@deepseek-ai/dsh-client-ui-session": ["./packages/client/ui-session/src"],
+      "@deepseek-ai/dsh-client-ui-session-mailbox": ["./packages/client/ui-session-mailbox/src/index.ts"],
+      "@deepseek-ai/dsh-client-ui-session-mailbox/client": ["./packages/client/ui-session-mailbox/src/client/index.tsx"],
       "@deepseek-ai/dsh-client-ui-session/client": ["./packages/client/ui-session/src/client"],
       "@deepseek-ai/dsh-client-connection": ["./packages/client/connection/src"],
       "@deepseek-ai/dsh-client-file-upload": ["./packages/client/file-upload/src"],

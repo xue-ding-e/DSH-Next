@@ -50,6 +50,9 @@ const NO_MODEL_EXPERIENCE_SECTION: Readonly<Record<string, string>> = {
  * blocks. A package moves on or off this list with its context behavior.
  */
 const SENTENCE_MODEL_EXPERIENCE: Readonly<Record<string, SentenceContract>> = {
+  'packages/api/session-mailbox-controller': { kind: 'none', reason: 'The owner browser queues text without starting an Agent or adding model input.' },
+  'packages/client/ui-session-mailbox': { kind: 'none', reason: 'The dialog renders mailbox text only for the user.' },
+  'packages/interaction/session-mailbox': { kind: 'none', reason: 'Mailbox records are kept outside Agent inboxes and Session logs.' },
   'packages/client/ui-context-menu': { kind: 'none', reason: 'Client menu presentation and contributed callbacks add no model input.' },
   'packages/client/ui-file-actions': { kind: 'none', reason: 'Explicit user file saves and clipboard operations add no model input.' },
   'packages/client/ui-entry-customization': { kind: 'none', reason: 'Controls browser launchers and prepares a reviewable Creator draft without submitting model input.' },
