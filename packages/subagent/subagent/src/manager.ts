@@ -143,6 +143,10 @@ export class SubagentManager {
   private readonly rootPools = new WeakMap<Agent, ActivationPool>()
   /** Materializations admitted before drain, tracked through publication or rollback. */
   private readonly materializations = new Set<Materialization>()
+  /** Cold Host deliveries whose root is still being resolved. */
+  private unresolvedDeliveries = 0
+  /** Delivery remains active while waiting for the target's serialization slot. */
+  private readonly deliveries = new Map<Agent, number>()
   /** Per-child serializer shared by delivery, release, and disposal. */
   private readonly locks = new ChildLock()
   /** Structural Cordis owner of every Activation handle. */
@@ -251,7 +255,8 @@ export class SubagentManager {
   hasOwnerActivity(owner: Agent): boolean {
     this.assertAdmitting(owner)
     const root = this.rootOf(owner)
-    return [...this.materializations].some(item => item.root === root)
+    return this.unresolvedDeliveries > 0 || this.deliveries.has(root)
+      || [...this.materializations].some(item => item.root === root)
       || [...this.resident.values()].some(item => item.root === root)
   }
 
@@ -646,8 +651,13 @@ export class SubagentManager {
     options.signal.throwIfAborted()
     let root = this.resident.get(childId)?.root
     if (root === undefined) {
-      using source = await this.observeContinuation(childId, options.signal)
-      ;({ root } = await this.resolveCreationAncestry(source, options.signal))
+      this.unresolvedDeliveries += 1
+      try {
+        using source = await this.observeContinuation(childId, options.signal)
+        ;({ root } = await this.resolveCreationAncestry(source, options.signal))
+      } finally {
+        this.unresolvedDeliveries -= 1
+      }
     }
     return this.deliverToMember(root, childId, content, options)
   }
@@ -1176,6 +1186,19 @@ export class SubagentManager {
 
   /** Serialize target restoration and inbox admission; closure is awaited outside the lock. */
   private async deliverToMember(
+    root: Agent, childId: SessionId, content: ContentBlock[], options: ChildDeliveryOptions,
+  ): Promise<MessageId> {
+    this.deliveries.set(root, (this.deliveries.get(root) ?? 0) + 1)
+    try {
+      return await this.deliverToMemberTracked(root, childId, content, options)
+    } finally {
+      const remaining = (this.deliveries.get(root) ?? 1) - 1
+      if (remaining === 0) this.deliveries.delete(root)
+      else this.deliveries.set(root, remaining)
+    }
+  }
+
+  private async deliverToMemberTracked(
     root: Agent, childId: SessionId, content: ContentBlock[], options: ChildDeliveryOptions,
   ): Promise<MessageId> {
     while (true) {

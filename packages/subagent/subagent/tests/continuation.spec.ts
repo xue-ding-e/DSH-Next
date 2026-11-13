@@ -1868,6 +1868,7 @@ describe('continuable durability and teardown', () => {
     try {
       const starting = ctx.subagents.startActivation({ ...startSpec(parent), delivery: 'parent' })
       const childId = await published.promise
+      expect(ctx.subagents.hasOwnerActivity(parent)).toBe(true)
       let drainResolved = false
       const drained = ctx.subagents.drainDescendants([parent]).then(() => {
         drainResolved = true
@@ -2043,6 +2044,7 @@ describe('continuable review regressions', () => {
       message('must not cross parent replacement'),
     )
     await resumed.promise
+    expect(ctx.subagents.hasOwnerActivity(originalParent.agent)).toBe(true)
     await originalParent.dispose()
     // The durable store still holds the parent, so a same-id replacement is a
     // resume of the persisted session — a distinct exact Agent identity.

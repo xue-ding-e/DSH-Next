@@ -79,6 +79,8 @@ In-process spawn accepts an independent `agentPreset`; fork and external backend
 
 ### Failure and recovery
 
+`hasOwnerActivity(owner)` includes queued delivery, cold restoration, and resident or closing children. A Host delivery whose root is still being resolved counts as active until ownership is known.
+
 Starting without the `agents` service rejects with `CONTINUATION_UNAVAILABLE`; an available runtime rejects a missing or replaced parent with `UNAUTHORIZED`. Providers implementing neither execution method are rejected at registration with `UNSUPPORTED_CAPABILITY`; unsupported requested capabilities reject creation with the same code. If a provider is removed or replaced while directory resolution is pending, creation rejects with `PROVIDER_CHANGED` before invoking either provider; retry the delegation against the current registration. The caller signal cancels only unpublished work; after publication, `dispose()` cancels the exact activation and waits for its resource cleanup. Creation descendants continue independently; hosts must await `drainDescendants([root])` before disposing the root handle to stop all members and await pending startup. `result` settles after teardown and notifications, carrying output, optional structured data, and a stop reason; capture failures reject it after teardown. Cleanup failures reject `dispose()` and mark the lifecycle end as failed; the result promise and parent notification retain the captured execution result.
 
 -----
