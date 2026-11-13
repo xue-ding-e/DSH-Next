@@ -90,7 +90,7 @@ export interface UiWorkspace {
    * Open the Workspace blank `connectWorkspace` resolves, so New Session returns to that blank's
    * unsent draft. A creation the Host refuses is shown through the Workspace notice and leaves the
    * selection as it was.
-   * @param workspaceId - explicit target; absent inherits the current or most recent Workspace.
+   * @param workspaceId - explicit target; absent inherits the current or most recent Workspace, or prepares the default.
    * @param options - initial content, the blank's preset, and `whenDraftExists`, which decides
    * whether existing text or attachments are kept, replaced, or followed by the prompt.
    */
@@ -355,25 +355,49 @@ class UiWorkspaceService extends Service implements UiWorkspace {
       ? recentWorkspace(workspace.items, sessions.byId)
       : undefined
     const target = workspaceId ?? currentWorkspaceId ?? recent
-    if (target === undefined) {
-      if (initializeDraft) {
-        this.notify({ kind: 'createFailed', message: this.ctx.locale.bind('workspace')('draft.workspaceRequired') })
-        return
-      }
-      this.clearMain()
-      return
-    }
-    const opening = this.openWorkspace(target, initializeDraft || beforeOpen !== undefined ? (id) => {
+    const prepare = initializeDraft || beforeOpen !== undefined ? (id: SessionId) => {
       if (initializeDraft) {
         const binding = this.sessions.binding(id)
         if (binding === undefined) this.draftPreparationFailed()
         this.prepareDraft(binding, draftOptions)
       }
       beforeOpen?.(id)
-    } : undefined, agentPreset === undefined ? {} : { agentPreset })
+    } : undefined
+    const reuse = agentPreset === undefined ? {} : { agentPreset }
+    const opening = target === undefined
+      ? this.openDefaultWorkspace(prepare, reuse, initializeDraft, workspace.phase === 'ready' && sessions.phase === 'ready')
+      : this.openWorkspace(target, prepare, reuse)
     void opening.catch(
       (reason: unknown) => { console.warn('new session failed:', reason) },
     )
+  }
+
+  private async openDefaultWorkspace(
+    prepare: ((id: SessionId) => void) | undefined,
+    reuse: Pick<StartSessionOptions, 'agentPreset'>,
+    initializeDraft: boolean,
+    ready: boolean,
+  ): Promise<void> {
+    if (ready) {
+      const navigation = AbortSignal.any([this.ctx.layout.beginNavigation(), this.lifetime.signal])
+      let workspace: WorkspaceView | undefined
+      try {
+        workspace = await this.workspaces.initializeDefault(navigation)
+      } catch (error: unknown) {
+        if (!navigation.aborted) this.notify({ kind: 'defaultWorkspaceFailed' })
+        throw error
+      }
+      if (navigation.aborted) return
+      if (workspace !== undefined) {
+        await this.openWorkspace(workspace.workspaceId, prepare, reuse)
+        return
+      }
+    }
+    if (initializeDraft) {
+      this.notify({ kind: 'createFailed', message: this.ctx.locale.bind('workspace')('draft.workspaceRequired') })
+      return
+    }
+    this.clearMain()
   }
 
   private prepareDraft(binding: SessionBinding, options: DraftInitializationOptions): void {
@@ -492,7 +516,7 @@ class UiWorkspaceService extends Service implements UiWorkspace {
       sessionId = await this.restoreBlank(workspace.workspaceId, summary.id)
     }
     let target = workspace?.workspaceId ?? recentWorkspace(workspaces.items, sessions.byId)
-    if (target === undefined && workspaces.items.length === 0 && sessions.ids.length === 0) {
+    if (target === undefined) {
       const prepared = await this.initializeDefaultWorkspace(navigation)
       if (navigation.aborted) return
       target = prepared?.workspaceId

@@ -6,26 +6,28 @@ import { chromium, webkit } from 'playwright'
 import { describe, expect, it, onTestFinished } from 'vitest'
 import {
   assertFinalWorkspaceSnapshot, captureStableAria, compareOrRefreshGolden, fixtureUserPrompts, launchWebScaffold,
-  selectedSessionFixture, watchConsole, webSnapshotMode,
+  seedSession, selectedSessionFixture, watchConsole, webSnapshotMode,
 } from './scaffold.ts'
 import { newEnglishPage, saveFailureShot } from './support.ts'
 
-const FIXTURE = fileURLToPath(new URL('../../../snapshots/web/fresh-round-trip/session.v3.jsonl', import.meta.url))
+const FIXTURE = fileURLToPath(new URL('../../../snapshots/web/standard-dsh-doc/session.v4.jsonl', import.meta.url))
 const EXPECTED = fileURLToPath(new URL('../../../snapshots/web/default-workspace/ui.expected.md', import.meta.url))
 const FAILURE_EXPECTED = fileURLToPath(new URL('./expected/default-workspace/failure.expected.md', import.meta.url))
 const MODE = webSnapshotMode()
 
 describe.skipIf(MODE === 'record')('web e2e: default Workspace', () => {
-  it('prepares a blank Session on startup, reuses it after reload, and sends through the ordinary composer', async () => {
+  it.each([false, true])('opens a sendable default workspace without choosing a folder (existing history: %s)', async (withHistory) => {
     const fixture = await selectedSessionFixture(FIXTURE)
     const scaffold = await launchWebScaffold({
       firstUse: true,
       replayFixture: fixture,
-      // The shared recording remains read-only; replay compares the complete persisted Session.
-      compareReplaySession: MODE === 'replay',
+      // The shared recording uses the Linux skill catalog. Windows also registers the ACL diagnosis skill.
+      compareReplaySession: MODE === 'replay' && process.platform !== 'win32' ? 'read-only' : false,
       paceMs: 5,
     })
     onTestFinished(() => scaffold.close())
+    const recording = await readFile(fixture, 'utf8')
+    const historyId = withHistory ? await seedSession(scaffold, recording, 'ungrouped-default-workspace-history') : undefined
     const browser = await chromium.launch()
     try {
       const page = await newEnglishPage(browser)
@@ -39,13 +41,18 @@ describe.skipIf(MODE === 'record')('web e2e: default Workspace', () => {
         await page.getByRole('button', { name: 'Choose workspace', exact: true })
           .getByText('Default workspace', { exact: true }).waitFor()
         expect(scaffold.ctx.workspaceRegistry.list()).toHaveLength(1)
+        if (historyId !== undefined) {
+          const ungrouped = page.getByRole('treeitem', { name: 'Ungrouped', exact: true })
+          await ungrouped.waitFor()
+          expect(scaffold.ctx.workspaceRegistry.list()[0]?.sessionIds).not.toContain(historyId)
+        }
         const initialSession = scaffold.ctx.sessions.list()[0]!
         expect(scaffold.ctx.sessions.list()).toHaveLength(1)
         expect(initialSession.snapshotEvents().some(event => event.type === 'user/message')).toBe(false)
         await page.reload()
         await input.waitFor()
         expect(scaffold.ctx.sessions.list().map(session => session.id)).toEqual([initialSession.id])
-        const prompt = fixtureUserPrompts(await readFile(fixture, 'utf8'))[0]!
+        const prompt = fixtureUserPrompts(recording)[0]!
         await input.fill(prompt)
         const settled = scaffold.whenTurnSettled()
         await input.press('Enter')
@@ -55,9 +62,12 @@ describe.skipIf(MODE === 'record')('web e2e: default Workspace', () => {
         expect(workspace.path).toBe(join(scaffold.workspaceCwd, 'Documents', 'deepseek-harness', 'default-workspace'))
         expect((await stat(workspace.path)).isDirectory()).toBe(true)
         expect(workspace.sessionIds).toContain(sessionId)
-        expect(scaffold.ctx.sessions.get(sessionId)?.header.cwd).toBe(workspace.path)
+        const session = scaffold.ctx.sessions.get(sessionId)
+        expect(session?.header.cwd).toBe(workspace.path)
+        const submitted = session?.snapshotEvents().find(event => event.type === 'user/message' && event.data.source.kind === 'user')
+        expect(submitted?.type === 'user/message' ? submitted.data.content : undefined).toEqual([{ type: 'text', text: prompt }])
         await assertFinalWorkspaceSnapshot(fileURLToPath(new URL('../../../snapshots/web/default-workspace', import.meta.url)), workspace.path)
-        await page.getByText('DONE', { exact: true }).waitFor()
+        await page.getByText('READY', { exact: true }).waitFor()
         await compareOrRefreshGolden(EXPECTED, await captureStableAria(page, '[class*="centerCol"]', scaffold.workspaceCwd), MODE)
         expect(tripwire.pageErrors).toEqual([])
         expect(tripwire.warnings).toEqual([])
@@ -118,6 +128,8 @@ describe.skipIf(MODE === 'record')('web e2e: default Workspace', () => {
         expect(await page.getByRole('dialog').count()).toBe(0)
         expect(await input.count()).toBe(0)
         await page.getByRole('button', { name: '选择工作区', exact: true }).click()
+        await page.getByRole('dialog', { name: '添加工作区', exact: true })
+          .getByRole('button', { name: '选择文件夹', exact: true }).click()
         const picker = page.getByRole('dialog', { name: '选择工作区目录' })
         await picker.waitFor()
         await picker.getByRole('button', { name: '编辑路径', exact: true }).click()

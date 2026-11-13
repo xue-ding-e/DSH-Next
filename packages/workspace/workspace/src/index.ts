@@ -260,9 +260,9 @@ export class WorkspaceRegistry extends Service {
   }
 
   /**
-   * Initialize the default Workspace only while both the registry and Session
-   * history are empty. Repeated requests reuse its durable identity; deleting
-   * that registration permanently disables automatic creation.
+   * Initialize the default Workspace when no Workspace is registered.
+   * Repeated requests reuse its durable identity; deleting that registration
+   * permanently disables automatic creation.
    * @param resolveDirectory - resolve the absolute directory; called only for
    * eligible creation, inside the registry mutation queue. Missing directories
    * are created recursively before registration, and the initial title is the
@@ -275,17 +275,12 @@ export class WorkspaceRegistry extends Service {
     return this.enqueueOperation(async () => {
       const state = this.requireState()
       if (state.defaultWorkspaceId !== undefined) return this.entities.get(state.defaultWorkspaceId)
-      const sessions = this.ctx.get('sessions')
-      if (sessions === undefined) throw new Error('default Workspace initialization requires the Session store')
-      if (state.workspaceIds.length > 0 || state.archivedSessionIds.length > 0
-        || sessions.list().length > 0 || (await this.listStoredHeaders()).length > 0) return undefined
+      if (state.workspaceIds.length > 0) return undefined
 
       const path = await resolveDirectory()
       if (!fullyQualifiedWorkspacePath(path)) throw new TypeError(`Workspace path is not fully qualified: '${path}'`)
       await mkdir(path, { recursive: true })
       const canonical = await realpathNormalize(path)
-      // A Session can start outside the registry queue while directory preparation awaits I/O.
-      if ((await this.listStoredHeaders()).length > 0 || sessions.list().length > 0) return undefined
       return this.createCanonical(canonical, defaultWorkspaceTitle(path), true)
     })
   }

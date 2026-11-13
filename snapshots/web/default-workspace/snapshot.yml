@@ -8,4 +8,4 @@ workspace:
 header:
   class: web-default
 session:
-  source: ../fresh-round-trip/session.v4.jsonl
+  source: ../standard-dsh-doc/session.v4.jsonl

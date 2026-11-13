@@ -56,7 +56,8 @@ export interface IWorkspaces {
   /**
    * Initialize or reuse the default Workspace.
    * @param signal - caller lifetime.
-   * @returns the prepared Workspace, or undefined when first-use initialization is ineligible; rejects on preparation failure.
+   * @returns the prepared Workspace, or undefined if another Workspace is registered
+   * or the default was deleted. Rejects on preparation failure.
    */
   initializeDefault(signal?: AbortSignal): Promise<WorkspaceView | undefined>
   /**

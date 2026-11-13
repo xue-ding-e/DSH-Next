@@ -57,6 +57,8 @@ jobs:
           packages/client/ui-chat/tests/chat-view.client.spec.tsx
           packages/client/ui-workspace/tests/rows.client.spec.tsx
           packages/client/ui-workspace/tests/workspace-browser.client.spec.tsx
+          packages/client/ui-workspace/tests/workspaces-service.client.spec.ts
+          packages/workspace/workspace/tests/workspace.spec.ts
           packages/client/ui-settings-account/tests/apply.client.spec.ts
           packages/client/ui-settings-account/tests/account.client.spec.tsx
           packages/experimental/liveshare/tests/viewer-access-policy.spec.ts
@@ -65,3 +67,9 @@ jobs:
         run: |
           pnpm run test:docs
           node --test apps/desktop/tests/desktop-build-identity.test.mjs apps/desktop/tests/next-uninstall-protocol.test.mjs
+      - name: Install browser engines for workspace regressions
+        run: pnpm --filter @deepseek-ai/dsh-web-frontend exec playwright install --with-deps chromium webkit
+      - name: Verify sidebar order and sending without folder selection
+        env:
+          DSH_SNAPSHOT: replay
+        run: pnpm run test:web:built apps/web/tests/default-workspace.e2e.ts apps/web/tests/sidebar-organization.e2e.ts

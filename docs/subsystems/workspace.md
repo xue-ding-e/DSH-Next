@@ -379,12 +379,13 @@ Host service backing the generated `ctx.remote.workspace` namespace.
 @Remote('create') create(request: WorkspaceCreateRequest): Promise<WorkspaceCreateValue>
 
 /**
- * Initialize or reuse the default Workspace during first-use startup. The
+ * Initialize or reuse the default Workspace when none is registered. The
  * directory name is fixed, so the Host never renames or relocates an
  * existing default; its initial title is that same name, which browser
  * consumers label in the reader's language.
  * @param signal - caller lifetime; cancels native directory lookup.
- * @returns the durable Workspace, or undefined when first-use initialization is ineligible; creates no Session or message.
+ * @returns the durable Workspace, or undefined if another Workspace is registered
+ * or the default was deleted. Creates no Session or message.
  */
 @Remote('initializeDefault') async initializeDefault(signal: AbortSignal): Promise<WorkspaceValue | undefined>
 
@@ -556,9 +557,9 @@ Durable workspace registry. Startup waits for `sessionPersistence`, builds one c
 async create(path: string, title?: string): Promise<Workspace>
 
 /**
- * Initialize the default Workspace only while both the registry and Session
- * history are empty. Repeated requests reuse its durable identity; deleting
- * that registration permanently disables automatic creation.
+ * Initialize the default Workspace when no Workspace is registered.
+ * Repeated requests reuse its durable identity; deleting that registration
+ * permanently disables automatic creation.
  * @param resolveDirectory - resolve the absolute directory; called only for
  * eligible creation, inside the registry mutation queue. Missing directories
  * are created recursively before registration, and the initial title is the

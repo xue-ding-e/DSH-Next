@@ -351,11 +351,21 @@ describe('UiWorkspaceService', () => {
     expect(b.notify).not.toHaveBeenCalled()
   })
 
-  it('requires explicit selection when the startup Session list contains history', async () => {
-    const b = bench({ workspaces: workspaceState(), sessions: sessionState([summary('history')]) })
-    await setImmediate()
-    expect(b.workspaces.initializeDefault).not.toHaveBeenCalled()
-    expect(b.sessions.create).not.toHaveBeenCalled()
+  it('prepares a default Workspace with ungrouped history and no saved selection', async () => {
+    const b = bench({ workspaces: workspaceState(), sessions: sessionState([summary('history')]),
+      configureWorkspaces: (workspaces) => {
+        workspaces.initializeDefault.mockImplementationOnce(async () => {
+          const item = workspace('default')
+          workspaces.list.set(workspaceState([item]))
+          return item
+        })
+      },
+    })
+    await vi.waitFor(() => {
+      expect(b.sessions.retain).toHaveBeenCalledExactlyOnceWith(sid('created-default'), { source: 'mainView' })
+    })
+    expect(b.sessions.create).toHaveBeenCalledExactlyOnceWith({ workspaceId: wid('default') })
+    expect(b.notify).not.toHaveBeenCalled()
   })
 
   it('publishes a startup directory failure once without creating a Session', async () => {
@@ -804,6 +814,31 @@ describe('UiWorkspaceService', () => {
     b.uiWorkspace.startSession()
 
     expect(b.selectPanel).toHaveBeenCalledWith(null)
+  })
+
+  it('opens a blank in the default Workspace when starting from saved ungrouped history', async () => {
+    const history = sid('history')
+    persistSelection({ sessionId: history })
+    const b = bench({ workspaces: workspaceState(), sessions: sessionState([summary('history')]),
+      configureWorkspaces: (workspaces) => {
+        workspaces.initializeDefault.mockImplementationOnce(async () => {
+          const item = workspace('default')
+          workspaces.list.set(workspaceState([item]))
+          return item
+        })
+      },
+    })
+    expect(b.sessions.retain).toHaveBeenCalledExactlyOnceWith(history, { source: 'mainView' })
+    expect(b.workspaces.initializeDefault).not.toHaveBeenCalled()
+
+    b.uiWorkspace.startSession(undefined, { prompt: 'New draft' })
+
+    await vi.waitFor(() => {
+      expect(b.sessions.retained.at(-1)?.reference.sessionId).toBe(sid('created-default'))
+      expect(b.sessions.retained[0]!.release).toHaveBeenCalledOnce()
+    })
+    expect(b.sessions.create).toHaveBeenCalledExactlyOnceWith({ workspaceId: wid('default') })
+    expect(b.requestDraftInitialization).toHaveBeenCalledOnce()
   })
 
   describe('startSession beforeOpen preparation', () => {

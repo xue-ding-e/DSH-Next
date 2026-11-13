@@ -93,12 +93,13 @@ export class WorkspaceController extends TypertRemoteService {
   }
 
   /**
-   * Initialize or reuse the default Workspace during first-use startup. The
+   * Initialize or reuse the default Workspace when none is registered. The
    * directory name is fixed, so the Host never renames or relocates an
    * existing default; its initial title is that same name, which browser
    * consumers label in the reader's language.
    * @param signal - caller lifetime; cancels native directory lookup.
-   * @returns the durable Workspace, or undefined when first-use initialization is ineligible; creates no Session or message.
+   * @returns the durable Workspace, or undefined if another Workspace is registered
+   * or the default was deleted. Creates no Session or message.
    */
   @Remote('initializeDefault')
   async initializeDefault(signal: AbortSignal): Promise<WorkspaceValue | undefined> {

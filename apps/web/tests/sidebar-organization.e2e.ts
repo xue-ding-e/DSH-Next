@@ -202,25 +202,32 @@ describe('web e2e: sidebar organization', () => {
     await expect.poll(() => recentTitles(page)).toEqual(updated)
   })
 
-  it('keeps pinned chats above projects and restores them to Recent when unpinned', async () => {
+  it('places pinned chats above projects and Recent below them, including after reload', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-sidebar-organization-pinned'))
     const pinned = page.getByRole('region', { name: 'Pinned', exact: true })
     await rowOptions(recent(page), TITLES[0])
     await page.getByRole('menuitem', { name: 'Pin session', exact: true }).click()
     try {
       await pinned.getByText(TITLES[0], { exact: true }).waitFor()
-      const order = await pinned.evaluate((section) => {
+      const order = () => pinned.evaluate((section) => {
         const projects = document.querySelector('[data-sidebar-workspace-header]')!
+        const tree = projects.parentElement?.querySelector('[role="tree"]')
+        const recent = projects.parentElement?.querySelector('[data-sidebar-section="recent"]')
         return {
           beforeProjects: Boolean(section.compareDocumentPosition(projects) & Node.DOCUMENT_POSITION_FOLLOWING),
+          recentAfterTree: tree != null && recent != null
+            && Boolean(tree.compareDocumentPosition(recent) & Node.DOCUMENT_POSITION_FOLLOWING),
           bottom: section.getBoundingClientRect().bottom,
           projectTop: projects.getBoundingClientRect().top,
         }
       })
-      expect(order.beforeProjects).toBe(true)
-      expect(order.bottom).toBeLessThanOrEqual(order.projectTop)
+      const initialOrder = await order()
+      expect(initialOrder.beforeProjects).toBe(true)
+      expect(initialOrder.recentAfterTree).toBe(true)
+      expect(initialOrder.bottom).toBeLessThanOrEqual(initialOrder.projectTop)
       await reload()
       await pinned.getByText(TITLES[0], { exact: true }).waitFor()
+      expect((await order()).recentAfterTree).toBe(true)
       await rowOptions(pinned, TITLES[0])
       await page.getByRole('menuitem', { name: 'Unpin session', exact: true }).click()
       await recent(page).getByText(TITLES[0], { exact: true }).waitFor()
