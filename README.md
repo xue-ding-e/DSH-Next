@@ -6,7 +6,7 @@ DSH-Next is an independent community-maintained source repository based on [Deep
 
 `main` has independent linear history; `upstream-main` preserves the complete official `master` history without changes. The [source-import tag](https://github.com/xue-ding-e/DSH-Next/tree/source-import) preserves the initial source snapshot and its upstream attribution. The original [MIT license](LICENSE), [third-party notices](THIRD_PARTY_NOTICES.md), and author attribution are preserved.
 
-Windows installers and updates are published through this repository's [GitHub Releases](https://github.com/xue-ding-e/DSH-Next/releases). Personal extensions are maintained in [DSH-Next-Plugins](https://github.com/xue-ding-e/DSH-Next-Plugins), with versions and installation managed by [DSH-Next-Profile](https://github.com/xue-ding-e/DSH-Next-Profile). The pnpm command below installs the official upstream program. The Next installer uses its own application identity, update feed and data directory.
+[Download DSH Next for Windows x64](https://github.com/xue-ding-e/DSH-Next/releases). Choose the newest Next release and its `win-x64-unsigned.exe` installer. Pushes to `main` trigger the Windows release workflow, which publishes the installer, checksums and update feeds.
 
 DeepSeek Harness (`dsh`) is an open-source agent harness developed by [DeepSeek AI](https://deepseek.com).
 
@@ -22,7 +22,7 @@ Review the [safety notice](SAFETY.md) before running the project.
 
 ## Run
 
-### Run from `npm`
+### Run the official upstream Web app from `npm`
 
 Install `Node.js`, then run:
 
@@ -48,13 +48,13 @@ pnpm dsh web
 
 ### Install the personal extension collection
 
-After installing DSH Next on Windows, fully quit it before installing the locked personal extensions. The Profile package keeps plugin versions and hashes outside this source repository:
+After installing DSH Next, fully quit it, including the tray process. Run this command in Windows PowerShell to install the latest published Profile. The same command updates the extensions later.
 
 ```powershell
-pnpm dlx --package="https://github.com/xue-ding-e/DSH-Next-Profile/releases/download/v0.2.10/dsh-next-profile-0.2.10.tgz" dsh-next-profile install --host next --match-baseline
+$d = Join-Path ([IO.Path]::GetTempPath()) ('dsh-profile-' + [guid]::NewGuid().ToString('N') + '.ps1'); try { Invoke-WebRequest -UseBasicParsing 'https://github.com/xue-ding-e/DSH-Next-Profile/releases/latest/download/Install-Latest.ps1' -OutFile $d -ErrorAction Stop; powershell.exe -NoProfile -ExecutionPolicy Bypass -File $d } finally { Remove-Item -LiteralPath $d -ErrorAction SilentlyContinue }
 ```
 
-This installs the external plugin collection into the existing DSH Next Host. It does not transfer credentials, browser identity, Sessions, or local media. See [DSH-Next-Profile](https://github.com/xue-ding-e/DSH-Next-Profile) for the locked feature classification and release assets.
+The Profile verifies the downloaded archive and installs the locked plugins using the desktop app’s bundled runtime. To install manually, download and extract the [latest Windows ZIP](https://github.com/xue-ding-e/DSH-Next-Profile/releases/latest/download/dsh-next-profile-windows.zip), then run `Install.cmd`. Configure your accounts, Qoder PAT and optional Magpie privacy model on the new device. The installer and version locks live in [DSH-Next-Profile](https://github.com/xue-ding-e/DSH-Next-Profile), and plugin source lives in [DSH-Next-Plugins](https://github.com/xue-ding-e/DSH-Next-Plugins).
 
 ## Community and support
 

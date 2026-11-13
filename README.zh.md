@@ -6,7 +6,7 @@ DSH-Next 是基于 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-ha
 
 `main` 保持独立线性历史；`upstream-main` 原样保留官方 `master` 的完整历史。初始源码快照为 [source-import](https://github.com/xue-ding-e/DSH-Next/tree/source-import)，原始 [MIT 许可证](LICENSE)、[第三方声明](THIRD_PARTY_NOTICES.md)和作者归属均予以保留。
 
-Windows 安装包和更新通过本仓库的 [GitHub Releases](https://github.com/xue-ding-e/DSH-Next/releases) 发布。个人扩展由 [DSH-Next-Plugins](https://github.com/xue-ding-e/DSH-Next-Plugins) 独立维护，版本清单和安装入口由 [DSH-Next-Profile](https://github.com/xue-ding-e/DSH-Next-Profile) 管理。下方 pnpm 命令安装官方上游程序。Next 安装包使用独立的应用身份、更新源和数据目录。
+[下载 Windows x64 版 DSH Next](https://github.com/xue-ding-e/DSH-Next/releases)。在最新的 Next 发行版中选择 `win-x64-unsigned.exe` 安装包。推送到 `main` 会触发 Windows 发布流程，生成安装包、校验和与更新清单。
 
 DeepSeek Harness（`dsh`）是由 [DeepSeek AI](https://deepseek.com) 开发的开源 agent harness（智能体框架）。
 
@@ -24,7 +24,7 @@ DeepSeek Harness 处于 _开发者预览_ 阶段，正在快速迭代。**未来
 
 ## 运行
 
-### 通过 `npm` 运行
+### 通过 `npm` 运行官方上游 Web 版
 
 安装 `Node.js`，然后运行：
 
@@ -52,13 +52,13 @@ pnpm dsh web
 
 ### 安装个人扩展集合
 
-在 Windows 上安装 DSH Next 后，先完全退出应用，再安装锁定版本的个人扩展。Profile 包在源码仓库之外维护插件版本和哈希：
+安装 DSH Next 后，完全退出应用，包括托盘进程。在 Windows PowerShell 运行下面这条命令，安装最新发布的 Profile。以后更新插件也用同一条命令。
 
 ```powershell
-pnpm dlx --package="https://github.com/xue-ding-e/DSH-Next-Profile/releases/download/v0.2.10/dsh-next-profile-0.2.10.tgz" dsh-next-profile install --host next --match-baseline
+$d = Join-Path ([IO.Path]::GetTempPath()) ('dsh-profile-' + [guid]::NewGuid().ToString('N') + '.ps1'); try { Invoke-WebRequest -UseBasicParsing 'https://github.com/xue-ding-e/DSH-Next-Profile/releases/latest/download/Install-Latest.ps1' -OutFile $d -ErrorAction Stop; powershell.exe -NoProfile -ExecutionPolicy Bypass -File $d } finally { Remove-Item -LiteralPath $d -ErrorAction SilentlyContinue }
 ```
 
-该命令会把外置插件集合安装到已有的 DSH Next Host 中，不会转移凭据、浏览器身份、会话或本地媒体。完整的功能分类和 Release 产物见 [DSH-Next-Profile](https://github.com/xue-ding-e/DSH-Next-Profile)。
+Profile 会校验下载的归档，并使用桌面端自带的运行时安装锁定版本的插件。也可以下载并解压[最新版 Windows ZIP](https://github.com/xue-ding-e/DSH-Next-Profile/releases/latest/download/dsh-next-profile-windows.zip)，再运行 `Install.cmd`。账号、Qoder PAT 和可选的 Magpie 脱敏模型在新电脑上配置。安装器和版本锁由 [DSH-Next-Profile](https://github.com/xue-ding-e/DSH-Next-Profile) 维护，插件源码在 [DSH-Next-Plugins](https://github.com/xue-ding-e/DSH-Next-Plugins)。
 
 ## 社区与支持
 
