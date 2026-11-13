@@ -268,6 +268,8 @@ Windows 卸载程序会随应用一起删除 Electron 用户数据目录（`%APP
 
 使用 `node apps/desktop/scripts/test-windows-installer.mjs --uninstall-only --compile-only` 以每次运行唯一的带作用域包名编译独立的中英文夹具。省略 `--compile-only` 可对预置数据运行原生删除器回归，以及交互、静默、`--updated`、`/KEEP_APP_DATA` 和 `DSH_HOME` 位于 Electron 数据内的检查。编译本身不能证明已安装卸载行为。
 
+Next Windows 发布流程在发布前使用一次性托管运行器验证安装流程。它安装固定的公开基线版本，启动已安装的 Electron 应用和随附 CLI，升级到候选版本，并核验修复安装和卸载。测试为两个 Harness 主目录准备独立夹具，CI 只保留启动日志。卸载验证覆盖移除本安装拥有的协议处理程序，以及保留其他处理程序。
+
 <a id="updates"></a>
 
 ## 更新

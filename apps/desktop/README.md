@@ -268,6 +268,8 @@ The Windows uninstaller removes the Electron user-data directory (browser storag
 
 Use `node apps/desktop/scripts/test-windows-installer.mjs --uninstall-only --compile-only` to compile isolated English and Chinese fixtures with a per-run scoped package name. Omit `--compile-only` to run the native remover regression and the interactive, silent, `--updated`, `/KEEP_APP_DATA` and `DSH_HOME`-inside-Electron-data checks against seeded data. Compilation does not establish installed-uninstall behavior.
 
+The Next Windows release workflow checks installation on a disposable hosted runner before publication. It installs a pinned public baseline, starts the installed Electron application and bundled CLI, upgrades to the candidate, and checks repair and uninstall. The test keeps private fixtures for the two Harness homes and retains the startup journals in CI. It checks both removal of the installation's protocol handler and preservation of a foreign handler.
+
 <a id="updates"></a>
 
 ## Updates
