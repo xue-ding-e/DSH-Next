@@ -8,7 +8,8 @@
 import { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import type { Agent, PreStepDecision } from '@deepseek-ai/dsh-agent'
-import { Remote, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
+import { Remote, TypertRemoteService, principalOf, type Principal } from '@deepseek-ai/dsh-typert-protocol'
+import type {} from '@deepseek-ai/dsh-api-remote-access'
 import { createUserMessage, freezeMessage, LlmError } from '@deepseek-ai/dsh-llm'
 import type { ContentBlock, LlmCallConfig, LlmResolvedModelInfo, UserMessage } from '@deepseek-ai/dsh-llm'
 import type { SessionId } from '@deepseek-ai/dsh-session'
@@ -35,6 +36,7 @@ import type {
   SessionReferenceMentionCandidate, SessionReferenceSource,
 } from './types.ts'
 import { formatSessionReferenceMention, parseSessionReferenceText } from './uri.ts'
+import { mayReferenceSession, requireReferenceAccess } from './access.ts'
 
 export type * from './types.ts'
 export type { Config, SessionReferenceErrorCode } from './config.ts'
@@ -150,6 +152,7 @@ export class SessionReferenceResolver extends TypertRemoteService {
     route: Readonly<Pick<LlmCallConfig, 'provider' | 'model'>>,
     signal: AbortSignal,
   ): Promise<UserMessage[]> {
+    const authorizationChecks: Array<() => void> = []
     const prepared = await Promise.all(messages.map(async (message): Promise<UserMessage[]> => {
       if (message.source.kind !== 'user') return [message]
       const references: SessionReferenceInput[] = []
@@ -160,7 +163,11 @@ export class SessionReferenceResolver extends TypertRemoteService {
         return { type: 'text', text: parsed.text }
       })
       if (references.length === 0) return [message]
-      const resolved = await this.prepare(agent, content, references, route, signal)
+      // Session Controller records the authenticated caller on user input.
+      // Text, labels and drag payloads never supply this authority.
+      const source: { kind: 'user'; principal?: Principal } = message.source
+      authorizationChecks.push(() => this.checkReferenceAccess(source.principal, agent.id, references))
+      const resolved = await this.prepare(agent, content, references, route, signal, source.principal)
       const direct = freezeMessage({ ...message, content: resolved.content })
       /* v8 ignore if -- a parsed canonical mention always leaves one normalized reference */
       if (resolved.additionalContext === undefined) {
@@ -168,7 +175,16 @@ export class SessionReferenceResolver extends TypertRemoteService {
       }
       return [direct, resolved.additionalContext]
     }))
+    // Another input's asynchronous capture must not extend an earlier grant.
+    for (const check of authorizationChecks) check()
     return prepared.flat()
+  }
+
+  private checkReferenceAccess(principal: Principal | undefined, target: SessionId, inputs: readonly SessionReferenceInput[]): void {
+    requireReferenceAccess(mayReferenceSession(this.ctx.get('remoteAccess'), principal, target, 'session/prompt'))
+    for (const input of inputs) {
+      requireReferenceAccess(mayReferenceSession(this.ctx.get('remoteAccess'), principal, input.sessionId, 'session/page'))
+    }
   }
 
   /**
@@ -193,10 +209,15 @@ export class SessionReferenceResolver extends TypertRemoteService {
     }
     const needle = query.toLocaleLowerCase()
     const targetCwd = agent.session.header.cwd
+    const principal = principalOf(this.ctx.invocation)
+    const canRead = (id: SessionId): boolean => mayReferenceSession(this.ctx.get('remoteAccess'), principal, id, 'session/page')
+    const checkTarget = (): void => requireReferenceAccess(mayReferenceSession(this.ctx.get('remoteAccess'), principal, agent.id, 'session/prompt'))
+    checkTarget()
     assertNotCancelled(signal)
     const records = (await settleWithCancellation(this.ctx.sessionQuery.listSessions(signal), signal))
-      .filter(record => record.header.id !== agent.id)
+      .filter(record => record.header.id !== agent.id && canRead(record.header.id))
       .map((record, index) => ({ record, index }))
+    checkTarget()
     const labelled = this.projectedLabels(records)
     return labelled.filter(({ record, label, displayTitle }) => {
       if (needle === '') return true
@@ -305,6 +326,7 @@ export class SessionReferenceResolver extends TypertRemoteService {
    * @param references - structured source sessions in mention order.
    * @param route - provider and model whose context capacity sizes the previews.
    * @param signal - optional cancellation boundary for the active turn.
+   * @param principal - authenticated caller retained by the Host, never prompt text.
    * @returns detached content and optional referenced-session context.
    */
   async prepare(
@@ -313,12 +335,16 @@ export class SessionReferenceResolver extends TypertRemoteService {
     references: SessionReferenceInput[],
     route: Readonly<Pick<LlmCallConfig, 'provider' | 'model'>>,
     signal?: AbortSignal,
+    principal: Principal | undefined = principalOf(this.ctx.invocation),
   ): Promise<PreparedReferencedMessage> {
     const acceptedContent = structuredClone(content)
     const inputs = normalizeReferences(agent.id, references, this.config.maxReferences)
     if (inputs.length === 0) return { content: acceptedContent }
+    const checkAccess = (): void => this.checkReferenceAccess(principal, agent.id, inputs)
+    checkAccess()
     assertNotCancelled(signal)
     const maxReferenceBytes = await this.referenceBudget(route, signal)
+    checkAccess()
     assertNotCancelled(signal)
     let prepared: PreparedSource[]
     try {
@@ -338,12 +364,14 @@ export class SessionReferenceResolver extends TypertRemoteService {
       )
     }
     assertNotCancelled(signal)
+    checkAccess()
 
     const rendered = this.renderSources(prepared, maxReferenceBytes)
     const omissions = await settleWithCancellation(Promise.all(rendered.map((source, index) =>
-      prepareReferenceOmission(this.ctx.get('spillStore'), agent.session.id, source, index),
+      prepareReferenceOmission(this.ctx.get('spillStore'), agent.session.id, source, index, principal !== undefined && principal.kind !== 'owner'),
     )), signal)
     assertNotCancelled(signal)
+    checkAccess()
     const notices = omissions.filter(notice => notice !== undefined)
     const prompt = renderPrompt(rendered.map(source => source.data))
       + (notices.length === 0 ? '' : '\n\n## Reference omissions\n\n'

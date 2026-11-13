@@ -51,6 +51,7 @@ jobs:
           packages/api/session-controller/tests/queue-recall-transaction.host.spec.ts
           packages/api/session-controller/tests/queue-recall-replay.host.spec.ts
           packages/api/session-controller/tests/queue-recall-jsonl.host.spec.ts
+          packages/context/session-reference/tests
           packages/sandbox/sandbox-policy/tests
           packages/session/session-persistence-jsonl/tests/zstd.spec.ts
           packages/session/working-directory/tests

@@ -40,6 +40,8 @@ kind: "package-reference"
 
 引用被截断时，可选的 spill 后端会在目标会话下保存完整的已捕获文本投影。有界预览 JSON 之外的独立省略通知给出精确的 `omittedMessages` 与 `omittedBytes`，以及保存后的定位信息和 `retrievalHint`，或区分未配置存储与保存失败的不可用结果。该通知属于同一条持久上下文消息。完整 transcript（文本记录）携带相同的不受信任背景警告与捕获元数据，包括 `capturedFormatVersion`。每条消息使用每行至多 64 个 Unicode 码点的 JSON 字符串片段；解码并拼接其片段即可恢复精确文本，包括原始换行。这种固定存储格式使很长的单行文本也可通过分页文件读取来检查。
 
+远程调用时，Host 检查目标会话的发送权限及每个来源会话的历史读取权限，在异步读取后及提供上下文前再次检查。非所有者的引用被截断时，仅提供有长度限制的预览和省略说明。只有本地请求和所有者请求可以保存完整快照。
+
 ### 查找可引用的会话
 
 `listCandidates(agent, query?, limit?)` 列出除 agent 自身外的会话，按 id、工作目录、投影标题或显示标题做不区分大小写的过滤，并把同目录会话排在前面。每个候选的 `label` 使用最新标题；标题缺失或不可读时回退到会话 id。显示标题优先使用 subagent 的持久创建 label，再回退到该标题。候选还会报告其工作目录是否就是发起方 agent 的工作目录，宿主因此可以只在位置能区分该行时才显示它。浏览器消费方通过 `ctx.remote.sessionReferenceResolver.candidates` 调用同一发现能力；该方法在 `displayTitle` 存在时用它标记规范 mention。

@@ -118,6 +118,7 @@ type SessionReferenceErrorCode =
   | 'SESSION_REFERENCE_SELF_REFERENCE'
   | 'SESSION_REFERENCE_TOO_MANY'
   | 'SESSION_REFERENCE_READ_FAILED'
+  | 'SESSION_REFERENCE_ACCESS_DENIED'
   | 'SESSION_REFERENCE_BUDGET_EXCEEDED'
   | 'SESSION_REFERENCE_CANCELLED'
 ```
@@ -214,12 +215,13 @@ async listCandidates( agent: Agent, query: string = '', limit: number = this.con
  * @param references - structured source sessions in mention order.
  * @param route - provider and model whose context capacity sizes the previews.
  * @param signal - optional cancellation boundary for the active turn.
+ * @param principal - authenticated caller retained by the Host, never prompt text.
  * @returns detached content and optional referenced-session context.
  */
-async prepare( agent: Agent, content: ContentBlock[], references: SessionReferenceInput[], route: Readonly<Pick<LlmCallConfig, 'provider' | 'model'>>, signal?: AbortSignal, ): Promise<PreparedReferencedMessage>
+async prepare( agent: Agent, content: ContentBlock[], references: SessionReferenceInput[], route: Readonly<Pick<LlmCallConfig, 'provider' | 'model'>>, signal?: AbortSignal, principal: Principal | undefined = principalOf(this.ctx.invocation), ): Promise<PreparedReferencedMessage>
 ```
 
-Types: [Agent](core.md) · [ContentBlock](llm-streaming.md) · [LlmCallConfig](llm-streaming.md)
+Types: [Agent](core.md) · [ContentBlock](llm-streaming.md) · [LlmCallConfig](llm-streaming.md) · [Principal](typert.md)
 
 Source: [`packages/context/session-reference/src/index.ts`](../../packages/context/session-reference/src/index.ts)
 <!-- END GENERATED cordis-surface -->

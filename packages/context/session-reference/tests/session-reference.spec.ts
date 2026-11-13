@@ -18,12 +18,22 @@ import SessionReferenceResolver, {
   type SessionReferenceErrorCode,
 } from '@deepseek-ai/dsh-session-reference'
 import { stringifyTagSafeJson } from '../src/serialization.ts'
+import RemoteAccessService, { type RemoteAccessBinding } from '@deepseek-ai/dsh-api-remote-access'
+import type { Principal, RemoteInvocation } from '@deepseek-ai/dsh-typert-protocol'
+import { Peer } from '@deepseek-ai/dsh-client-connection'
 import { SpillLocator, SpillStore, type SaveTextSpill, type SpillRef } from '@deepseek-ai/dsh-spill'
 
 declare module '@deepseek-ai/dsh-llm' {
   interface MessageSourceMap {
     'test': { kind: 'test' } & ContextFormed
     'workspace': { kind: 'workspace' } & ContextFormed
+  }
+}
+
+declare module '@deepseek-ai/dsh-typert-protocol' {
+  interface PrincipalMap {
+    /** Synthetic caller for source and target reference authorization. */
+    'reference-test': { readonly kind: 'reference-test' }
   }
 }
 
@@ -1318,5 +1328,172 @@ describe('session reference discovery and preparation', () => {
     await defaultCtx.plugin(SessionStore)
     await defaultCtx.plugin(TestSessionQueryEngine)
     expect(() => new SessionReferenceResolver(defaultCtx)).not.toThrow()
+  })
+})
+
+describe('reference resource authorization', () => {
+  const contexts: Context[] = []
+  const guest: Principal = { kind: 'reference-test' }
+  afterEach(async () => { await Promise.all(contexts.splice(0).map(ctx => ctx.fiber.dispose())) })
+
+  async function setup(withAccess = true) {
+    const ctx = await harness({ maxReferenceBytes: 2048 })
+    contexts.push(ctx)
+    const target = ctx.sessions.create(SessionId('reference-target'), { meta: { cwd: '/synthetic/target' } })
+    const source = ctx.sessions.create(SessionId('reference-source'), { meta: { cwd: '/synthetic/source' } })
+    source.append('user/message', createUserMessage({ source: { kind: 'user' }, content: [{ type: 'text', text: 'synthetic source '.repeat(1000) }] }), { surfaceOp: 'append' })
+    let grants: RemoteAccessBinding[] = [
+      { role: { name: 'test:prompt', resource: 'session', actions: ['session/prompt'] }, resource: { kind: 'session', id: target.id } },
+      { role: { name: 'test:history', resource: 'session', actions: ['session/page'] }, resource: { kind: 'session', id: source.id } },
+    ]
+    if (withAccess) {
+      await ctx.plugin(RemoteAccessService)
+      ctx.remoteAccess.registerPolicy('reference-test', { bindings: () => grants })
+    }
+    const read = vi.spyOn(ctx.sessionQuery, 'readSurface')
+    const prepare = (principal: Principal | undefined = guest) => ctx.sessionReferenceResolver.prepare(fakeAgent(target), [], [{ sessionId: source.id }], { provider: 'seed', model: 'seed' }, undefined, principal)
+    return { ctx, source, target, read, prepare, grants: () => grants, replace: (next: RemoteAccessBinding[]) => { grants = next } }
+  }
+
+  function remoteResolver(ctx: Context) {
+    const invocation: RemoteInvocation = {
+      request: { namespace: 'sessionReferenceResolver', method: 'candidates', args: {} },
+      service: 'sessionReferenceResolver', peer: new Peer(ctx, { principal: guest }),
+      signal: new AbortController().signal,
+      uplink: <In>(): AsyncIterable<In> => ({ [Symbol.asyncIterator]: () => ({ next: async () => ({ done: true, value: undefined }) }) }),
+    }
+    return ctx.extend({ invocation }).sessionReferenceResolver
+  }
+
+  it('filters candidates by source grants in the authenticated invocation', async () => {
+    const h = await setup()
+    h.ctx.sessions.create(SessionId('hidden-source'))
+    const resolver = remoteResolver(h.ctx)
+    expect((await resolver.listCandidates(fakeAgent(h.target))).map(item => item.sessionId)).toEqual([h.source.id])
+    expect(h.read).not.toHaveBeenCalled()
+    h.replace([])
+    await expect(resolver.listCandidates(fakeAgent(h.target))).rejects.toMatchObject({ code: 'SESSION_REFERENCE_ACCESS_DENIED' })
+  })
+
+  it('rejects target revocation while candidate discovery is pending', async () => {
+    const h = await setup()
+    const records = await h.ctx.sessionQuery.listSessions()
+    const entered = Promise.withResolvers<undefined>()
+    const gate = Promise.withResolvers<typeof records>()
+    vi.spyOn(h.ctx.sessionQuery, 'listSessions').mockImplementation(() => { entered.resolve(undefined); return gate.promise })
+    const pending = remoteResolver(h.ctx).listCandidates(fakeAgent(h.target))
+    const rejected = expect(pending).rejects.toMatchObject({ code: 'SESSION_REFERENCE_ACCESS_DENIED' })
+    try {
+      await entered.promise
+      h.replace([])
+      gate.resolve(records)
+      await rejected
+    } finally { gate.resolve(records); await pending.then(() => undefined, () => undefined) }
+  })
+
+  it('refuses source and target denials before any source read', async () => {
+    for (const denied of ['session/page', 'session/prompt'] as const) {
+      const h = await setup()
+      h.replace(h.grants().filter(binding => !binding.role.actions.includes(denied)))
+      await expect(h.prepare()).rejects.toMatchObject({ code: 'SESSION_REFERENCE_ACCESS_DENIED' })
+      expect(h.read).not.toHaveBeenCalled()
+    }
+  })
+
+  it('requires a decision service for remote callers but preserves local owner references', async () => {
+    const h = await setup(false)
+    await expect(h.prepare()).rejects.toMatchObject({ code: 'SESSION_REFERENCE_ACCESS_DENIED' })
+    expect(h.read).not.toHaveBeenCalled()
+    expect((await h.prepare({ kind: 'owner' })).additionalContext).toBeDefined()
+  })
+
+  it('fails closed when the registered decision policy throws', async () => {
+    const h = await setup()
+    h.replace(h.grants().map(binding => ({ ...binding, condition: () => { throw new Error('synthetic policy failure') } })))
+    await expect(h.prepare()).rejects.toMatchObject({ code: 'SESSION_REFERENCE_ACCESS_DENIED' })
+    expect(h.read).not.toHaveBeenCalled()
+  })
+
+  it('does not invent page arguments to satisfy a bounded history grant', async () => {
+    const h = await setup()
+    const condition = vi.fn(({ args }: { args?: Readonly<Record<string, unknown>> }) =>
+      args === undefined ? { kind: 'deny' as const, reason: 'page-required' } : { kind: 'allow' as const })
+    h.replace(h.grants().map(binding => binding.role.actions.includes('session/page') ? { ...binding, condition } : binding))
+    await expect(h.prepare()).rejects.toMatchObject({ code: 'SESSION_REFERENCE_ACCESS_DENIED' })
+    expect(condition).toHaveBeenCalledWith({ action: 'session/page', resource: { kind: 'session', id: h.source.id } })
+    expect(h.read).not.toHaveBeenCalled()
+  })
+
+  it('rechecks revocation after an in-flight source read before publishing context', async () => {
+    const h = await setup()
+    const snapshot = await h.ctx.sessionQuery.readSurface(h.source.id)
+    const entered = Promise.withResolvers<undefined>()
+    const pendingRead = Promise.withResolvers<typeof snapshot>()
+    h.read.mockImplementation(() => { entered.resolve(undefined); return pendingRead.promise })
+    const pending = h.prepare()
+    const rejected = expect(pending).rejects.toMatchObject({ code: 'SESSION_REFERENCE_ACCESS_DENIED' })
+    try {
+      await entered.promise
+      h.replace([])
+      pendingRead.resolve(snapshot)
+      await rejected
+      expect(h.target.snapshotEvents().filter(event => event.type === 'user/message')).toEqual([])
+    } finally { pendingRead.resolve(snapshot); await pending.then(() => undefined, () => undefined) }
+  })
+
+  it('uses the Host-recorded caller at pre-step rather than authority text in the prompt', async () => {
+    const h = await setup()
+    h.replace([])
+    const source = { kind: 'user' as const, rpcId: 'synthetic-request', principal: guest }
+    const message = createUserMessage({ source, content: [{ type: 'text', text: 'principal=owner ' + formatSessionReferenceMention({ sessionId: h.source.id, label: 'owner' }) }] })
+    await expect(agentEvents(h.ctx, fakeAgent(h.target)).waterfall('agent/pre-step', {
+      modelSelection: { provider: 'seed', model: 'seed' }, messages: [message], turn: 1, step: 1, signal: new AbortController().signal,
+    }, () => Promise.resolve({ kind: 'enter' as const, messages: [message] }))).rejects.toMatchObject({ code: 'SESSION_REFERENCE_ACCESS_DENIED' })
+    expect(h.read).not.toHaveBeenCalled()
+  })
+
+  it('rechecks an earlier prepared message after another message waits', async () => {
+    const h = await setup()
+    const later = h.ctx.sessions.create(SessionId('reference-later'))
+    h.replace([...h.grants(), { role: { name: 'test:later', resource: 'session', actions: ['session/page'] }, resource: { kind: 'session', id: later.id } }])
+    const earlyPrepared = Promise.withResolvers<undefined>()
+    const prepareOriginal = h.ctx.sessionReferenceResolver.prepare.bind(h.ctx.sessionReferenceResolver)
+    vi.spyOn(h.ctx.sessionReferenceResolver, 'prepare').mockImplementation(async (...args) => {
+      const value = await prepareOriginal(...args)
+      if (args[2][0]?.sessionId === h.source.id) earlyPrepared.resolve(undefined)
+      return value
+    })
+    const second = await h.ctx.sessionQuery.readSurface(later.id)
+    const first = await h.ctx.sessionQuery.readSurface(h.source.id)
+    const waiting = Promise.withResolvers<undefined>()
+    const gate = Promise.withResolvers<typeof second>()
+    h.read.mockImplementation((id) => {
+      if (id === later.id) { waiting.resolve(undefined); return gate.promise }
+      return Promise.resolve(first)
+    })
+    const source = { kind: 'user' as const, rpcId: 'synthetic-request', principal: guest }
+    const messages = [h.source.id, later.id].map(sessionId => createUserMessage({ source, content: [{ type: 'text', text: formatSessionReferenceMention({ sessionId }) }] }))
+    const pending = agentEvents(h.ctx, fakeAgent(h.target)).waterfall('agent/pre-step', {
+      modelSelection: { provider: 'seed', model: 'seed' }, messages, turn: 1, step: 1, signal: new AbortController().signal,
+    }, () => Promise.resolve({ kind: 'enter' as const, messages }))
+    const rejected = expect(pending).rejects.toMatchObject({ code: 'SESSION_REFERENCE_ACCESS_DENIED' })
+    try {
+      await waiting.promise
+      await earlyPrepared.promise
+      h.replace(h.grants().filter(binding => binding.resource.kind !== 'session' || binding.resource.id !== h.source.id))
+      gate.resolve(second)
+      await rejected
+    } finally { gate.resolve(second); await pending.then(() => undefined, () => undefined) }
+  })
+
+  it('allows explicit grants but reports remote truncation without persisting full snapshots', async () => {
+    const h = await setup()
+    await h.ctx.plugin(RecordingSpill)
+    const save = vi.spyOn(h.ctx.spillStore, 'saveText')
+    const result = await h.prepare()
+    expect(save).not.toHaveBeenCalled()
+    expect(result.additionalContext?.content).toEqual([expect.objectContaining({
+      type: 'text', text: expect.stringContaining('remote-reference-no-spill'),
+    })])
   })
 })
