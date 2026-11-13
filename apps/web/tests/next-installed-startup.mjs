@@ -28,7 +28,7 @@ const app = await _electron.launch({
 try {
   await app.firstWindow({ timeout: 60_000 })
   const installed = await app.evaluate(({ app }) => ({
-    version: app.getVersion(), packaged: app.isPackaged, executable: process.execPath,
+    version: app.getVersion(), packaged: app.isPackaged, executable: process.execPath, pid: process.pid,
   }))
   assert.equal(installed.version, version)
   assert.equal(installed.packaged, true)
@@ -38,7 +38,7 @@ try {
   while (!ready && Date.now() < deadline) {
     for (const file of (await readdir(journal)).filter(name => !initialJournal.has(name))) {
       const events = (await readFile(join(journal, file), 'utf8')).trim().split('\n').map(line => JSON.parse(line))
-      assert.ok(events.every(event => event.version === version && event.pid === app.process().pid))
+      assert.ok(events.every(event => event.version === version && event.pid === installed.pid))
       assert.ok(!events.some(event => event.event === 'workspace-failed'), 'Installed Host startup failed')
       ready ||= events.some(event => event.event === 'workspace-ready')
     }
