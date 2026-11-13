@@ -25,6 +25,7 @@ const app = await _electron.launch({
   },
   timeout: 60_000,
 })
+const processHandle = app.process()
 try {
   await app.firstWindow({ timeout: 60_000 })
   const installed = await app.evaluate(({ app }) => ({
@@ -52,7 +53,6 @@ try {
       timer = setTimeout(() => reject(new Error('Installed Electron did not quit')), 30_000)
     })])
   } catch (error) {
-    const processHandle = app.process()
     if (processHandle.exitCode === null && processHandle.signalCode === null) {
       spawnSync(join(environment.SystemRoot, 'System32', 'taskkill.exe'),
         ['/PID', String(processHandle.pid), '/T', '/F'], { windowsHide: true, timeout: 15_000 })
@@ -62,4 +62,4 @@ try {
     clearTimeout(timer)
   }
 }
-assert.equal(app.process().exitCode, 0)
+assert.equal(processHandle.exitCode, 0)

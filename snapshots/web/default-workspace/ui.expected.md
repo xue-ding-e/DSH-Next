@@ -1,6 +1,8 @@
 - banner:
   - navigation "Session hierarchy": Reply READY without using tools
+  - button "Session mailbox"
   - text: Standard mode
+  - button "Manage directories"
   - button "More actions"
   - button "Open right sidebar"
   - tablist:
