@@ -33,7 +33,9 @@ it('binds targets in loops, captures deferred identity before focus changes it, 
   expect(focus).toHaveBeenCalledWith({ preventScroll: true })
   expect(button.tabIndex).toBe(-1)
   expect(clicked).not.toHaveBeenCalled()
-  fireEvent.contextMenu(button)
+  fireEvent.contextMenu(button, { button: -1, clientX: 55, clientY: 50 })
+  expect(open).toHaveBeenCalledTimes(3)
+  fireEvent.contextMenu(button, { button: -1, clientX: 55, clientY: 50 })
   expect(open).toHaveBeenLastCalledWith(target('changed'), { x: 30, y: 60 })
 })
 

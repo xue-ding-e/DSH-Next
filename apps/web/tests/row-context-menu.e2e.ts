@@ -49,7 +49,7 @@ describe('web e2e: row context-menu placement', () => {
 
   /** Read actual rendered geometry, not the inline placement declaration. */
   async function rect(locator: Locator) {
-    return await locator.evaluate(element => {
+    return await locator.evaluate((element) => {
       const bounds = element.getBoundingClientRect()
       return { x: bounds.x, y: bounds.y, width: bounds.width, height: bounds.height }
     })
@@ -66,21 +66,24 @@ describe('web e2e: row context-menu placement', () => {
     const expanded = await row.getAttribute('aria-expanded')
     for (const offset of [60, 120]) {
       const bounds = await rect(row)
-      // Playwright sends the native pointerdown/mousedown/contextmenu sequence.
-      await row.click({ button: 'right', position: { x: offset, y: bounds.height / 2 } })
+      // Use viewport coordinates. Locator offsets are relative to the padding box.
+      const x = Math.round(bounds.x + offset)
+      const y = Math.round(bounds.y + bounds.height / 2)
+      await page.mouse.click(x, y, { button: 'right' })
       await menu.waitFor()
-      await expect.poll(async () => Math.abs((await rect(menu)).x - (bounds.x + offset))).toBeLessThan(1)
-      await expect.poll(async () => Math.abs((await rect(menu)).y - (bounds.y + bounds.height / 2 + 4))).toBeLessThan(1)
+      await expect.poll(async () => Math.abs((await rect(menu)).x - x)).toBeLessThan(1)
+      await expect.poll(async () => Math.abs((await rect(menu)).y - (y + 4))).toBeLessThan(1)
       expect(await menu.count()).toBe(1)
     }
     expect(await row.getAttribute('aria-expanded')).toBe(expanded)
     expect(await page.locator(`[data-row-key="session:${SELECTED}"]`).getAttribute('aria-selected')).toBe('true')
     await page.keyboard.press('Escape')
     await menu.waitFor({ state: 'detached' })
-    expect(await trigger.evaluate(element => element === document.activeElement)).toBe(true)
+    await expect.poll(() => row.evaluate(element => element === document.activeElement)).toBe(true)
 
     for (const key of ['ContextMenu', 'Shift+F10']) {
       await row.focus()
+      expect(await row.evaluate(element => element === document.activeElement)).toBe(true)
       await page.keyboard.press(key)
       await menu.waitFor()
       await expect.poll(async () => {
@@ -90,7 +93,7 @@ describe('web e2e: row context-menu placement', () => {
         // Keyboard anchoring retains the shared menu's 12px viewport safety margin.
         const expectedX = Math.min(Math.max(anchor.x, 12), viewportWidth - placed.width - 12)
         return Math.abs(placed.x - expectedX)
-      }).toBeLessThan(1)
+      }, { message: key }).toBeLessThan(1)
       await expect.poll(async () => {
         const bounds = await rect(row)
         return Math.abs((await rect(menu)).y - (bounds.y + bounds.height + 4))

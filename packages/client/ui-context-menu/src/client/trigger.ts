@@ -11,6 +11,7 @@ import type { ContextMenuTriggerProps, MenuPoint, ContextMenuTarget } from './ty
 export function createContextMenuBindings<Target extends object = ContextMenuTarget>(
   open: (target: Target, point: MenuPoint) => void, active: () => boolean,
 ): { getTriggerProps: (target: Target | (() => Target) | undefined, handlers?: ContextMenuTriggerProps) => ContextMenuTriggerProps } {
+  const keyboardAnchors = new WeakMap<HTMLElement, number>()
   return {
     getTriggerProps(target, handlers = {}) {
       if (target === undefined) return handlers
@@ -27,7 +28,16 @@ export function createContextMenuBindings<Target extends object = ContextMenuTar
         tabIndex: handlers.tabIndex ?? 0,
         onContextMenu(event) {
           handlers.onContextMenu?.(event)
-          const rect = event.clientX === 0 && event.clientY === 0 ? event.currentTarget.getBoundingClientRect() : undefined
+          // Keyboard context-menu events can carry the focused element's center in Chromium.
+          const keyboard = event.button === -1 || (event.clientX === 0 && event.clientY === 0)
+          const handledAt = keyboardAnchors.get(event.currentTarget)
+          keyboardAnchors.delete(event.currentTarget)
+          if (keyboard && handledAt !== undefined && event.timeStamp - handledAt < 100) {
+            event.preventDefault()
+            event.stopPropagation()
+            return
+          }
+          const rect = keyboard ? event.currentTarget.getBoundingClientRect() : undefined
           show(event, rect?.left ?? event.clientX, rect?.bottom ?? event.clientY)
         },
         onKeyDown(event) {
@@ -35,6 +45,7 @@ export function createContextMenuBindings<Target extends object = ContextMenuTar
           if (event.defaultPrevented || event.repeat || event.nativeEvent.isComposing || event.ctrlKey || event.altKey || event.metaKey
             || !(event.key === 'ContextMenu' || event.key === 'F10' && event.shiftKey)) return
           const rect = event.currentTarget.getBoundingClientRect()
+          if (active()) keyboardAnchors.set(event.currentTarget, event.timeStamp)
           show(event, rect.left, rect.bottom)
         },
       }
