@@ -105,11 +105,11 @@ jobs:
         run: |
           $dir = 'apps/desktop/.desktop-build/targets/win-x64/unsigned-artifacts'
           $installer = (Resolve-Path -LiteralPath (Join-Path $dir "dsh-next-$env:NEXT_VERSION-win-x64-unsigned.exe")).ProviderPath
-          apps/desktop/tests/next-installed-lifecycle.ps1 -Installer $installer -Version $env:NEXT_VERSION -OutputDirectory (Join-Path $env:RUNNER_TEMP 'next-installed-lifecycle')
+          & './apps/desktop/tests/next-installed-lifecycle.ps1' -Installer $installer -Version $env:NEXT_VERSION -OutputDirectory (Join-Path $env:RUNNER_TEMP 'next-installed-lifecycle')
 
       - name: Retain installed startup journals
         if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: next-installed-startup
           path: ${{ runner.temp }}/next-installed-lifecycle/journal-*/*.jsonl
