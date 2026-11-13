@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 
 import { cleanup } from '@testing-library/react'
 import { LocaleRuntime } from '@deepseek-ai/dsh-client-locale/client'
 import type { ISession, SessionEventLikeEntry } from '@deepseek-ai/dsh-api-session-controller/client'
+import type { ClientRemote } from '@deepseek-ai/dsh-api-remotes/client'
 import type { PropsRenderSlots } from '@deepseek-ai/dsh-client-ui-slots'
 import { SlotTestRuntime, stubConfigForm, usePinnedBrowserLanguages } from '@deepseek-ai/dsh-client-test-runtime'
 import { apply as applyConversation, inject as injectConversation } from '@deepseek-ai/dsh-client-ui-conversation/client'
@@ -87,7 +88,12 @@ async function renderChat(events: readonly SessionEventLikeEntry[]) {
   runtime.ctx.provide('sidebarRight', { openResource: vi.fn(), openTab: vi.fn() } as never)
   runtime.ctx.provide('sidebarRightTabs', { register: vi.fn(() => () => {}), get: vi.fn(() => ({})), subscribe: vi.fn(() => () => {}) } as never)
   runtime.ctx.provide('resources', { register: vi.fn(() => () => {}) } as never)
-  runtime.remote.provideNamespaces({ session: { openWorkspacePath: vi.fn() } })
+  runtime.remote.provideNamespaces({
+    session: { openWorkspacePath: vi.fn() },
+    fileUploads: { stageHistory: vi.fn<ClientRemote['fileUploads']['stageHistory']>(async () => {
+      throw new Error('Markdown rendering must not stage historical files')
+    }) },
+  })
   let mainReference: ReturnType<typeof runtime.sessions.retain> | undefined
   const openSession = (id: SessionId): void => {
     const next = runtime.sessions.retain(id, { source: 'mainView' })

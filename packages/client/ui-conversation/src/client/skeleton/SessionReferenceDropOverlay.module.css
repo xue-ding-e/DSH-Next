@@ -5,17 +5,17 @@
   place-items: center;
   box-sizing: border-box;
   pointer-events: none;
-  border: 1px solid color-mix(in srgb, var(--dsw-static-blue-500) 45%, transparent);
+  border: 1px solid var(--dsw-alias-reference-drop-border);
   border-radius: var(--dsw-radius-xl);
-  background: color-mix(in srgb, var(--dsw-static-blue-600) 32%, transparent);
+  background: var(--dsw-alias-reference-drop-bg);
 }
 
 .hint {
   max-width: calc(100% - 32px);
   padding: 8px 12px;
   border-radius: var(--dsw-radius-lg);
-  background: var(--dsw-static-blue-900);
-  color: var(--dsw-static-neutral-bluish-00);
+  background: var(--dsw-alias-reference-drop-hint-bg);
+  color: var(--dsw-alias-label-on-color);
   box-shadow: var(--dsw-elevation-panel);
   font: var(--dsw-font-s-14);
   text-align: center;

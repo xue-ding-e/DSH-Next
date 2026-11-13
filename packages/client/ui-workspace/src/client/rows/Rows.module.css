@@ -33,7 +33,7 @@ button.sessionRow {
   border: 0;
   border-top: 0.5px solid var(--dsw-alias-border-l4);
   background: transparent;
-  color: #FFFFFF;
+  color: var(--dsw-alias-tooltip-label);
   font: inherit;
   cursor: pointer;
 }
@@ -45,7 +45,7 @@ button.sessionRow {
   padding: 0;
   border: 0;
   background: transparent;
-  color: #FFFFFF;
+  color: var(--dsw-alias-tooltip-label);
   font: inherit;
   text-align: start;
   cursor: pointer;

@@ -50,6 +50,7 @@ function sessionFakeFor() {
       value: { attachment: ATTACHMENT, data: Uint8Array.of(1) },
     })),
     prompt: vi.fn<ISession['prompt']>(() => Promise.resolve({ ok: true, value: { accepted: true } })),
+    edit: vi.fn<ISession['edit']>(() => Promise.resolve({ ok: true, value: { accepted: true, messageSeq: 12 } })),
     cancel: vi.fn<ISession['cancel']>(() => Promise.resolve({ ok: true, value: { accepted: true } })),
   } satisfies SessionBehaviorOverrides
 }
@@ -152,15 +153,10 @@ async function bench(initialSettings?: ChatSettings, withBrowserRegistry = true,
 }
 
 describe('Chat inject API', () => {
-  it('reads each edited image with its complete source reference and preserves names when sending to the child', async () => {
+  it('edits image-bearing prompts in the original Session without fetching or resending their attachments', async () => {
     const b = await bench()
     try {
-      const childPrompt = vi.fn<ISession['prompt']>().mockResolvedValue({ ok: true, value: { accepted: true } })
-      const childId = await b.runtime.sessions.add({ id: 'edited-image-child', session: { prompt: childPrompt } })
-      const fork = vi.spyOn(b.runtime.ctx.sessions, 'fork').mockImplementation(async (options) => {
-        options.onCreated?.(childId)
-        return childId
-      })
+      const fork = vi.spyOn(b.runtime.ctx.sessions, 'fork')
       const edit = b.chatViewApi(b.rootReference).injected.editUserMessage
       if (edit === undefined) throw new Error('Official Chat fixture did not provide message editing')
       const first = { ...ATTACHMENT, name: 'first.png' }
@@ -170,18 +166,17 @@ describe('Chat inject API', () => {
         content: [{ type: 'image', attachment: first }, { type: 'text', text: 'Original caption' },
           { type: 'image', attachment: renamed }],
       }
-      await expect(edit(message).submit('Revised caption', new AbortController().signal)).resolves.toEqual({ kind: 'sent' })
-      expect(fork).toHaveBeenCalledOnce()
-      expect(b.imageAttachment.mock.calls.map(call => call[0])).toEqual([
-        { sessionId: ROOT, attachment: first }, { sessionId: ROOT, attachment: renamed },
-      ])
-      expect(childPrompt.mock.calls[0]?.[0]).toEqual([
-        { type: 'image', mediaType: 'image/png', data: 'AQ==', name: 'first.png' },
-        { type: 'text', text: 'Revised caption' },
-        { type: 'image', mediaType: 'image/png', data: 'AQ==', name: 'renamed.png' },
+      const signal = new AbortController().signal
+      await expect(edit(message).submit('Revised caption', signal)).resolves.toEqual({ kind: 'sent' })
+      expect(b.session.edit).toHaveBeenCalledExactlyOnceWith(7, 7, 'Revised caption', signal)
+      expect(fork).not.toHaveBeenCalled()
+      expect(b.imageAttachment).not.toHaveBeenCalled()
+      expect(message.content).toEqual([
+        { type: 'image', attachment: first }, { type: 'text', text: 'Original caption' },
+        { type: 'image', attachment: renamed },
       ])
       expect(b.session.prompt).not.toHaveBeenCalled()
-      expect(b.openSession).toHaveBeenCalledWith(childId)
+      expect(b.openSession).not.toHaveBeenCalled()
     } finally { vi.restoreAllMocks(); await b.runtime.dispose() }
   })
 

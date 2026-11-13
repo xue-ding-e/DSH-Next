@@ -7,7 +7,7 @@
   gap: 12px;
   margin: 12px 0;
   padding: 12px;
-  border: 1px solid var(--dsw-alias-border-l2);
+  border: 0.5px solid var(--dsw-alias-border-l2);
   border-radius: var(--dsw-radius-md);
   font-size: 13px;
   color: var(--dsw-alias-label-primary);
@@ -19,7 +19,7 @@
   font: inherit;
   color: inherit;
   background: var(--dsw-alias-bg-module-platform);
-  border: 1px solid var(--dsw-alias-border-l2);
+  border: 0.5px solid var(--dsw-alias-border-l2);
   border-radius: var(--dsw-radius-sm);
 }
 .error { color: var(--dsw-alias-state-error-primary); font-size: 13px; }

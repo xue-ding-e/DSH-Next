@@ -125,6 +125,8 @@ describe('web e2e: Session reference navigation', () => {
   afterEach(async () => {
     const dialog = page.getByRole('dialog', { name: 'Settings', exact: true })
     if (await dialog.count() > 0) await dialog.getByRole('button', { name: 'Close', exact: true }).click()
+    const collapseRight = page.getByRole('button', { name: 'Collapse right sidebar', exact: true })
+    if (await collapseRight.isVisible()) await collapseRight.click()
     await page.evaluate(() => { window.getSelection()?.removeAllRanges() })
   })
 

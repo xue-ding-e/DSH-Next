@@ -1,0 +1,3 @@
+- text: EDITED_USER_MESSAGE Explain this revision without running tools. {{clock}}
+- button "Copy"
+- button "Edit and resend"

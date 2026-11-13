@@ -47,12 +47,6 @@ declare module '../contract/chat-nodes.ts' {
   }
 }
 
-function isCompactionCheckpoint(event: Parameters<ConversationNodeDefinition['match']>[0]): boolean {
-  if (event.type !== 'user/message' || !isReplacementSurfaceEvent(event)) return false
-  const source = event.data.source as { kind?: unknown }
-  return source.kind === 'compact-checkpoint'
-}
-
 /** Context presentation shared by user-role injections and developer messages. */
 function contextMessage(
   event: Pick<ContextMessageNode, 'seq' | 'time'>,
@@ -82,13 +76,13 @@ function followsProcessEvidence(location: ConversationLocation, reader: Conversa
   return reader.previous<ProcessEvidenceState>('process-evidence')?.state.turn === location.turn.turn
 }
 
-/** User, steering, and injected-context message classification Definition. */
+/** Classify appended inputs and edited human prompts; model-only replacements add no Chat node. */
 export const messageDefinition: ConversationNodeDefinition<MessageNode> = {
   kind: 'input-message',
   target: 'chat',
   match: (event) => {
     if (event.type === 'user/message') {
-      return (isAppendSurfaceEvent(event) || isReplacementSurfaceEvent(event)) && !isCompactionCheckpoint(event)
+      return (isAppendSurfaceEvent(event) || (isReplacementSurfaceEvent(event) && event.data.source.kind === 'user'))
         ? { id: String(event.data.id), role: 'start' }
         : null
     }

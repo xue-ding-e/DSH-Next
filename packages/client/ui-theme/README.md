@@ -54,6 +54,8 @@ When the host composition includes an HTTP server, the host half embeds the regi
 
 Shared menus use `--dsw-menu-surface-fill` and blur through `MenuSurface`; platform code must preserve those token values. Sticky menu group headings can use `--dsw-alias-menu-group-header-fill`, a 94%-opaque light or dark fill, independently of the menu material. Other overlays consume `--dsw-specific-menu`, which keeps a nearly opaque macOS fill without a menu backing. The enforced source rules are defined in the [styling reference](../../../docs/web-styling.md#component-rules). Modal masks retain their dark translucent fill without background blur.
 
+Conversation-reference drop invitations use shared theme aliases for their blue border, translucent fill, and hint backing in both palettes.
+
 <details>
 <summary>Implementation internals — click to expand</summary>
 

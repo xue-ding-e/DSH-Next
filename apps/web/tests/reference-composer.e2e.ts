@@ -7,7 +7,7 @@ import { homedir } from 'node:os'
 import { join } from 'node:path'
 import type { Browser, Locator, Page } from 'playwright'
 import { chromium } from 'playwright'
-import { afterAll, beforeAll, describe, expect, it, onTestFailed } from 'vitest'
+import { afterAll, afterEach, beforeAll, describe, expect, it, onTestFailed, onTestFinished } from 'vitest'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import { abbreviateHomePath } from '@deepseek-ai/dsh-util-workspace-path'
 import {
@@ -30,7 +30,7 @@ import {
   webSnapshotMode,
   type WebScaffold,
 } from './scaffold.ts'
-import { connectFreshWorkspace, newEnglishPage, pinBrowserClock, saveFailureShot, WEB_FIXTURE_TIME, writeComposerDraft } from './support.ts'
+import { connectFreshWorkspace, newEnglishPage, pinBrowserClock, revealNavigationDrawer, saveFailureShot, WEB_FIXTURE_TIME, writeComposerDraft } from './support.ts'
 
 const SNAPSHOT_DIR = fileURLToPath(new URL('./expected/reference-composer', import.meta.url))
 const MENU_EXPECTED = join(SNAPSHOT_DIR, 'menu.expected.md')
@@ -47,6 +47,13 @@ async function settledSourceOption(menu: Locator): Promise<Locator> {
   const source = menu.getByRole('option', { name: new RegExp(SOURCE_SESSION_ID) })
   await expect.poll(() => source.count(), { timeout: 15_000 }).toBe(1)
   return source
+}
+
+async function settledFileOption(menu: Locator, name: string): Promise<Locator> {
+  await expect.poll(() => menu.getByRole('option').count()).toBe(1)
+  const option = menu.getByRole('option').filter({ has: menu.page().getByText(name, { exact: true }) })
+  await option.waitFor()
+  return option
 }
 
 // Clear retained suggestions and insert one complete query so an intermediate
@@ -175,18 +182,22 @@ describe.skipIf(MODE === 'record')('web e2e: file and session references through
     await scaffold?.close()
   })
 
+  afterEach(async () => {
+    await page.mouse.up()
+    await page.setViewportSize({ width: 1680, height: 1000 })
+    await page.emulateMedia({ colorScheme: 'light' })
+    const collapseRight = page.getByRole('button', { name: 'Collapse right sidebar', exact: true })
+    if (await collapseRight.isVisible()) await collapseRight.click()
+  })
+
   it.each([
     ['recent', 'content', 1680], ['workspace', 'content', 1680],
-    ['recent', 'rightbar', 1680], ['workspace', 'rightbar', 1680], ['recent', 'content', 390],
+    ['recent', 'rightbar', 1680], ['workspace', 'rightbar', 1680],
   ] as const)('drags a %s conversation onto %s at %ipx without losing its draft or reordering the sidebar', async (origin, destinationArea, width) => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-reference-drag'))
     await page.setViewportSize({ width, height: 1000 })
     await page.emulateMedia({ colorScheme: origin === 'workspace' ? 'dark' : 'light' })
     const input = page.locator('[data-composer-input]').first()
-    if (width === 390) {
-      await writeComposerDraft(page, input, 'Keep this draft. ')
-      await page.getByRole('button', { name: 'Open sidebar', exact: true }).click()
-    }
     if (origin === 'workspace') {
       const group = page.getByRole('treeitem', { name: /Ungrouped/ })
       if (await group.getAttribute('aria-expanded') !== 'true') await group.click()
@@ -195,10 +206,11 @@ describe.skipIf(MODE === 'record')('web e2e: file and session references through
       ? page.getByRole('region', { name: 'Recent', exact: true }).locator(`[data-row-key="recent-session:${SOURCE_SESSION_ID}"]`)
       : page.locator(`[data-row-key="session:${SOURCE_SESSION_ID}"]`)
     await source.waitFor()
-    if (width !== 390) await writeComposerDraft(page, input, 'Keep this draft. ')
+    await writeComposerDraft(page, input, 'Keep this draft. ')
     if (destinationArea === 'rightbar') await page.getByRole('button', { name: 'Open right sidebar', exact: true }).click()
     const destinationRegion = page.locator(destinationArea === 'rightbar' ? '[data-rightbar-col]' : '[data-conversation-content]').first()
     await expect.poll(async () => (await destinationRegion.boundingBox())?.width ?? 0).toBeGreaterThan(0)
+    await source.hover()
     const order = await page.evaluate(() => localStorage.getItem('dsh.workspace.view.v5'))
     const from = await source.boundingBox()
     const destination = await destinationRegion.boundingBox()
@@ -238,13 +250,45 @@ describe.skipIf(MODE === 'record')('web e2e: file and session references through
     await page.keyboard.insertText('Continue typing')
     expect(await input.textContent()).toContain('Continue typing')
     expect(await page.evaluate(() => localStorage.getItem('dsh.workspace.view.v5'))).toBe(order)
-    if (width === 390) await page.getByRole('button', { name: 'Collapse sidebar', exact: true }).click()
     await writeComposerDraft(page, input, '')
     if (destinationArea === 'rightbar') await page.getByRole('button', { name: 'Collapse right sidebar', exact: true }).click()
     await page.emulateMedia({ colorScheme: 'light' })
     await page.setViewportSize({ width: 1680, height: 1000 })
     expect(tripwire.warnings).toEqual([])
     expect(tripwire.pageErrors).toEqual([])
+  })
+
+  it('keeps a native reference drop on the narrow navigation mask out of the inert conversation', async () => {
+    const input = page.locator('[data-composer-input]').first()
+    await writeComposerDraft(page, input, 'Keep this draft. ')
+    await page.setViewportSize({ width: 390, height: 1000 })
+    await revealNavigationDrawer(page, 'en')
+    const drawer = page.getByRole('dialog', { name: 'Navigation', exact: true })
+    const source = drawer.locator(`[data-row-key="recent-session:${SOURCE_SESSION_ID}"]`)
+    await source.hover()
+    const observation = await page.evaluateHandle(() => {
+      const abort = new AbortController()
+      document.addEventListener('dragover', (event) => {
+        document.documentElement.dataset.nativeReferenceDrag = String(event.dataTransfer?.types.includes('application/x-dsh-session-reference'))
+      }, { capture: true, once: true, signal: abort.signal })
+      return abort
+    })
+    onTestFinished(async () => {
+      await observation.evaluate((abort) => { abort.abort() })
+      await observation.dispose()
+      await page.locator('html').evaluate((element) => { delete element.dataset.nativeReferenceDrag })
+    })
+    const row = await source.boundingBox()
+    if (row === null) throw new Error('Narrow navigation drag source is not visible')
+    await page.mouse.move(row.x + row.width / 2, row.y + row.height / 2)
+    await page.mouse.down()
+    await page.mouse.move(row.x + row.width / 2 + 10, row.y + row.height / 2, { steps: 3 })
+    await expect.poll(() => page.locator('html').getAttribute('data-native-reference-drag')).toBe('true')
+    await page.mouse.move(385, row.y + row.height / 2, { steps: 10 })
+    expect(await page.locator('[data-session-reference-drop]').count()).toBe(0)
+    await page.mouse.up()
+    expect(await input.locator('[data-composer-chip]').count()).toBe(0)
+    expect(await input.textContent()).toContain('Keep this draft.')
   })
 
   it('groups both sources and projects files and sessions as structured inline icon labels', async () => {
@@ -312,8 +356,7 @@ describe.skipIf(MODE === 'record')('web e2e: file and session references through
 
     await writeComposerDraft(page, input, '@reference.txt')
     await expect.poll(() => input.locator('[data-composer-chip]').count()).toBe(0)
-    await expect.poll(() => menu.getByRole('option').allTextContents()).toEqual(['reference.txt'])
-    await menu.getByRole('option', { name: 'reference.txt', exact: true }).click()
+    await (await settledFileOption(menu, 'reference.txt')).click()
     await expect.poll(() => input.locator('[data-composer-chip]').count()).toBe(1)
 
     // The #2813 gesture: collapse the caret to the document start, directly
@@ -343,8 +386,7 @@ describe.skipIf(MODE === 'record')('web e2e: file and session references through
 
     await writeComposerDraft(page, input, '@reference.txt')
     await expect.poll(() => input.locator('[data-composer-chip]').count()).toBe(0)
-    await expect.poll(() => menu.getByRole('option').allTextContents()).toEqual(['reference.txt'])
-    await menu.getByRole('option', { name: 'reference.txt', exact: true }).click()
+    await (await settledFileOption(menu, 'reference.txt')).click()
     await expect.poll(() => input.locator('[data-composer-chip]').count()).toBe(1)
 
     // First ArrowLeft crosses the trailing space; the second steps across the
@@ -504,26 +546,27 @@ describe.skipIf(MODE === 'record')('web e2e: file and session references through
     await assertFixtureInventory(SNAPSHOT_DIR, ['menu.expected.md', 'order.expected.md'])
   })
 
-  it('keeps the last opened conversation first across reload without changing the workspace tree', async () => {
+  it('keeps recent conversations in update order across navigation and reload without changing the workspace tree', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-recent-order'))
     const recent = page.getByRole('region', { name: 'Recent', exact: true })
     const rows = recent.locator('[data-row-key^="recent-session:"]')
     const treeRows = page.locator('[role="treeitem"][data-row-key^="session:"]')
     const treeOrder = await treeRows.evaluateAll(elements => elements.map(element => element.getAttribute('data-row-key')))
     expect(treeOrder).toEqual(expect.arrayContaining([`session:${SOURCE_SESSION_ID}`, `session:${TARGET_SESSION_ID}`]))
+    const recentOrder = await rows.evaluateAll(elements => elements.map(element => element.getAttribute('data-row-key')))
     const openedAt = Date.now() + 60_000
     await page.clock.setFixedTime(openedAt)
     await recent.locator(`[data-row-key="recent-session:${SOURCE_SESSION_ID}"]`).click()
-    await expect.poll(() => rows.first().getAttribute('data-row-key')).toBe(`recent-session:${SOURCE_SESSION_ID}`)
+    await expect.poll(() => rows.evaluateAll(elements => elements.map(element => element.getAttribute('data-row-key')))).toEqual(recentOrder)
     await page.clock.setFixedTime(openedAt + 1_000)
     await recent.locator(`[data-row-key="recent-session:${TARGET_SESSION_ID}"]`).click()
-    await expect.poll(() => rows.first().getAttribute('data-row-key')).toBe(`recent-session:${TARGET_SESSION_ID}`)
+    await expect.poll(() => rows.evaluateAll(elements => elements.map(element => element.getAttribute('data-row-key')))).toEqual(recentOrder)
     expect(await treeRows.evaluateAll(elements => elements.map(element => element.getAttribute('data-row-key')))).toEqual(treeOrder)
 
     const warningStart = tripwire.warnings.length
     await page.reload()
     await recent.waitFor()
-    await expect.poll(() => rows.first().getAttribute('data-row-key')).toBe(`recent-session:${TARGET_SESSION_ID}`)
+    await expect.poll(() => rows.evaluateAll(elements => elements.map(element => element.getAttribute('data-row-key')))).toEqual(recentOrder)
     await expect.poll(() => treeRows.evaluateAll(elements => elements.map(element => element.getAttribute('data-row-key')))).toEqual(treeOrder)
     acknowledgeReloadConnectionLoss(tripwire, warningStart)
     expect(tripwire.pageErrors).toEqual([])

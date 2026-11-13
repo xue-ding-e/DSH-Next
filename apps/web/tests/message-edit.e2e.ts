@@ -6,8 +6,10 @@ import { fileURLToPath } from 'node:url'
 import { chromium, type Browser, type Page } from 'playwright'
 import { afterAll, beforeAll, describe, expect, it, onTestFailed } from 'vitest'
 import type { ReplayEntry } from '@deepseek-ai/dsh-llm-replay'
+import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import { SessionId, type SessionEvent } from '@deepseek-ai/dsh-session'
 import {
+  acknowledgeReloadConnectionLoss, captureStableAria, compareOrRefreshGolden,
   launchWebScaffold, parseSeedFixture, seedSession, selectedSessionFixture,
   watchConsole, webSnapshotMode, type WebScaffold,
 } from './scaffold.ts'
@@ -17,6 +19,8 @@ const SEED = fileURLToPath(new URL('../../../snapshots/web/seeded-history/sessio
 const SOURCE = SessionId('message-edit-source')
 const REPLACEMENT = 'EDITED_USER_MESSAGE Explain this revision without running tools.'
 const RESPONSE = 'EDITED_MESSAGE_REPLY The replacement reached this branch.'
+const MODEL_ONLY = 'MODEL_ONLY_REPLACEMENT This context belongs only to model history.'
+const EXPECTED = fileURLToPath(new URL('./expected/message-edit/replacement-visibility.expected.md', import.meta.url))
 
 function continuation(): ReplayEntry[] {
   return [{ kind: 'chunks', chunks: [
@@ -109,6 +113,17 @@ describe.skipIf(webSnapshotMode() === 'record')('web e2e: edit and resend a prev
     expect(scaffold.ctx.sessions.list()).toHaveLength(sessionCount)
     const sourceAfter = await readSource(scaffold)
     expect(sourceAfter.slice(0, sourceBefore.length)).toEqual(sourceBefore)
+    if (lastUser?.type !== 'user/message') throw new Error('edited Session lacks its human prompt')
+    editedSession.append('user/message', createUserMessage({
+      content: [{ type: 'text', text: MODEL_ONLY }], source: { kind: 'model', provider: 'fixture', model: 'fixture' },
+    }), { surfaceOp: { op: 'replace', startSeq: lastUser.seq, endSeq: lastUser.seq }, sourceEventSeqs: [lastUser.seq] })
+    const warningStart = tripwire.warnings.length
+    await page.reload({ waitUntil: 'load' })
+    await page.getByText(RESPONSE, { exact: true }).waitFor({ timeout: 15_000 })
+    acknowledgeReloadConnectionLoss(tripwire, warningStart)
+    expect(await page.getByText(MODEL_ONLY, { exact: true }).count()).toBe(0)
+    await compareOrRefreshGolden(EXPECTED,
+      await captureStableAria(page, '[data-chat-flow-kind="user"]', scaffold.workspaceCwd), webSnapshotMode())
     expect(tripwire.pageErrors).toEqual([])
     expect(tripwire.warnings).toEqual([])
   }, 90_000)
