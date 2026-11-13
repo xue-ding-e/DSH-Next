@@ -289,6 +289,13 @@ Typed Remote control of transient Session-owned terminal processes.
 @Remote list(sessionId: SessionId): WebTerminalInfo[]
 
 /**
+ * Check whether a Session still owns a terminal or an in-flight allocation.
+ * @param sessionId - Session whose operations require quiescence.
+ * @returns whether terminal resources are still owned by this Session.
+ */
+hasSessionActivity(sessionId: SessionId): boolean
+
+/**
  * Allocate a user shell once for a caller-generated identity, without Agent sandbox or approval restrictions.
  * @param agent - Session owner supplied by the Gateway.
  * @param request - initial dimensions and idempotency identity.

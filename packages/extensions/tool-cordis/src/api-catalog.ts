@@ -4242,6 +4242,12 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         returns: 'terminals retained for this Host lifetime.',
       },
       {
+        signature: 'hasSessionActivity(sessionId: SessionId): boolean',
+        description: 'Check whether a Session still owns a terminal or an in-flight allocation.',
+        parameters: [{ name: 'sessionId', description: 'Session whose operations require quiescence.' }],
+        returns: 'whether terminal resources are still owned by this Session.',
+      },
+      {
         signature: '@Remote async create(agent: Agent, request: TerminalCreateRequest, signal: AbortSignal): Promise<WebTerminalInfo>',
         description: 'Allocate a user shell once for a caller-generated identity, without Agent sandbox or approval restrictions.',
         parameters: [{ name: 'agent', description: 'Session owner supplied by the Gateway.' }, { name: 'request', description: 'initial dimensions and idempotency identity.' }, { name: 'signal', description: 'allocation cancellation; committed terminals survive disconnection.' }],

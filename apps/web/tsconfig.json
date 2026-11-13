@@ -33,6 +33,7 @@
     "tests/plugin-recommendations.e2e.ts",
     "tests/japanese-plugin-metadata.e2e.ts",
     "tests/context-menus.e2e.ts",
+    "tests/session-directories.e2e.ts",
     "tests/additional-locales.e2e.ts",
     "tests/rich-text-quotes.e2e.ts",
     "tests/hover-input.e2e.ts",

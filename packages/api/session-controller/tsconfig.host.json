@@ -36,6 +36,9 @@
       "path": "../gateway/tsconfig.host.json"
     },
     {
+      "path": "../terminal-controller/tsconfig.host.json"
+    },
+    {
       "path": "../../util/timeout"
     },
     {

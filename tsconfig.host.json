@@ -9,6 +9,7 @@
   },
   "include": [
     "apps/web/tests/workspace-sources.e2e.ts",
+    "apps/web/tests/session-directories.e2e.ts",
     "apps/web/tests/queue-recall-focus.e2e.ts",
     "apps/web/tests/message-edit.e2e.ts",
     "apps/web/tests/message-edit-files.e2e.ts",

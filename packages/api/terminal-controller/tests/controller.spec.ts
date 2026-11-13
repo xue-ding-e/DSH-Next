@@ -211,14 +211,17 @@ describe('TerminalController', () => {
 
   it('waits for pending allocation when explicitly closing and rolls back cancellation before publication', async () => {
     const { controller, agent, subprocess, handle } = fixture()
+    expect(controller.hasSessionActivity(agent.id)).toBe(false)
     const allocation = Promise.withResolvers<SubprocessTerminalHandle>()
     subprocess.spawnTerminal.mockImplementationOnce(() => allocation.promise)
     const creating = controller.create(agent, request, signal())
+    expect(controller.hasSessionActivity(agent.id)).toBe(true)
     const rejected = expect(creating).rejects.toThrow('closed in this Session')
     const closing = controller.close(agent, id)
     allocation.resolve(handle)
     await rejected
     await closing
+    expect(controller.hasSessionActivity(agent.id)).toBe(false)
     expect(controller.list(agent.id)).toEqual([])
     expect(handle.terminate).toHaveBeenCalledOnce()
   })

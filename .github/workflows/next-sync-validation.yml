@@ -90,6 +90,7 @@ jobs:
           apps/web/tests/default-workspace.e2e.ts
           apps/web/tests/sidebar-organization.e2e.ts
           apps/web/tests/session-mailbox.e2e.ts
+          apps/web/tests/session-directories.e2e.ts
           apps/web/tests/reference-composer.e2e.ts
           apps/web/tests/row-context-menu.e2e.ts
           apps/web/tests/context-menus.e2e.ts

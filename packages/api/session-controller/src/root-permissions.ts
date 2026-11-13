@@ -3,6 +3,7 @@ import { symbols, type Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import type {} from '@deepseek-ai/dsh-jobs'
 import type {} from '@deepseek-ai/dsh-terminal'
+import type {} from '@deepseek-ai/dsh-api-terminal-controller'
 import type {} from '@deepseek-ai/dsh-subagent'
 import { RemoteError } from '@deepseek-ai/dsh-typert-protocol'
 import type { SessionId } from '@deepseek-ai/dsh-session'
@@ -26,17 +27,19 @@ function requireAgent(ctx: Context, sessionId: SessionId): Agent {
 function activityFence(agent: Agent): () => void {
   const ctx = agent.ctx
   const terminals = ctx.get('terminals')
+  const browserTerminals = ctx.get('terminalController')
   const jobs = ctx.get('jobs')
   const subagents = ctx.get('subagents')
-  if (terminals === undefined || jobs === undefined || subagents === undefined) {
+  if ((terminals === undefined && browserTerminals === undefined) || jobs === undefined || subagents === undefined) {
     throw new RootApprovalError('Directory confirmation requires all activity providers to be available')
   }
   return () => {
-    if (identity(ctx.get('terminals')) !== identity(terminals) || identity(ctx.get('jobs')) !== identity(jobs)
+    if (identity(ctx.get('terminals')) !== identity(terminals)
+      || identity(ctx.get('terminalController')) !== identity(browserTerminals) || identity(ctx.get('jobs')) !== identity(jobs)
       || identity(ctx.get('subagents')) !== identity(subagents)) {
       throw new RootApprovalError('Activity providers changed; preview again')
     }
-    if (terminals.hasOwnerActivity(agent) || subagents.hasOwnerActivity(agent)
+    if (terminals?.hasOwnerActivity(agent) || browserTerminals?.hasSessionActivity(agent.id) || subagents.hasOwnerActivity(agent)
       || jobs.list(agent.id).some(job => job.owner === agent.id && (job.status === 'running' || job.status === 'stopping'))) {
       throw new RootApprovalError('Close terminals and wait for jobs and descendant work before confirming directories')
     }
