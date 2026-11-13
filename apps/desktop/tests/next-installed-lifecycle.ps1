@@ -27,9 +27,11 @@ $exe = Join-Path $install 'DSH Next.exe'
 $asar = Join-Path $install 'resources\app.asar'
 $uninstall = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\e74d59b9-768b-51ae-bb11-7f24bfbafa5a'
 $protocol = 'HKCU:\Software\Classes\dsh-next'
+$commandOwner = 'HKCU:\Software\DSHNext\Command'
+$cliDirectory = Join-Path $install 'resources\runtime\cli\bin'
 $ownedCommand = '"' + $exe + '" "%1"'
 $foreignCommand = '"' + (Join-Path $root 'unrelated.exe') + '" "%1"'
-if ((Test-Path -LiteralPath $uninstall) -or (Test-Path -LiteralPath $protocol)) {
+if ((Test-Path -LiteralPath $uninstall) -or (Test-Path -LiteralPath $protocol) -or (Test-Path -LiteralPath $commandOwner)) {
     throw 'The qualification account already owns a DSH Next installation or protocol handler.'
 }
 
@@ -62,7 +64,7 @@ function Read-Protocol {
 function Start-Installed([string]$ExpectedVersion) {
     $env:DSH_NEXT_HOME = $nextHome
     $env:DSH_HOME = $officialHome
-    $cli = Join-Path $install 'resources\runtime\cli\bin\dsh-next.cmd'
+    $cli = Join-Path $cliDirectory 'dsh-next.cmd'
     $reported = & $cli --version
     if ($LASTEXITCODE -ne 0 -or ($reported -join ' ') -notmatch '^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$') {
         throw "The installed dsh-next launcher did not report the expected product version."
@@ -70,6 +72,14 @@ function Start-Installed([string]$ExpectedVersion) {
     & node (Join-Path $PSScriptRoot '..\..\web\tests\next-installed-startup.mjs') $root $exe $ExpectedVersion
     if ($LASTEXITCODE -ne 0) { throw "Installed Electron startup failed for $ExpectedVersion." }
     if ((Read-Protocol) -cne $ownedCommand) { throw 'The installed app did not register its own protocol.' }
+}
+
+function Invoke-CommandWorker([string]$Operation, [string]$Expected = '') {
+    $worker = Join-Path $install 'resources\runtime\cli\command-path.ps1'
+    $request = @{ operation = $Operation; directory = $cliDirectory; commandName = 'dsh-next'; expected = $Expected } | ConvertTo-Json -Compress
+    $reply = $request | & (Join-Path $PSHOME 'pwsh.exe') -NoProfile -NonInteractive -File $worker | ConvertFrom-Json
+    if ($LASTEXITCODE -ne 0 -or -not $reply.ok) { throw "The installed command worker refused $Operation." }
+    return $reply.state
 }
 
 function Assert-Data {
@@ -103,12 +113,21 @@ foreach ($path in @($nextHome, $officialHome)) {
 Install-Next $baseline
 Start-Installed $baselineVersion
 Assert-Data
+$beforeCommand = Invoke-CommandWorker 'inspect'
+$registeredCommand = Invoke-CommandWorker 'install' $beforeCommand.fingerprint
+if (-not $registeredCommand.managed -or -not $registeredCommand.available -or $registeredCommand.activeCommand -ine (Join-Path $cliDirectory 'dsh-next.cmd')) {
+    throw 'The installed command did not become available through PATH.'
+}
 Install-Next $Installer
 Start-Installed $Version
 Assert-Data
 $installedHash = (Get-FileHash -LiteralPath $asar -Algorithm SHA256).Hash
 Install-Next $Installer
 if ((Get-FileHash -LiteralPath $asar -Algorithm SHA256).Hash -cne $installedHash) { throw 'Same-version repair changed the installed archive.' }
+$afterRepair = Invoke-CommandWorker 'inspect'
+if (-not $afterRepair.managed -or -not $afterRepair.available) { throw 'Upgrade or repair changed command ownership.' }
+$removedCommand = Invoke-CommandWorker 'remove' $afterRepair.fingerprint
+if ($removedCommand.managed -or $removedCommand.available) { throw 'The installed command worker left its registration behind.' }
 Remove-Next
 if (Test-Path -LiteralPath $protocol) { throw 'The owned protocol handler survived uninstall.' }
 
