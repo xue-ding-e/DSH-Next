@@ -23,7 +23,7 @@ const repository = { id: NEXT_DESKTOP_IDENTITY.repositoryId, full_name: NEXT_DES
 const base = `https://github.com/${repository.full_name}`
 const manifest = () => ({ productName: NEXT_DESKTOP_IDENTITY.productName, name: NEXT_DESKTOP_IDENTITY.packageName, dshDesktopAppId: NEXT_DESKTOP_IDENTITY.appId,
   version: '0.2.1-rc.3', dshDesktopUpdateChannel: 'rc', dshNext: { schemaVersion: 1, repositoryId: repository.id,
-    repository: repository.full_name, updateMode: 'manual' } })
+    repository: repository.full_name, updateMode: 'auto' } })
 const release = (version = '0.2.1-rc.3.20261029.1', platform = 'win', arch = 'x64') => {
   const tag = `v${version}`
   const filename = `dsh-next-${version}-${platform}-${arch}-unsigned.${platform === 'win' ? 'exe' : 'dmg'}`
@@ -47,7 +47,7 @@ test('Next identifiers separate installation, protocol, package user data, and H
 
 test('unmarked packages retain their existing behavior while malformed Next identity fails closed', () => {
   assert.equal(nextDesktopDistribution({ name: '@deepseek-ai/dsh-desktop' }), undefined)
-  assert.deepEqual(nextDesktopDistribution(manifest()), { channel: 'rc', updateMode: 'manual' })
+  assert.deepEqual(nextDesktopDistribution(manifest()), { channel: 'rc', updateMode: 'auto' })
   for (const change of [
     value => { delete value.dshNext },
     value => { value.productName = 'DeepSeek Harness' },
@@ -91,7 +91,7 @@ for (const [name, change] of [
   ['draft', value => { value.draft = true }],
   ['wrong channel', value => { value.prerelease = false }],
   ['mutable nightly alias', value => { value.tag_name = 'nightly' }],
-  ['upstream tag', value => { value.tag_name = value.tag_name.replace('next-', '') }],
+  ['legacy prefixed tag', value => { value.tag_name = 'next-' + value.tag_name }],
   ['cross-origin page', value => { value.html_url = 'https://example.com/install' }],
   ['page credentials', value => { value.html_url = value.html_url.replace('https://', 'https://credential@') }],
   ['page query', value => { value.html_url += '?redirect=other' }],

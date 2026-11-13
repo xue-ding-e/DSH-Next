@@ -1,5 +1,7 @@
 Pin session
 Rename
+Move to section
 Fork session
-Copy Session ID
+Open in
 Archive session
+Copy Session ID

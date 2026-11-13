@@ -1,15 +1,16 @@
 name: Next source synchronization validation
 
-# Credential-free validation only. Packaging and publication remain manual.
+# Credential-free source and installer validation.
 on:
   pull_request:
     branches: [main]
+  workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: next-sync-validation-${{ github.event.pull_request.number }}
+  group: next-sync-validation-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -51,6 +52,10 @@ jobs:
           packages/api/session-controller/tests/queue-recall-transaction.host.spec.ts
           packages/api/session-controller/tests/queue-recall-replay.host.spec.ts
           packages/api/session-controller/tests/queue-recall-jsonl.host.spec.ts
+          packages/api/session-controller/tests/session-roots.host.spec.ts
+          packages/api/session-controller/tests/root-permissions.host.spec.ts
+          packages/api/session-controller/tests/file-reference-drop.host.spec.ts
+          packages/api/session-controller/tests/file-reference-roots.host.spec.ts
           packages/context/session-reference/tests
           packages/api/session-mailbox-controller/tests
           packages/client/ui-session-mailbox/tests
@@ -62,6 +67,8 @@ jobs:
           packages/client/ui-chat/tests/chat-view.client.spec.tsx
           packages/client/ui-workspace/tests/rows.client.spec.tsx
           packages/client/ui-workspace/tests/workspace-browser.client.spec.tsx
+          packages/client/ui-permission-presets/tests
+          packages/client/ui-context-menu/tests
           packages/client/ui-workspace/tests/workspaces-service.client.spec.ts
           packages/workspace/workspace/tests/workspace.spec.ts
           packages/client/ui-settings-account/tests/apply.client.spec.ts
@@ -72,11 +79,37 @@ jobs:
         run: |
           pnpm run test:docs
           node --test apps/desktop/tests/desktop-build-identity.test.mjs apps/desktop/tests/next-uninstall-protocol.test.mjs
+          node --import tsx/esm --test .github/validation/next-desktop.test.mjs
       - name: Install browser engines for workspace regressions
         run: pnpm --filter @deepseek-ai/dsh-web-frontend exec playwright install --with-deps chromium webkit
-      - name: Verify sidebar order, default workspace, and mailbox delivery
+      - name: Verify sidebar, mailbox, reference drops, and menus in Chromium
         env:
           DSH_SNAPSHOT: replay
-        run: pnpm run test:web:built apps/web/tests/default-workspace.e2e.ts apps/web/tests/sidebar-organization.e2e.ts apps/web/tests/session-mailbox.e2e.ts
+        run: >-
+          pnpm run test:web:built
+          apps/web/tests/default-workspace.e2e.ts
+          apps/web/tests/sidebar-organization.e2e.ts
+          apps/web/tests/session-mailbox.e2e.ts
+          apps/web/tests/reference-composer.e2e.ts
+          apps/web/tests/row-context-menu.e2e.ts
+          apps/web/tests/context-menus.e2e.ts
       - name: Verify session storage and workspace startup
         run: pnpm run test:expected apps/cli/tests/profiles/web/tests/session-artifact-startup.expected.e2e.ts
+
+  windows-installer:
+    if: github.repository == 'xue-ding-e/DSH-Next' && github.event_name == 'workflow_dispatch'
+    runs-on: windows-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320
+        with:
+          version: 11.28.5
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: 24.22.1
+      - run: pnpm install --frozen-lockfile
+      - name: Verify native installer and uninstaller behavior
+        run: pnpm --dir apps/desktop run test:installer --uninstall-only

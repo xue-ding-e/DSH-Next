@@ -1,9 +1,10 @@
 /** Context gestures against built plugins, seeded Sessions, and original files. */
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
-import { join } from 'node:path'
+import { join, normalize } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { chromium, type Browser, type Locator, type Page } from 'playwright'
 import { afterAll, beforeAll, describe, expect, it, onTestFailed, vi } from 'vitest'
+import { OPEN_IN_APP_APPS_PATH, OPEN_IN_APP_OPEN_PATH } from '@deepseek-ai/dsh-host-open-in-app/shared'
 import { createLaunchEnvironmentSnapshot } from '@deepseek-ai/dsh-launch-environment'
 import { createAssistantMessage, createUserMessage } from '@deepseek-ai/dsh-llm'
 import { SESSION_FORMAT_VERSION, Session, SessionId } from '@deepseek-ai/dsh-session'
@@ -38,6 +39,7 @@ function fixture(title: string): string {
 describe.each(['MacIntel', 'Win32', 'Linux x86_64'])('web context menus on %s', (platform) => {
   let scaffold: WebScaffold, browser: Browser, page: Page
   let tripwire: ReturnType<typeof watchConsole>
+  const openedWorkspace = vi.fn()
   beforeAll(async () => {
     scaffold = await launchWebScaffold({
       openInAppEnvironment: createLaunchEnvironmentSnapshot([{ source: 'process', values: { SSH_CONNECTION: '10.0.0.2 55000 10.0.0.9 22' } }]),
@@ -56,6 +58,11 @@ describe.each(['MacIntel', 'Win32', 'Linux x86_64'])('web context menus on %s', 
     page = await context.newPage()
     await page.setViewportSize({ width: 1291, height: 768 })
     tripwire = watchConsole(page)
+    await page.route(`**${OPEN_IN_APP_APPS_PATH}`, route => route.fulfill({ json: { apps: ['filemanager'] } }))
+    await page.route(`**${OPEN_IN_APP_OPEN_PATH}`, async (route) => {
+      openedWorkspace(route.request().postDataJSON())
+      await route.fulfill({ status: 204 })
+    })
     await page.route('https://images.example/original.gif', route => route.fulfill({ body: GIF, contentType: 'image/gif', headers: { 'access-control-allow-origin': '*' } }))
     await page.context().grantPermissions(['clipboard-read', 'clipboard-write'])
     await page.goto(scaffold.authenticatedUrl)
@@ -74,10 +81,9 @@ describe.each(['MacIntel', 'Win32', 'Linux x86_64'])('web context menus on %s', 
     const menu = page.getByRole('menu')
     await menu.getByRole('menuitem', { name: /Copy.*[Ii][Dd]/ }).waitFor()
     const names = await menuLabels(menu)
-    expect(names.slice(0, 4)).toEqual(['Pin session', 'Rename', 'Fork session', 'Copy Session ID'])
-    expect(names).not.toContain('Open in')
-    expect(names.at(-1)).toBe('Archive session')
-    expect(await menu.getByRole('menuitem').evaluateAll(rows => rows.every(row => row.querySelector('svg[data-icon]')))).toBe(true)
+    expect(names).toEqual(['Pin session', 'Rename', 'Move to section', 'Fork session', 'Open in', 'Archive session', 'Copy Session ID'])
+    expect(await menu.getByRole('menuitem').evaluateAll(rows => rows.every(row =>
+      row.getAttribute('aria-haspopup') === 'menu' || row.querySelector('svg[data-icon]')))).toBe(true)
     expect(await menu.getByRole('separator').count()).toBe(2)
     expect(await menu.getByRole('menuitem', { name: 'Archive session', exact: true }).evaluate(row =>
       getComputedStyle(row.parentElement!.parentElement!).borderTopWidth)).toBe('0px')
@@ -105,12 +111,13 @@ describe.each(['MacIntel', 'Win32', 'Linux x86_64'])('web context menus on %s', 
     expect(names.some(name => name.includes('Rename'))).toBe(true)
     expect(await background.getAttribute('aria-selected')).toBe('false')
     await page.keyboard.press('Escape')
+    await menu.waitFor({ state: 'detached' })
     await background.getByRole('button', { name: /actions/i }).click()
     await menu.getByRole('menuitem', { name: /Copy.*[Ii][Dd]/ }).waitFor()
     expect(await menuLabels(menu)).toEqual(names)
     await alignedSeparators()
     await background.getByRole('button', { name: /actions/i }).click()
-    expect(await menu.count()).toBe(0)
+    await menu.waitFor({ state: 'detached' })
     expect(await background.getAttribute('aria-selected')).toBe('false')
   })
 
@@ -176,16 +183,23 @@ describe.each(['MacIntel', 'Win32', 'Linux x86_64'])('web context menus on %s', 
     const expanded = await workspace.getAttribute('aria-expanded')
     await workspace.click({ button: 'right' })
     const menu = page.getByRole('menu')
-    await menu.getByRole('menuitem', { name: 'Rename', exact: true }).waitFor()
+    await menu.getByRole('menuitem', { name: 'Edit workspace', exact: true }).waitFor()
     const names = await menuLabels(menu)
-    expect(names).toEqual(['Rename', 'Show in folder', 'Delete workspace'])
+    expect(names).toEqual(['Edit workspace', 'Show in folder', 'Delete workspace'])
     expect(await menu.locator('svg[data-icon]').count()).toBe(3)
     expect(await workspace.getAttribute('aria-expanded')).toBe(expanded)
-    await page.keyboard.press('Escape')
+    await menu.getByRole('menuitem', { name: 'Show in folder', exact: true }).click()
+    await expect.poll(() => openedWorkspace.mock.calls).toEqual([[
+      { app: 'filemanager', path: join(scaffold.workspaceCwd, 'folder') },
+    ]])
+    expect(await workspace.getAttribute('aria-expanded')).toBe(expanded)
+    expect(await page.locator('[data-row-key="session:context-menu-first"]').getAttribute('aria-selected')).toBe('true')
+    await menu.waitFor({ state: 'detached' })
+    await workspace.hover()
     await workspace.getByRole('button', { name: /actions/i }).click()
-    await menu.getByRole('menuitem', { name: 'Rename', exact: true }).waitFor()
+    await menu.getByRole('menuitem', { name: 'Edit workspace', exact: true }).waitFor()
     expect(await menuLabels(menu)).toEqual(names)
-    await menu.getByRole('menuitem', { name: 'Rename', exact: true }).click()
+    await menu.getByRole('menuitem', { name: 'Edit workspace', exact: true }).click()
     await page.getByRole('dialog').waitFor()
     await page.getByRole('button', { name: 'Cancel', exact: true }).click()
     await workspace.click({ button: 'right' })
@@ -201,7 +215,7 @@ describe.each(['MacIntel', 'Win32', 'Linux x86_64'])('web context menus on %s', 
     expect(await menuLabels(menu)).toEqual(['Show in folder', 'Copy folder path'])
     expect(await folder.getAttribute('aria-expanded')).toBe('false')
     await menu.getByRole('menuitem', { name: 'Copy folder path', exact: true }).click()
-    expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(join(scaffold.workspaceCwd, 'folder'))
+    expect(normalize(await page.evaluate(() => navigator.clipboard.readText()))).toBe(join(scaffold.workspaceCwd, 'folder'))
     await page.getByText('Copied', { exact: true }).waitFor()
     await expect(names.join('\n') + '\n').toMatchFileSnapshot(join(import.meta.dirname, 'expected/context-menus/workspace.txt'))
   })
