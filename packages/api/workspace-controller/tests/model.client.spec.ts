@@ -16,6 +16,7 @@ import type {
   WorkspacePinSessionRequest,
   WorkspacePinValue,
   WorkspaceRenameRequest,
+  WorkspaceRootsRequest,
   WorkspaceUnarchiveSessionRequest,
   WorkspaceUnpinSessionRequest,
   WorkspaceValue,
@@ -75,6 +76,8 @@ class FakeWorkspaceRemote implements WorkspaceRemote {
     Promise.resolve(remoteOk({ workspace: workspace(request.path.split('/').pop() ?? 'workspace'), created: true }))
   onRename: (request: WorkspaceRenameRequest) => Promise<RemoteResult<WorkspaceValue>> = request =>
     Promise.resolve(remoteOk({ workspace: { ...workspace(String(request.workspaceId)), title: request.title } }))
+  onSetRoots: (request: WorkspaceRootsRequest) => Promise<RemoteResult<WorkspaceValue>> = request =>
+    Promise.resolve(remoteOk({ workspace: { ...workspace(String(request.workspaceId)), additionalRoots: request.roots } }))
   onDelete: (_request: WorkspaceDeleteRequest) => Promise<RemoteResult<WorkspaceDeleteValue>> = () =>
     Promise.resolve(remoteOk({ deleted: true }))
   onInsertBefore: (
@@ -111,6 +114,11 @@ class FakeWorkspaceRemote implements WorkspaceRemote {
   rename(request: WorkspaceRenameRequest): Promise<RemoteResult<WorkspaceValue>> {
     this.record('rename', request)
     return this.onRename(request)
+  }
+
+  setRoots(request: WorkspaceRootsRequest): Promise<RemoteResult<WorkspaceValue>> {
+    this.record('setRoots', request)
+    return this.onSetRoots(request)
   }
 
   delete(request: WorkspaceDeleteRequest): Promise<RemoteResult<WorkspaceDeleteValue>> {
@@ -171,6 +179,19 @@ function baseline(
 }
 
 describe('ClientWorkspaceModel', () => {
+  it('uses the Host row for saved defaults and retains it if clearing is refused', async () => {
+    const remote = new FakeWorkspaceRemote()
+    const model = modelFor(remote)
+    const original = workspace('roots')
+    baseline(model, [original])
+    const roots = [{ path: '/fixture/reference', access: 'reference' as const }]
+    expect((await model.setRoots(original.workspaceId, roots)).ok).toBe(true)
+    expect(model.getSnapshot().items[0]?.additionalRoots).toEqual(roots)
+    remote.onSetRoots = async () => workspaceError(new RemoteError('gateway/internal', 'write failed', {}))
+    expect((await model.setRoots(original.workspaceId, [])).ok).toBe(false)
+    expect(model.getSnapshot().items[0]?.additionalRoots).toEqual(roots)
+  })
+
   it('forwards ordered source directories and retains the authoritative rename projection', async () => {
     const remote = new FakeWorkspaceRemote()
     const model = modelFor(remote)

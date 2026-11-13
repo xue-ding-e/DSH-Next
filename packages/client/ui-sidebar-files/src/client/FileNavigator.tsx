@@ -18,7 +18,8 @@ import {
   Button, IconCloseOutlineRegular, IconEyeOffOutlineRegular, IconEyeOutlineRegular, IconInfoOutlineRegular, IconSearchOutlineRegular,
   StateDot, Tooltip,
 } from '@deepseek-ai/dsh-client-ui-primitives'
-import { fileAddressFor } from '@deepseek-ai/dsh-util-workspace-path'
+import { fileAddressFor, resolveWorkspacePath } from '@deepseek-ai/dsh-util-workspace-path'
+import { FILE_REFERENCE_DRAG_TYPE } from '@deepseek-ai/dsh-file-reference/grammar'
 import type { FilesInjected } from './face.ts'
 import type { SidebarFilesKey } from './locales.ts'
 import { SearchSettings } from './SearchSettings.tsx'
@@ -257,6 +258,12 @@ export function FileNavigator({
       onToggle: (entry: TreeEntry) => { toggle(paneId, parentOf(tree, entry.path), entry.path, tree.expanded) },
       onOpen: (entry: TreeEntry) => { onOpen(fileAddressFor(sessionId, tree.root, entry.path)) },
       canOpen: (entry: TreeEntry) => canOpen(fileAddressFor(sessionId, tree.root, entry.path)),
+      onReferenceDrag: (entry: TreeEntry, kind: 'file' | 'directory', transfer: DataTransfer) => {
+        transfer.effectAllowed = 'copy'
+        transfer.setData(FILE_REFERENCE_DRAG_TYPE, JSON.stringify({
+          sessionId, path: resolveWorkspacePath(tree.root, entry.path), kind,
+        }))
+      },
       rowTriggerProps: (entry: TreeEntry, kind: 'file' | 'directory') => getTriggerProps(kind === 'directory'
         ? { kind, value: { sessionId, path: entry.path } }
         : { kind, value: { sessionId, path: entry.path, paneId } }),

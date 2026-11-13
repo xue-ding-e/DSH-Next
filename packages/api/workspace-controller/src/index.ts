@@ -2,7 +2,7 @@
 
 import { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
-import { Remote, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
+import { Remote, RemoteError, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
 import type {} from '@deepseek-ai/dsh-api-remote-access'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import { WorkspaceCommands } from './commands.ts'
@@ -25,6 +25,7 @@ import type {
   WorkspacePinSessionRequest,
   WorkspacePinValue,
   WorkspaceRenameRequest,
+  WorkspaceRootsRequest,
   WorkspaceUnarchiveSessionRequest,
   WorkspaceUnpinSessionRequest,
   WorkspaceValue,
@@ -120,6 +121,20 @@ export class WorkspaceController extends TypertRemoteService {
   @Remote('rename')
   rename(request: WorkspaceRenameRequest): Promise<WorkspaceValue> {
     return this.commands.rename(request)
+  }
+
+  /**
+   * Save directory defaults on the authenticated owner's Workspace.
+   * @param request - Workspace and complete directory selection.
+   * @returns the updated Workspace; saving does not grant execution access.
+   */
+  @Remote('setRoots')
+  setRoots(request: WorkspaceRootsRequest): Promise<WorkspaceValue> {
+    const invocation = this.ctx.invocation
+    if (invocation === undefined || invocation.peer.principal.kind !== 'owner') {
+      throw new RemoteError('workspace/roots-owner-required', 'Directory defaults require an authenticated owner', {})
+    }
+    return this.commands.setRoots(request, invocation)
   }
 
   /**

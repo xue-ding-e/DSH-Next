@@ -15,6 +15,7 @@
     "src/commands.ts",
     "src/queue-recall-projection.ts",
     "src/queue-recall.ts",
+    "src/root-permissions.ts",
     "src/control.ts",
     "src/file-references.ts",
     "src/history.ts",
@@ -56,6 +57,9 @@
       "path": "../../core/session"
     },
     {
+      "path": "../../sandbox/sandbox-policy"
+    },
+    {
       "path": "../../context/file-reference"
     },
     {
@@ -72,6 +76,9 @@
     },
     {
       "path": "../../jobs/jobs"
+    },
+    {
+      "path": "../../terminal/terminal"
     },
     {
       "path": "../../fs/fs"

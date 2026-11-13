@@ -6,6 +6,9 @@
 
 import type { FileReferenceCandidate } from './types.ts'
 
+/** Native drag type for path-only references originating in a file tree. */
+export const FILE_REFERENCE_DRAG_TYPE = 'application/x-dsh-file-reference'
+
 /** Active `@` token ending at the editor cursor. */
 export interface ActiveAtToken {
   /** Complete token replaced when the user accepts a completion. */

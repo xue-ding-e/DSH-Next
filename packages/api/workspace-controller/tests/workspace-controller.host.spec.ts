@@ -90,9 +90,9 @@ const WORKSPACE_VIEWER: RemoteAccessRole<'workspace'> = { name: 'test:workspace-
 const SESSION_VIEWER: RemoteAccessRole<'session'> = { name: 'test:session-viewer', resource: 'session', actions: ['workspace/follow'] }
 
 /** The Context a Gateway dispatch of `workspace/follow` binds for `principal`. */
-function followerContext(ctx: Context, principal: Principal): Context {
+function followerContext(ctx: Context, principal: Principal, method = 'follow'): Context {
   const invocation: RemoteInvocation = {
-    request: { namespace: 'workspace', method: 'follow', args: {} },
+    request: { namespace: 'workspace', method, args: {} },
     service: 'workspaceController',
     peer: { id: 'workspace-access-peer' as PeerId, ctx, principal, interactions: 'answer', signal: new AbortController().signal, dispose: async () => {} },
     signal: new AbortController().signal,
@@ -116,6 +116,38 @@ async function nextFrame(
 }
 
 describe('WorkspaceController commands', () => {
+  it('saves owner directory defaults and emits the same row after save and clear', async () => {
+    const { controller, ctx, root } = await harness()
+    const primary = stageDir(root, 'primary')
+    const reference = stageDir(root, 'reference')
+    const created = await controller.create({ path: primary })
+    const workspaceId = created.workspace.workspaceId
+    const owner = followerContext(ctx, { kind: 'owner' }, 'setRoots').workspaceController
+    const guest = followerContext(ctx, { kind: 'test-guest', guest: 'reader' }, 'setRoots').workspaceController
+    const abort = new AbortController()
+    const stream = controller.follow(abort.signal)[Symbol.asyncIterator]()
+    await nextFrame(stream)
+    try {
+      const roots = [{ path: reference, access: 'reference' as const }]
+      expect(() => guest.setRoots({ workspaceId, roots })).toThrowError(expect.objectContaining({
+        code: 'workspace/roots-owner-required',
+      }))
+      const saved = await owner.setRoots({ workspaceId, roots })
+      expect(saved.workspace.additionalRoots).toEqual(roots)
+      expect(await nextFrame(stream)).toEqual({ type: 'upsert', workspace: saved.workspace })
+      await expect(controller.rename({ workspaceId, title: 'Refused', sourcePaths: [reference, primary] }))
+        .rejects.toMatchObject({ code: 'gateway/bad-request' })
+      expect(ctx.workspaceRegistry.get(workspaceId)?.primaryPath).toBe(primary)
+      expect(await controller.create({ path: primary })).toMatchObject({ workspace: saved.workspace })
+      const cleared = await owner.setRoots({ workspaceId, roots: [] })
+      expect(cleared.workspace.additionalRoots).toBeUndefined()
+      expect(await nextFrame(stream)).toEqual({ type: 'upsert', workspace: cleared.workspace })
+    } finally {
+      abort.abort()
+      await stream.return?.()
+    }
+  })
+
   it('saves canonical source directories with the title and maps source validation without partial writes', async () => {
     const { controller, ctx, root } = await harness()
     const anchor = stageDir(root, 'source-anchor')

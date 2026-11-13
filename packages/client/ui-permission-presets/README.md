@@ -29,6 +29,8 @@ Mount this plugin alongside the settings, commands, and conversation packages. G
 
 In narrow browser settings, the default-permission label uses a smaller gutter before its control. Windows and macOS desktop windows retain the standard spacing.
 
+**Manage directories** in the Session header opens the current selection and the owning Workspace's defaults. Saving a current selection revokes the previous grant. Preview and confirm the saved selection to enable it for the live Session. The Windows ACL process backend supports reference selections in this editor and refuses additional write requests.
+
 ### The picker
 
 A pick submits the `/permission <preset>` command line. The argument-bearing form (`/permission <preset>` typed directly) still switches directly; the decoration replaces only the bare invocation. The built-in labels are `Read Only`, `Workspace Write`, `Full access`, and `Auto review` in English and `仅可查看`, `工作区内修改`, `完全权限`, and `自动审查` in Chinese. Explicit host labels remain unchanged, unknown kebab-case names render in title case, and `auto` carries an `EXP` badge in menu options plus an experimental-risk confirmation. The selected composer control shows the mode without the badge. `custom` is display state, never a target.

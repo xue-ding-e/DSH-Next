@@ -181,6 +181,13 @@ Abstract process-sandbox service. confine must return enforcing argv or fail clo
 
 ```ts cordis-catalog
 /**
+ * Report whether this provider's process confinement honors additional write roots.
+ * @param _mode - current file-effect mode.
+ * @returns whether the provider supports additional roots in this mode.
+ */
+supportsAdditionalWritableRoots(_mode: SandboxMode): boolean
+
+/**
  * Wrap `argv` so it executes confined under `policy` on this host; the
  * caller spawns the returned argv in place of its own.
  * @param argv - the exact argv the caller is about to spawn (program plus
@@ -222,6 +229,68 @@ The sandbox-policy service (`ctx.sandboxPolicy`). Owns the deployment default mo
 resolve(request: SandboxPolicyRequest = {}): SandboxExecutionPolicy
 
 /**
+ * Record pending directory defaults before the Agent is published.
+ * @param session - the fresh Session from Agent setup.
+ * @param roots - complete directory selection to record.
+ * @throws if this Session already has a selection or has started a turn.
+ */
+initializeRequestedRoots(session: Session, roots: readonly SessionRootRequest[]): void
+
+/**
+ * Read pending selections without touching the filesystem.
+ * @param session - Session with prepared projection state.
+ * @returns the detached selection, or null if none has been recorded.
+ */
+requestedRootsOf(session: Session): readonly SessionRootRequest[] | null
+
+/**
+ * Read directory selections approved in this process for the exact Session.
+ * @param session - the active Session instance.
+ * @returns approved selections, or an empty list when no current grant exists.
+ */
+confirmedRootsOf(session: Session): readonly SessionRootRequest[]
+
+/**
+ * Report directory selections and active grants to the authenticated owner.
+ * @param agent - the exact active Agent.
+ * @returns current selection, effective roots, and backend support.
+ */
+directoryState(agent: Agent): SessionDirectoryState
+
+/**
+ * Replace the pending selection at the supplied revision and revoke its live grant.
+ * @param agent - the exact active Agent.
+ * @param roots - complete replacement selection.
+ * @param revision - the observed revision, or null before a selection exists.
+ * @param assertQuiescent - synchronous activity check owned by the caller.
+ * @returns updated directory state.
+ */
+async replaceRequestedRoots(agent: Agent, roots: readonly SessionRootRequest[], revision: number | null, assertQuiescent: () => void): Promise<SessionDirectoryState>
+
+/**
+ * Prepare a one-use preview for the authenticated owner.
+ * @param agent - the exact active Agent.
+ * @param assertQuiescent - synchronous activity check repeated at confirmation.
+ * @returns the preview for the current Peer and policy revision.
+ */
+prepareRootApproval(agent: Agent, assertQuiescent: () => void): Promise<RootApprovalPreview>
+
+/**
+ * Confirm a matching preview and publish the updated directory state.
+ * @param agent - the exact active Agent.
+ * @param nonce - the current Peer's one-use preview nonce.
+ * @returns the live grant receipt.
+ */
+async confirmRootApproval(agent: Agent, nonce: string): Promise<RootApprovalReceipt>
+
+/**
+ * Discard the current Peer's matching preview.
+ * @param agent - the exact active Agent.
+ * @param nonce - the preview to discard.
+ */
+cancelRootApproval(agent: Agent, nonce: string): void
+
+/**
  * Permit writes under one directory in this Session's future workspace-write
  * operations. The calling context owns the effect; disposal removes only this
  * registration. Other grants to the directory remain effective. Existing
@@ -243,7 +312,30 @@ registerWritableRoot(session: Session, directory: string): () => void
 overrideOf(session: Session): SandboxMode | undefined
 ```
 
-Types: [Session](session.zh.md)
+Types: [Agent](core.zh.md) · [Session](session.zh.md)
+
+Source: [`packages/sandbox/sandbox-policy/src/index.ts`](../../packages/sandbox/sandbox-policy/src/index.ts)
+
+<a id="sandbox-events"></a>
+
+### `sandbox/*` events
+
+<a id="sandboxdirectories-changed--emit"></a>
+
+#### `sandbox/directories-changed` — emit
+
+An owner saved a directory selection or changed its live authorization.
+
+```ts cordis-catalog
+/**
+ * An owner saved a directory selection or changed its live authorization.
+ * @mode emit
+ * @param sessionId - affected Session.
+ */
+'sandbox/directories-changed'(sessionId: SessionId): void
+```
+
+Types: [SessionId](core.zh.md)
 
 Source: [`packages/sandbox/sandbox-policy/src/index.ts`](../../packages/sandbox/sandbox-policy/src/index.ts)
 <!-- END GENERATED cordis-surface -->

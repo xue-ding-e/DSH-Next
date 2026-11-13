@@ -65,6 +65,8 @@ ctx.workspaceRegistry.list() // shows the project, newest first
 
 `path` remains the original canonical registration directory. `sourcePaths` defaults to that directory, and its first entry is `primaryPath`, which the Session controller uses for a new Session's initial cwd. Editing sources never changes an existing Session's recorded cwd. `status()` checks the original registration directory, independently of the primary source.
 
+Additional directory defaults are stored separately from the ordered source directories. A reference entry adds no write request. A write entry requests approval for a future Session. Saving defaults leaves existing Session permissions unchanged.
+
 <a id="first-use-workspace"></a>
 ### First-use Workspace
 

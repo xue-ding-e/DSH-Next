@@ -59,6 +59,14 @@ export interface SessionActivity {
   readonly items?: readonly SessionActivityItem[]
 }
 
+/** A future Session directory selection. Execution authorization is separate. */
+export interface WorkspaceAdditionalRoot {
+  /** Canonical absolute directory on the Host. */
+  readonly path: string
+  /** Reference adds no write request; write requires approval. */
+  readonly access: 'reference' | 'write'
+}
+
 /**
  * One workspace: a stable id over its original directory, ordered source
  * directories, a display title, and an ordered Session account. Membership
@@ -82,6 +90,16 @@ export interface Workspace {
 
   /** Primary source directory used when creating a Session. */
   readonly primaryPath: string
+
+  /** Defaults for new Sessions; they carry no active access grant. */
+  readonly additionalRoots: readonly WorkspaceAdditionalRoot[]
+
+  /**
+   * Replace directory defaults without changing any existing Session.
+   * @param roots - existing directories and their requested use.
+   * @returns resolution after validation and durability.
+   */
+  setAdditionalRoots(roots: readonly WorkspaceAdditionalRoot[]): Promise<void>
 
   /** Display title. Defaults to the final path segment, or a filesystem root's own spelling; duplicates are allowed. */
   readonly title: string

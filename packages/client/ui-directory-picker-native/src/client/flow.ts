@@ -25,6 +25,7 @@ export interface NativeFlowInjected {
 export function NativeDirectoryFlow(props: DirectoryFlowOwnerProps & NativeFlowInjected): ReactElement | null {
   const { open, pick } = props
   const armed = useRef(false)
+  const requestGeneration = useRef(0)
   // Callbacks ride a ref so the settled pick reports through the owner's
   // latest handlers, not the ones captured when the chooser opened.
   const outcome = useRef(props)
@@ -45,18 +46,21 @@ export function NativeDirectoryFlow(props: DirectoryFlowOwnerProps & NativeFlowI
   }, [])
   useEffect(() => {
     if (!open) {
+      ++requestGeneration.current
       armed.current = false
       return
     }
     if (armed.current) return
     armed.current = true
+    // An older native chooser can settle after the next open.
+    const generation = ++requestGeneration.current
     pick().then(
       (path) => {
-        if (!alive.current) return
+        if (!alive.current || generation !== requestGeneration.current) return
         if (path === null) outcome.current.onCancel(); else outcome.current.onPicked(path)
       },
       (reason: unknown) => {
-        if (!alive.current) return
+        if (!alive.current || generation !== requestGeneration.current) return
         outcome.current.onError(reason instanceof Error ? reason.message : String(reason))
       },
     )

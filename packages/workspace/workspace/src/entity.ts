@@ -11,9 +11,10 @@
 import { stat } from 'node:fs/promises'
 import type { SessionHeader, SessionId } from '@deepseek-ai/dsh-session'
 import type { KvTable } from '@deepseek-ai/dsh-storage-domain'
-import type { WorkspaceRecord } from './spec.ts'
-import type { Workspace, WorkspaceId } from './types.ts'
+import { workspaceAdditionalRoots, type WorkspaceRecord } from './spec.ts'
+import type { Workspace, WorkspaceAdditionalRoot, WorkspaceId } from './types.ts'
 import { realpathNormalize } from './paths.ts'
+import { normalizeAdditionalRoots, rootsOverlap } from './additional-roots.ts'
 
 /** An insertSessionBefore request named a session or anchor not on the account (storage failures stay plain errors). */
 export class WorkspaceMoveInvalidError extends Error {
@@ -123,6 +124,29 @@ export class WorkspaceEntity implements Workspace {
     return this.record.sourcePaths?.[0] ?? this.record.path
   }
 
+  get additionalRoots(): readonly WorkspaceAdditionalRoot[] {
+    return Object.freeze((this.record.additionalRoots ?? []).map(root => Object.freeze({ ...root })))
+  }
+
+  async setAdditionalRoots(roots: readonly WorkspaceAdditionalRoot[]): Promise<void> {
+    const primary = this.primaryPath
+    let normalized: readonly WorkspaceAdditionalRoot[]
+    try {
+      normalized = await normalizeAdditionalRoots(primary, workspaceAdditionalRoots.parse(roots))
+    } catch (error) {
+      throw new WorkspaceSourcesInvalidError('Invalid additional directory defaults', { cause: error })
+    }
+    await this.mutate((record) => {
+      if ((record.sourcePaths?.[0] ?? record.path) !== primary) {
+        throw new WorkspaceSourcesInvalidError('Workspace primary directory changed while validating the defaults')
+      }
+      const previous = record.additionalRoots ?? []
+      if (previous.length === normalized.length && previous.every((root, index) =>
+        root.path === normalized[index]?.path && root.access === normalized[index]?.access)) return record
+      return { ...record, additionalRoots: [...normalized] }
+    })
+  }
+
   get createdAt(): string {
     return this.record.createdAt
   }
@@ -158,6 +182,11 @@ export class WorkspaceEntity implements Workspace {
       canonical.push(resolved)
     }
     await this.mutate((record) => {
+      const primary = canonical[0]
+      if (primary !== undefined && primary !== (record.sourcePaths?.[0] ?? record.path)
+        && record.additionalRoots?.some(root => root.access === 'reference' && rootsOverlap(primary, root.path))) {
+        throw new WorkspaceSourcesInvalidError('The new primary directory overlaps a reference directory default')
+      }
       const priorPaths = new Set([...(record.sourcePaths ?? []), ...(record.retainedSourcePaths ?? [])])
       const retainedSourcePaths = [...priorPaths].filter(path => path !== record.path && !canonical.includes(path)
         && record.sessionIds.some(id => this.host.candidateMatches(id, path)))

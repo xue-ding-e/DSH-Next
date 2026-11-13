@@ -1224,7 +1224,7 @@
     {
       "doc": "docs/subsystems/sandbox.md",
       "symbol": "SandboxMode",
-      "source": "packages/sandbox/sandbox/src/index.ts"
+      "source": "packages/sandbox/sandbox/src/types.ts"
     },
     {
       "doc": "docs/subsystems/sandbox.md",

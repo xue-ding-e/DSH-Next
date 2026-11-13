@@ -29,6 +29,7 @@
     "packages/experimental/*/src/css-modules.d.ts",
     "packages/client/*/tests/**/*.ts",
     "packages/client/*/tests/**/*.tsx",
+    "packages/api/session-controller/tests/root-permissions-wire.ts",
     "benchmarks/**/*.client.ts",
     "benchmarks/**/*.client.tsx",
     "benchmarks/support/**/*.ts",

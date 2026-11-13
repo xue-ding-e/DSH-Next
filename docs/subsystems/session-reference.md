@@ -139,6 +139,21 @@ Host capability for cancellable file-reference discovery.
 
 ```ts cordis-catalog
 /**
+ * Capture the provider's current discovery scope for an authorized Agent.
+ * @param _agent - exact active Agent.
+ * @returns a final synchronous guard; unsupported providers refuse path drops.
+ */
+captureScope(_agent: Agent): () => boolean
+
+/**
+ * Capture the identity of a provider-issued candidate.
+ * @param _agent - authorized Agent used to list the candidate.
+ * @param _candidate - candidate returned by list.
+ * @returns a final synchronous guard; unsupported providers refuse path drops.
+ */
+captureCandidate(_agent: Agent, _candidate: FileReferenceCandidate): () => boolean
+
+/**
  * List file and directory candidates for one agent's working directory.
  * @param agent - target agent whose session cwd bounds discovery.
  * @param query - path text following `@` or `@"`.
@@ -160,6 +175,18 @@ Host Remote adapter over the composed file-reference provider.
 
 ```ts cordis-catalog
 /**
+ * Resolve a path-only drag through both Sessions' current file discovery scopes.
+ * No file bytes are read, uploaded, or granted additional tool access.
+ * @param agent - destination Agent authorized by the Gateway.
+ * @param sourceSessionId - origin identity, authorized before its Agent lookup.
+ * @param path - absolute source path; never rebound relative to the destination.
+ * @param kind - expected entry kind from the source listing.
+ * @param signal - cancellation before any result is staged by the caller.
+ * @returns one current path-only candidate; later reads remain normal tool operations.
+ */
+@Remote async resolveDrop( agent: Agent, sourceSessionId: SessionId, path: string, kind: 'file' | 'directory', signal: AbortSignal, ): Promise<FileReferenceCandidate>
+
+/**
  * List file and directory candidates for one Agent's working directory.
  * @param agent - target Agent resolved from the Session identity on the wire.
  * @param query - path text following `@` or `@"`.
@@ -169,7 +196,7 @@ Host Remote adapter over the composed file-reference provider.
 @Remote list( agent: Agent, query: string, signal: AbortSignal, ): Promise<FileReferenceCandidate[]>
 ```
 
-Types: [Agent](core.md)
+Types: [Agent](core.md) · [SessionId](core.md)
 
 Source: [`packages/api/session-controller/src/file-references.ts`](../../packages/api/session-controller/src/file-references.ts)
 

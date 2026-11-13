@@ -30,6 +30,8 @@ The Client entry provides `ClientWorkspaceModel` and `createWorkspaceStateStream
 
 `workspace.rename({ workspaceId, title, sourcePaths? })` saves the trimmed title and optional ordered source directories atomically. Omit `sourcePaths` to preserve them; invalid or duplicate directories and an empty list reject with `gateway/bad-request` without changing either field. The first source supplies the initial cwd of new Sessions; `path` remains the original registration directory. Removing a secondary source retains its existing Session history and order. Unary responses, follow increments, and reconnect baselines expose the same source list; omission means only `path`.
 
+An authenticated owner can use `workspace.setRoots({ workspaceId, roots })` to replace the additional-directory defaults for future Sessions. Pass an empty list to clear the defaults. Each directory is canonicalized before saving, and a reference selection cannot overlap the primary directory. Unary and follow responses include the same saved list. Saving defaults does not change existing Sessions or authorize access.
+
 <a id="first-use-workspace"></a>
 ### First-use Workspace
 

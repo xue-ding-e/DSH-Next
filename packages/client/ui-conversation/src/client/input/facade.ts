@@ -23,6 +23,7 @@ import type {
 } from '../contract/input.ts'
 import type {
   ArbitrateKey, ArbitrateOutcome, ComposerKeyboard, DraftInput, DraftSnapshot, ReferenceInsert, TokenSpan,
+  FileReferenceDrag,
 } from '../contract/draft-editor.ts'
 import type { InputSubmitMode, MessageSubmission, MessageSubmissionState } from '../contract/composer-submission.ts'
 import { serializeDraftPrompt } from './prompt.ts'
@@ -66,6 +67,9 @@ export interface SessionInputDeps {
   ) => Promise<{ readonly text: string; readonly attachmentIds: readonly DraftAttachmentId[]; commit(): void } | undefined>
   recallFailed?: () => string
   retainRecall?: () => (() => void)
+  /** Host validation and localized notice for a file-tree drop. */
+  resolveDroppedFile?: (source: FileReferenceDrag, signal: AbortSignal) => Promise<ReferenceInsert>
+  droppedFileUnavailable?: () => string
   /**
    * The plain-message sink (send choreography / materialize fork — the hub owns it).
    * `accept` settles the message as accepted at once; the sink calls it when
@@ -419,6 +423,30 @@ export class SessionInputShell implements SessionInput {
     const applied = this.insertReference(reference, { start: selection.end, end: selection.end, draftRev: this.rev })
     if (applied) this.focus()
     return applied
+  }
+
+  /**
+   * Insert an authorized file reference at the selection captured for this drop.
+   * @param source - source Session and file-tree entry.
+   * @param signal - receiving composer lifetime.
+   */
+  async insertDroppedFileReference(source: FileReferenceDrag, signal: AbortSignal): Promise<void> {
+    if (this.disposed || this.deps.resolveDroppedFile === undefined || !this.editor.isEditable()) return
+    const selection = this.caretSpan()
+    const span = { start: selection.end, end: selection.end, draftRev: this.rev }
+    try {
+      const reference = await this.deps.resolveDroppedFile(source, signal)
+      if (signal.aborted || this.disposed) return
+      if (!this.editor.isEditable() || span.draftRev !== this.rev) {
+        throw new Error('Draft changed before the file reference was resolved')
+      }
+      if (this.snapshot.occurrences.some(item => item.source === reference.source && item.ref === reference.ref)) return
+      if (!this.insertReference(reference, span)) throw new Error('The draft did not accept the file reference')
+      this.focus()
+    } catch (error) {
+      if (!signal.aborted && !this.disposed) this.notify('error', this.deps.droppedFileUnavailable?.()
+        ?? (error instanceof Error ? error.message : String(error)))
+    }
   }
 
   /**

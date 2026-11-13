@@ -60,6 +60,10 @@ kind: "package-reference"
 
 注册与清理影响后续策略解析及下一次模型请求中记录的上下文。其他 Session（包括子 agent 的 Session）与无 agent 调用不会获得此授权。授权不随 Session 历史保存或继承；恢复或派生的 Session 需要自行注册。已经解析策略的操作与持久进程保留原权限，包括注册已被移除的目录。启动新进程才能使用当前授权。`read-only` 仍然只读。在 Windows 上，`write` 与 `edit` 执行额外目录授权，受沙箱限制的进程则忽略这些授权，保留工作区与私有临时目录访问权限；参见 [sandbox-local](../sandbox-local/README.zh.md#known-limitations-and-deferred-work)。
 
+### 确认 Session 的附加目录
+
+工作区默认目录保存为 Session 的待确认选择。已认证的所有者先预览物理路径和当前策略，再在 Agent、终端、任务与子 Agent 均空闲时确认一次。保存另一份选择、更改模式或执行提供方、替换 Agent 以及重启宿主都会撤回授权。Session 回放保留选择和主工作目录。参考目录扩大路径发现范围，不增加写权限。无法为受限进程应用附加根目录的后端会拒绝此流程的额外写入请求。
+
 ### 切换会话模式
 
 会话的模式可以在运行时通过 UI 策略控件或显式切换来更改；切换记录在会话日志中，并在该会话的下一次受限调用时生效。切换通过回放跨重启保留，每个会话保持自己的模式——两个会话绝不会看到彼此状态。切换后的会话继续以不可变的工作区 cwd 作为工作区根目录。
@@ -96,6 +100,7 @@ kind: "package-reference"
 |---|---|
 | [`src/index.ts`](src/index.ts) | 插件入口：`SandboxPolicyService`、`Config` schema、策略解析与上下文贡献 |
 | [`src/session-mode.ts`](src/session-mode.ts) | `sandbox/mode` 事件、其 fold 与写入路径 |
+| [`src/session-roots.ts`](src/session-roots.ts) | Session 目录选择及其回放投影 |
 
 </details>
 

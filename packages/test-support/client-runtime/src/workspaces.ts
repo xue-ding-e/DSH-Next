@@ -105,6 +105,21 @@ export class TestWorkspaces implements IWorkspaces {
   }
 
   /**
+   * Record directory defaults and echo them on the matching fixture row.
+   * @param workspaceId - target Workspace.
+   * @param roots - complete directory selection.
+   * @returns the fixture or stub's updated row.
+   */
+  async setRoots(workspaceId: WorkspaceId, roots: Parameters<IWorkspaces['setRoots']>[1]): Promise<WorkspaceView> {
+    this.calls.push({ method: 'setRoots', args: [workspaceId, roots] })
+    const stub = this.stubs.get('setRoots')
+    if (stub !== undefined) return await (stub(workspaceId, roots) as Promise<WorkspaceView>)
+    const workspace = this.list.getSnapshot().items.find(item => item.workspaceId === workspaceId)
+    if (workspace === undefined) throw new Error(`No fixture Workspace '${workspaceId}'`)
+    return { ...workspace, additionalRoots: roots }
+  }
+
+  /**
    * Delete a Workspace (recorded; default no-op).
    * @param workspaceId - target workspace.
    */

@@ -196,6 +196,7 @@ class FakeWorkspaces implements IWorkspaces {
 
   declare readonly create: IWorkspaces['create']
   declare readonly rename: IWorkspaces['rename']
+  declare readonly setRoots: IWorkspaces['setRoots']
   declare readonly delete: IWorkspaces['delete']
   declare readonly insertBefore: IWorkspaces['insertBefore']
   declare readonly insertSessionBefore: IWorkspaces['insertSessionBefore']

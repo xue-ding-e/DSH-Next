@@ -1038,12 +1038,15 @@ describe('Workspace source directories', () => {
     const workspace = await initial.registry.create(anchor)
     expect(workspace.sourcePaths).toEqual([anchor])
     expect(workspace.primaryPath).toBe(anchor)
+    expect(workspace.additionalRoots).toEqual([])
     expect(storedRecord(initial.pool, workspace.id).sourcePaths).toBeUndefined()
 
     await workspace.configure('Multiple sources', [join(alias, '.'), anchor])
     expect(workspace.path).toBe(anchor)
     expect(workspace.sourcePaths).toEqual([secondary, anchor])
     expect(workspace.primaryPath).toBe(secondary)
+    const reference = await makeDir('sources-reference')
+    await workspace.setAdditionalRoots([{ path: reference, access: 'reference' }])
     await workspace.configure('Title only')
     expect(workspace.sourcePaths).toEqual([secondary, anchor])
     await initial.ctx.fiber.dispose()
@@ -1055,6 +1058,7 @@ describe('Workspace source directories', () => {
     expect(restored.path).toBe(anchor)
     expect(restored.sourcePaths).toEqual([secondary, anchor])
     expect(restored.primaryPath).toBe(secondary)
+    expect(restored.additionalRoots).toEqual([{ path: reference, access: 'reference' }])
     expect(restarted.pool.versions.get('workspace')).toBe(DOMAIN_VERSION)
   })
 

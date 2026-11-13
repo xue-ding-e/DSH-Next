@@ -8,6 +8,8 @@ DSH-Next 是基于 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-ha
 
 [下载 Windows x64 版 DSH Next](https://github.com/xue-ding-e/DSH-Next/releases)。在最新的 Next 发行版中选择 `win-x64-unsigned.exe` 安装包。推送到 `main` 会触发 Windows 发布流程，生成安装包、校验和与更新清单。
 
+Next 桌面端内置会话信箱、会话与文件树拖放引用，以及会话目录管理。从会话标题栏打开**管理目录**，可编辑当前会话的目录选择，或保存该工作区新会话的默认值。Windows ACL 后端支持确认参考目录，此对话框中的额外写入申请会被拒绝。[个人扩展一键安装](#personal-extensions)用于添加独立维护的可选插件。
+
 DeepSeek Harness（`dsh`）是由 [DeepSeek AI](https://deepseek.com) 开发的开源 agent harness（智能体框架）。
 
 它构建于**一切皆插件**的架构之上，由 [Cordis](https://github.com/cordiverse/cordis) 驱动，其设计参见论文 [_A Programming Paradigm for Spatiotemporal Composability_](https://arxiv.org/abs/2608.25512)。
@@ -49,6 +51,8 @@ pnpm dsh web
 ```
 
 `pnpm run build` 会准备仓库产物。`pnpm dsh web` 会直接使用这些已构建产物，不会重新构建。
+
+<a id="personal-extensions"></a>
 
 ### 安装个人扩展集合
 

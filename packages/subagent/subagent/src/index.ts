@@ -302,6 +302,15 @@ export class SubagentRuntime extends TypertRemoteService {
   }
 
   /**
+   * Inspect work that can outlive the owner's current turn.
+   * @param owner - exact active Agent.
+   * @returns whether its tree has pending, resident, or closing work.
+   */
+  hasOwnerActivity(owner: Agent): boolean {
+    return this.requireManager().hasOwnerActivity(owner)
+  }
+
+  /**
    * Report the model-facing names of a live tree member and its direct creator.
    * The root is `lead`; a descendant is the slash-separated path of names from
    * the root, or its Session id when it or a creator below the root has no name.

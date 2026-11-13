@@ -186,8 +186,39 @@ export const SESSION_SEARCH_RESULT_LIMIT = 20
 /** Maximum search snippet length in Unicode code points. */
 export const SESSION_SEARCH_SNIPPET_MAX_CODE_POINTS = 240
 
+/** Select the live Session whose directory permissions are being inspected. */
+export interface SessionRootsRequest {
+  readonly sessionId: SessionId
+}
+
+/** Confirm or cancel the one-use preview issued to the current Peer. */
+export interface SessionRootsConfirmRequest extends SessionRootsRequest {
+  readonly nonce: string
+}
+
+/** Replace the selection at the last revision observed by this editor. */
+export interface SessionRootsReplaceRequest extends SessionRootsRequest {
+  readonly roots: readonly import('@deepseek-ai/dsh-sandbox-policy/types').SessionRootRequest[]
+  readonly expectedRevision: number | null
+}
+
+/** Current process facts about the selected Session. */
+export type SessionRootsState = import('@deepseek-ai/dsh-sandbox-policy/types').SessionDirectoryState
+/** Preview of the exact selection and policy to confirm. */
+export type SessionRootsPreview = import('@deepseek-ai/dsh-sandbox-policy/types').RootApprovalPreview
+/** Acknowledgement of one active grant. */
+export type SessionRootsReceipt = import('@deepseek-ai/dsh-sandbox-policy/types').RootApprovalReceipt
+
 declare module '@deepseek-ai/dsh-typert-protocol' {
   interface RemoteErrorDetailsMap {
+    /** The requested path is no longer available in both authorized discovery scopes. */
+    'file-reference/unavailable': Record<string, never>
+    /** An unauthenticated or non-owner request attempted to manage Session directories. */
+    'session/roots-owner-required': Record<string, never>
+    /** The Session no longer has an active Agent. */
+    'session/roots-unavailable': Record<string, never>
+    /** The current selection, provider, or activity state precludes the operation. */
+    'session/roots-refused': Record<string, never>
     /** A wait observation ended before a stopping state; the caller should reread. */
     'session/observation-ended': Record<string, never>
     /** No state arrived before the deadline; a timeout after a state returns its value instead. */
@@ -716,6 +747,12 @@ export type SessionProjectionFrame =
 
 declare module '@deepseek-ai/cordis' {
   interface Events {
+    /**
+     * An active Session's directory authority or requested selection changed.
+     * @mode emit
+     * @param sessionId - Session whose directory facts must be refreshed.
+     */
+    'api-session/directories-changed'(sessionId: SessionId): void
     /**
      * A Session became visible or its Agent was created or disposed.
      * Consumers upsert the summary and replace its current running and availability state.

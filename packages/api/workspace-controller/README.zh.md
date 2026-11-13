@@ -30,6 +30,8 @@ Client 入口提供 `ClientWorkspaceModel` 和 `createWorkspaceStateStream()`。
 
 `workspace.rename({ workspaceId, title, sourcePaths? })` 原子保存去除首尾空白的标题及可选的有序来源目录。省略 `sourcePaths` 会保留它们；无效或重复目录、空列表会以 `gateway/bad-request` 拒绝，两个字段均不变。首个来源决定新 Session 的初始 cwd；`path` 仍为原始登记目录。移除次级来源会保留它的现有 Session 历史及顺序。一元响应、follow 增量和重连 baseline 暴露相同的来源列表；省略表示仅有 `path`。
 
+已认证的所有者可以用 `workspace.setRoots({ workspaceId, roots })` 替换后续 Session 的附加目录默认设置。传入空列表可清除默认设置。目录会先规范化，参考目录不能与主目录重叠。一元响应和 follow 流返回相同的已保存列表。保存默认设置不会改变现有 Session 或授予访问权限。
+
 <a id="first-use-workspace"></a>
 ### 首次使用工作区
 

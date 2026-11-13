@@ -258,6 +258,59 @@ describe.skipIf(MODE === 'record')('web e2e: file and session references through
     expect(tripwire.pageErrors).toEqual([])
   })
 
+  async function verifyFileTreeDrop(page: Page) {
+    const row = page.locator(`[data-row-key="session:${TARGET_SESSION_ID}"]`)
+    const ungrouped = page.getByRole('treeitem', { name: /Ungrouped/ })
+    if (await ungrouped.getAttribute('aria-expanded') !== 'true') await ungrouped.click()
+    await row.click()
+    const input = page.locator('[data-composer-input]').first()
+    const id = SessionId(TARGET_SESSION_ID)
+    const before = await readPersistedEvents(scaffold, id)
+    const messages = before.filter(event => event.type === 'user/message' || event.type === 'turn/start')
+    await writeComposerDraft(page, input, 'Keep the file reference draft. ')
+    await page.getByRole('button', { name: 'Open right sidebar', exact: true }).click()
+    await page.locator('[data-sidebar-right-guide-entry="files"]').click()
+    const tree = page.locator('[data-files-state="tree"]')
+    await tree.waitFor()
+    const workspace = tree.locator('[data-files-entry="directory"]').getByRole('button', { name: 'workspace', exact: true })
+    await workspace.waitFor()
+    if (await workspace.getAttribute('aria-expanded') !== 'true') await workspace.click()
+    const file = tree.locator('[data-files-entry="file"]').getByRole('button', { name: 'reference.txt', exact: true })
+    const folder = tree.locator('[data-files-entry="directory"]').getByRole('button', { name: 'folderx', exact: true })
+    const destination = page.locator('[data-conversation-content]').first()
+    for (const source of [file, folder, file]) {
+      await source.scrollIntoViewIfNeeded()
+      const from = await source.boundingBox()
+      const to = await destination.boundingBox()
+      if (from === null || to === null) throw new Error('The file-tree drag surfaces must be visible')
+      await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2)
+      await page.mouse.down()
+      await page.mouse.move(to.x + to.width / 2, to.y + to.height / 3, { steps: 16 })
+      const invitation = page.locator('[data-session-reference-drop]')
+      await invitation.waitFor()
+      expect(await invitation.textContent()).toBe('Release to reference a file or folder')
+      await page.mouse.up()
+      await invitation.waitFor({ state: 'hidden' })
+      const name = source === folder ? 'folderx/' : 'reference.txt'
+      await expect.poll(async () => {
+        const chips = await input.locator('[data-composer-chip]').allTextContents()
+        return {
+          inserted: chips.includes(name),
+          notice: await page.getByText('Could not add this path reference. Your draft was kept.', { exact: true }).count(),
+        }
+      }).toEqual({ inserted: true, notice: 0 })
+    }
+    expect(await input.locator('[data-composer-chip]').count()).toBe(2)
+    expect(await input.textContent()).toContain('Keep the file reference draft.')
+    const agent = scaffold.ctx.agents.get(id)
+    expect(agent?.status).toBe('idle')
+    expect(agent?.inbox.nextTurn).toEqual([])
+    expect(agent?.inbox.nextStep).toEqual([])
+    expect((await readPersistedEvents(scaffold, id)).filter(event => event.type === 'user/message' || event.type === 'turn/start'))
+      .toEqual(messages)
+    await writeComposerDraft(page, input, '')
+  }
+
   it('keeps a native reference drop on the narrow navigation mask out of the inert conversation', async () => {
     const input = page.locator('[data-composer-input]').first()
     await writeComposerDraft(page, input, 'Keep this draft. ')
@@ -523,6 +576,7 @@ describe.skipIf(MODE === 'record')('web e2e: file and session references through
     await target.waitFor({ timeout: 15_000 })
     await target.click()
     await page.locator('[data-chat-flow-kind="user"]').filter({ hasText: 'Research notes' }).waitFor({ timeout: 15_000 })
+    await writeComposerDraft(page, page.locator('[data-composer-input]').first(), '')
     const events = await readPersistedEvents(scaffold, SessionId(TARGET_SESSION_ID))
     const inputs = events.filter(event => event.type === 'user/message')
     expect(inputs.map(event => event.data.source.kind)).toEqual(['user', 'session-reference'])
@@ -571,5 +625,15 @@ describe.skipIf(MODE === 'record')('web e2e: file and session references through
     acknowledgeReloadConnectionLoss(tripwire, warningStart)
     expect(tripwire.pageErrors).toEqual([])
     expect(tripwire.warnings).toEqual([])
+  })
+
+  it('drags file-tree files and folders onto the conversation without sending or uploading', async () => {
+    const isolated = await newEnglishPage(browser)
+    try {
+      await isolated.goto(scaffold.authenticatedUrl, { waitUntil: 'load' })
+      await verifyFileTreeDrop(isolated)
+    } finally {
+      await isolated.context().close()
+    }
   })
 })

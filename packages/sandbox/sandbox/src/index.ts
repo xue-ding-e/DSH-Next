@@ -8,6 +8,8 @@
 import { Context, Service } from '@deepseek-ai/cordis'
 import { HarnessError } from '@deepseek-ai/dsh-llm'
 import type { SessionId } from '@deepseek-ai/dsh-session'
+import type { SandboxMode } from './types.ts'
+export type { SandboxMode } from './types.ts'
 
 export {
   ESCALATION_TARGETS,
@@ -28,14 +30,6 @@ export type {
   SandboxEscalationErrorCode,
 } from './escalation.ts'
 export { canonicalPath, workspaceWritableRoots, writableRoots, SandboxInvalidRootError } from './roots.ts'
-
-/**
- * File-effect policy for confined processes. `read-only` permits only required
- * sinks such as `/dev/null`; `workspace-write` also permits the workspace,
- * explicit extra roots where supported, and backend-defined temp areas; `danger-full-access` bypasses confinement. Network
- * and process visibility are outside this vocabulary.
- */
-export type SandboxMode = 'read-only' | 'workspace-write' | 'danger-full-access'
 
 /** A confining (non-`danger-full-access`) mode — the modes a {@link SandboxPolicy} can carry. */
 export type ConfinedSandboxMode = Exclude<SandboxMode, 'danger-full-access'>
@@ -208,6 +202,15 @@ export abstract class SandboxProvider extends Service {
   /* v8 ignore next -- abstract service construction is covered through concrete provider packages. */
   constructor(ctx: Context) {
     super(ctx, 'sandbox')
+  }
+
+  /**
+   * Report whether this provider's process confinement honors additional write roots.
+   * @param _mode - current file-effect mode.
+   * @returns whether the provider supports additional roots in this mode.
+   */
+  supportsAdditionalWritableRoots(_mode: SandboxMode): boolean {
+    return false
   }
 
   /**

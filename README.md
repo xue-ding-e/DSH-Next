@@ -8,6 +8,8 @@ DSH-Next is an independent community-maintained source repository based on [Deep
 
 [Download DSH Next for Windows x64](https://github.com/xue-ding-e/DSH-Next/releases). Choose the newest Next release and its `win-x64-unsigned.exe` installer. Pushes to `main` trigger the Windows release workflow, which publishes the installer, checksums and update feeds.
 
+The Next desktop app includes a Session mailbox, conversation and file-tree drag references, and per-Session directory selections. Open **Manage directories** in a Session header to edit its selection or save defaults for new Sessions in the Workspace. The Windows ACL backend accepts confirmed reference folders and refuses extra write requests from this dialog. The [optional personal extension installer](#personal-extensions) adds separately maintained plugins.
+
 DeepSeek Harness (`dsh`) is an open-source agent harness developed by [DeepSeek AI](https://deepseek.com).
 
 It is built on an **everything-is-a-plugin** architecture and powered by [Cordis](https://github.com/cordiverse/cordis), whose design is described in [_A Programming Paradigm for Spatiotemporal Composability_](https://arxiv.org/abs/2608.25512).
@@ -45,6 +47,8 @@ pnpm dsh web
 ```
 
 `pnpm run build` prepares the repository artifacts. `pnpm dsh web` uses those built artifacts without rebuilding.
+
+<a id="personal-extensions"></a>
 
 ### Install the personal extension collection
 

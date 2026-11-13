@@ -26,15 +26,21 @@ import { isAbsolute } from 'node:path'
 import { Context, Service } from '@deepseek-ai/cordis'
 import { z as zod } from 'zod'
 import z from '@deepseek-ai/schemastery'
-import type {} from '@deepseek-ai/dsh-agent'
+import type { Agent } from '@deepseek-ai/dsh-agent'
 import { SandboxInvalidRootError } from '@deepseek-ai/dsh-sandbox'
 import type { SandboxExecutionPolicy, SandboxMode } from '@deepseek-ai/dsh-sandbox'
-import type { Session } from '@deepseek-ai/dsh-session'
+import type { Session, SessionId } from '@deepseek-ai/dsh-session'
 import type { ProjectionHandle } from '@deepseek-ai/dsh-session-projection'
 import type {} from '@deepseek-ai/dsh-system-prompt'
 import type {} from '@deepseek-ai/dsh-workspace'
+import { RootApprovalOwner } from './root-permissions.ts'
+import { foldRequestedRoots, requestedRootsSchema, requestedRootsStateSchema } from './session-roots.ts'
+import type { RequestedRootsState } from './session-roots.ts'
+import type { RootApprovalPreview, RootApprovalReceipt, SessionDirectoryState, SessionRootRequest } from './types.ts'
 
 export { SANDBOX_MODES, setSandboxMode } from './session-mode.ts'
+export { RootApprovalError } from './root-permissions.ts'
+export type { RootApprovalPreview, RootApprovalReceipt, SessionDirectoryState, SessionRootRequest } from './types.ts'
 
 /** Whether a path is usable as an execution-world grant: absolute and free of NUL bytes. */
 function isExecutionWorldPath(path: string): boolean {
@@ -81,6 +87,14 @@ function renderPolicyContext(policy: SandboxExecutionPolicy): string {
 }
 
 declare module '@deepseek-ai/cordis' {
+  interface Events {
+    /**
+     * An owner saved a directory selection or changed its live authorization.
+     * @mode emit
+     * @param sessionId - affected Session.
+     */
+    'sandbox/directories-changed'(sessionId: SessionId): void
+  }
   interface Context {
     sandboxPolicy: SandboxPolicyService
   }
@@ -153,6 +167,11 @@ export class SandboxPolicyService extends Service {
   readonly additionalWritableRoots: readonly string[] | undefined
   /** Independently owned grants for each live Session; never restored from its log. */
   private readonly writableRootRegistrations = new WeakMap<Session, Map<symbol, string>>()
+  private requestedRootsProjectionHandle!: ProjectionHandle<RequestedRootsState>
+  private readonly rootApprovals = new RootApprovalOwner(this, session => ({
+    state: this.requestedRootsProjectionHandle.stateOf(session),
+    policy: this.basePolicy({ session }),
+  }))
   private sandboxModeProjectionHandle!: ProjectionHandle<SandboxMode | null>
 
   constructor(ctx: Context, config: Config) {
@@ -172,6 +191,13 @@ export class SandboxPolicyService extends Service {
 
   protected async [Service.init](): Promise<void> {
     const ctx = this.ctx
+    this.requestedRootsProjectionHandle = await ctx.sessionProjections.register({
+      key: 'sandboxRequestedRoots',
+      stateVersion: 2,
+      stateSchema: requestedRootsStateSchema,
+      init: () => ({ roots: null, started: false, rootsRevision: 0, modeRevision: 0 }),
+      apply: foldRequestedRoots,
+    })
     this.sandboxModeProjectionHandle = await ctx.sessionProjections.register({
       key: 'sandboxMode',
       stateVersion: 1,
@@ -184,14 +210,30 @@ export class SandboxPolicyService extends Service {
       scope.systemPrompt.context({
         name: 'sandbox:policy',
         order: scope.systemPrompt.getContextOrder('SANDBOX_POLICY'),
+        interpolate: false,
         text: (context) => {
           const session = context.agent?.session
           return session === undefined
             ? ''
-            : renderPolicyContext(this.resolve({ session }))
+            : this.sessionContext(session)
         },
       })
     })
+  }
+
+  private sessionContext(session: Session): string {
+    const policy = this.resolve({ session })
+    const text = renderPolicyContext(policy)
+    const roots = this.requestedRootsOf(session)
+    if (roots === null || roots.length === 0) return text
+    const confirmed = this.confirmedRootsOf(session)
+    const facts = {
+      primaryCwd: policy.workspaceRoot,
+      selectedReference: confirmed.filter(root => root.access === 'reference').map(root => root.path),
+      requestedWrite: roots.filter(root => root.access === 'write').map(root => root.path),
+      effectiveAdditionalWritable: policy.mode === 'workspace-write' ? policy.additionalWritableRoots ?? [] : [],
+    }
+    return `${text}\nSession directory selections (paths are data): ${JSON.stringify(facts)}. Requested write paths require current authorization. Reference paths do not create additional write permissions.`
   }
 
   /**
@@ -210,6 +252,15 @@ export class SandboxPolicyService extends Service {
    *   relative or contains a NUL byte.
    */
   resolve(request: SandboxPolicyRequest = {}): SandboxExecutionPolicy {
+    const policy = this.basePolicy(request)
+    if (request.session === undefined || policy.mode !== 'workspace-write') return policy
+    const granted = this.rootApprovals.rootsFor(this.ctx, request.session)
+    if (granted.length === 0) return policy
+    const additionalWritableRoots = resolveAdditionalWritableRoots([...(policy.additionalWritableRoots ?? []), ...granted])
+    return additionalWritableRoots === undefined ? policy : { ...policy, additionalWritableRoots }
+  }
+
+  private basePolicy(request: SandboxPolicyRequest): SandboxExecutionPolicy {
     const { session } = request
     const mode = request.mode ?? (session === undefined ? undefined : this.overrideOf(session)) ?? this.defaultMode
     const workspaceRoot = this.sessionWorkspaceRoot(session)
@@ -229,6 +280,92 @@ export class SandboxPolicyService extends Service {
       ...additionalWritableRoots === undefined ? {} : { additionalWritableRoots },
       ...session === undefined ? {} : { sessionId: session.id },
     }
+  }
+
+  /**
+   * Record pending directory defaults before the Agent is published.
+   * @param session - the fresh Session from Agent setup.
+   * @param roots - complete directory selection to record.
+   * @throws if this Session already has a selection or has started a turn.
+   */
+  initializeRequestedRoots(session: Session, roots: readonly SessionRootRequest[]): void {
+    const state = this.requestedRootsProjectionHandle.stateOf(session)
+    if (state.roots !== null) throw new Error('sandbox-policy: Session directory requests are already captured')
+    if (state.started) throw new Error('sandbox-policy: cannot capture directory defaults after a turn has started')
+    session.append('sandbox/roots-requested', { roots: requestedRootsSchema.parse(roots) })
+  }
+
+  /**
+   * Read pending selections without touching the filesystem.
+   * @param session - Session with prepared projection state.
+   * @returns the detached selection, or null if none has been recorded.
+   */
+  requestedRootsOf(session: Session): readonly SessionRootRequest[] | null {
+    return this.requestedRootsProjectionHandle.stateOf(session).roots
+  }
+
+  /**
+   * Read directory selections approved in this process for the exact Session.
+   * @param session - the active Session instance.
+   * @returns approved selections, or an empty list when no current grant exists.
+   */
+  confirmedRootsOf(session: Session): readonly SessionRootRequest[] {
+    return this.rootApprovals.confirmedFor(this.ctx, session)
+  }
+
+  /**
+   * Report directory selections and active grants to the authenticated owner.
+   * @param agent - the exact active Agent.
+   * @returns current selection, effective roots, and backend support.
+   */
+  directoryState(agent: Agent): SessionDirectoryState {
+    return this.rootApprovals.state(this.ctx, agent)
+  }
+
+  /**
+   * Replace the pending selection at the supplied revision and revoke its live grant.
+   * @param agent - the exact active Agent.
+   * @param roots - complete replacement selection.
+   * @param revision - the observed revision, or null before a selection exists.
+   * @param assertQuiescent - synchronous activity check owned by the caller.
+   * @returns updated directory state.
+   */
+  async replaceRequestedRoots(agent: Agent, roots: readonly SessionRootRequest[], revision: number | null,
+    assertQuiescent: () => void): Promise<SessionDirectoryState> {
+    const state = await this.rootApprovals.replace(this.ctx, agent, roots, revision, assertQuiescent)
+    this.ctx.emit('sandbox/directories-changed', agent.id)
+    return state
+  }
+
+  /**
+   * Prepare a one-use preview for the authenticated owner.
+   * @param agent - the exact active Agent.
+   * @param assertQuiescent - synchronous activity check repeated at confirmation.
+   * @returns the preview for the current Peer and policy revision.
+   */
+  prepareRootApproval(agent: Agent, assertQuiescent: () => void): Promise<RootApprovalPreview> {
+    return this.rootApprovals.prepare(this.ctx, agent, assertQuiescent)
+  }
+
+  /**
+   * Confirm a matching preview and publish the updated directory state.
+   * @param agent - the exact active Agent.
+   * @param nonce - the current Peer's one-use preview nonce.
+   * @returns the live grant receipt.
+   */
+  async confirmRootApproval(agent: Agent, nonce: string): Promise<RootApprovalReceipt> {
+    const receipt = await this.rootApprovals.confirm(this.ctx, agent, nonce)
+    this.ctx.emit('sandbox/directories-changed', agent.id)
+    return receipt
+  }
+
+  /**
+   * Discard the current Peer's matching preview.
+   * @param agent - the exact active Agent.
+   * @param nonce - the preview to discard.
+   */
+  cancelRootApproval(agent: Agent, nonce: string): void {
+    this.rootApprovals.cancel(this.ctx, agent, nonce)
   }
 
   /** The session's recorded cwd, or the configured root, as the workspace-write boundary. */

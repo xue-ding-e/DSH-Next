@@ -28,6 +28,7 @@ export function workspaceView(workspace: Workspace): WorkspaceView {
     workspaceId: workspace.id,
     path: workspace.path,
     ...sourcePathFields(workspace.path, workspace.sourcePaths),
+    ...additionalRootFields(workspace.additionalRoots),
     title: workspace.title,
     sessionIds: [...workspace.sessionIds],
     createdAt: workspace.createdAt,
@@ -41,6 +42,7 @@ function changedWorkspaceView(workspaceId: string, value: unknown): WorkspaceVie
     workspaceId: WorkspaceId(workspaceId),
     path: record.path,
     ...sourcePathFields(record.path, record.sourcePaths),
+    ...additionalRootFields(record.additionalRoots),
     title: record.title,
     sessionIds: [...record.sessionIds],
     createdAt: record.createdAt,
@@ -52,6 +54,10 @@ function changedWorkspaceView(workspaceId: string, value: unknown): WorkspaceVie
 function sourcePathFields(path: string, sourcePaths: readonly string[] | undefined): Pick<WorkspaceView, 'sourcePaths'> {
   if (sourcePaths === undefined || (sourcePaths.length === 1 && sourcePaths[0] === path)) return {}
   return { sourcePaths: [...sourcePaths] }
+}
+
+function additionalRootFields(roots: WorkspaceView['additionalRoots']): Pick<WorkspaceView, 'additionalRoots'> {
+  return roots === undefined || roots.length === 0 ? {} : { additionalRoots: roots.map(root => ({ ...root })) }
 }
 
 /** Owns Workspace domain observation and all active follow generations. */

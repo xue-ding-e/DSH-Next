@@ -29,6 +29,8 @@ kind: "package-reference"
 
 窄屏浏览器设置中，默认权限标签与控件的间距缩小；Windows 和 macOS 桌面窗口保留标准间距。
 
+会话标题栏的**管理目录**可打开当前选择和所属工作区的默认设置。保存当前选择会撤回此前的授权。预览并确认已保存的选择后，它会在当前活跃会话中生效。使用 Windows ACL 进程后端时，此界面支持参考目录，并拒绝附加写入请求。
+
 ### 选择器
 
 选中即提交 `/permission <preset>` 命令行。带参形式（直接键入 `/permission <preset>`）仍直接切换；装饰只替换裸调用。内置标签在英文界面中是 `Read Only`、`Workspace Write`、`Full access` 和 `Auto review`，在中文界面中是「仅可查看」「工作区内修改」「完全权限」和「自动审查」。显式 host 标签保持原样，未知 kebab-case 名称渲染为 Title Case；`auto` 在菜单选项中带有 `EXP` 标记，并在可见选择时要求实验风险确认。选中后的 composer 控件显示模式，不展示该标记。`custom` 只是显示状态，绝非目标。

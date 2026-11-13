@@ -11,6 +11,9 @@
     "src/remote-events.ts"
   ],
   "references": [
+    {
+      "path": "../../sandbox/sandbox-policy"
+    },
     { "path": "../../../vendor/cordis" },
     { "path": "../gateway/tsconfig.client.json" },
     { "path": "../../attachment/attachment" },

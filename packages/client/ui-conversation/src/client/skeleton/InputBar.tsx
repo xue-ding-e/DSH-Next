@@ -39,7 +39,7 @@ import { attachmentErrorText, imageSizeText } from '../image-labels.ts'
 import { isImageMediaType } from '../service.ts'
 import { ContextMeter } from './ContextMeter.tsx'
 import { observeControlRow } from './control-row-layout.ts'
-import { installSessionReferenceDrop, type SessionDropArea } from './session-reference-drop.ts'
+import { installSessionReferenceDrop, type ReferenceDropFeedback } from './session-reference-drop.ts'
 import { SessionReferenceDropOverlay } from './SessionReferenceDropOverlay.tsx'
 import css from './InputBar.module.css'
 
@@ -345,7 +345,7 @@ export const InputBar = memo(function InputBar({
     if (document.activeElement !== editor.getRootElement()) focusDraftEditor(editor, revealSelection)
   }
 
-  const [sessionDropArea, setSessionDropArea] = useState<SessionDropArea | null>(null)
+  const [referenceDrop, setReferenceDrop] = useState<ReferenceDropFeedback | null>(null)
   const referenceDropAllowed = useRef(false)
   referenceDropAllowed.current = editable && !promptDenied
   useEffect(() => {
@@ -355,7 +355,8 @@ export const InputBar = memo(function InputBar({
       sessionId,
       canAccept: () => referenceDropAllowed.current && keyboard.editor.isEditable(),
       insert: reference => keyboard.insertReferenceAtCaret(reference),
-      show: setSessionDropArea,
+      insertFile: keyboard.insertDroppedFileReference?.bind(keyboard),
+      show: setReferenceDrop,
     })
   }, [keyboard, sessionId])
 
@@ -452,7 +453,8 @@ export const InputBar = memo(function InputBar({
 
   return (
     <div className={clsx(css.root, variant === 'hero' && css.hero)}>
-      {sessionDropArea !== null && <SessionReferenceDropOverlay area={sessionDropArea} label={t('input.dropConversation')} />}
+      {referenceDrop !== null && <SessionReferenceDropOverlay area={referenceDrop.area}
+        label={t(referenceDrop.kind === 'file' ? 'input.dropFile' : 'input.dropConversation')} />}
       {toast !== null && (
         <Toast
           key={toast.seq}

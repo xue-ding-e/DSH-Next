@@ -15,6 +15,7 @@ import type {} from '@deepseek-ai/dsh-client-ui-workspace/client'
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import type { BrowseFlowInjected } from './flow.ts'
 import { BrowseDirectoryFlow } from './flow.ts'
+import type {} from '@deepseek-ai/dsh-client-ui-permission-presets/client'
 
 /** Locale namespace owning the browser dialog's copy. */
 const LOCALE_NS = 'directory-browser'
@@ -170,6 +171,9 @@ export function apply(ctx: ClientContext): void {
     createDirectory: (path, name) => ctx.uiWorkspace.createDirectory(path, name),
     t: ctx.locale.bind(LOCALE_NS),
   })
+  ctx.slots.inject('session.directories.directoryFlow', () => ctx.slots.register({
+    name: 'session.directories.directoryFlow', inject: injected,
+  }, BrowseDirectoryFlow))
   // Both declaration lifetimes must be live before the pair installs; the
   // generator makes the two registrations one transactional effect. The
   // outer/inner nesting order is arbitrary; neither hole has precedence.

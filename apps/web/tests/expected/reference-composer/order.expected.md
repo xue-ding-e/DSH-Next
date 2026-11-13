@@ -1,5 +1,7 @@
 - banner:
   - navigation "Session hierarchy": Reference order target
+  - button "Session mailbox"
+  - button "Manage directories"
   - button "More actions"
   - button "Open right sidebar"
   - tablist:

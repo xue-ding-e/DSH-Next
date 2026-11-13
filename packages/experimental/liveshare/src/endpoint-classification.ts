@@ -98,8 +98,14 @@ export const VIEWER_ENDPOINT_CLASSES = {
   'job/kill': 'owner-only', // owner background jobs
   'job/list': 'owner-only', // owner background jobs'
   'fileReferences/list': 'owner-only', // owner file references'
+  'fileReferences/resolveDrop': 'owner-only', // owner path-only file references
   'fileUploads/stageHistory': 'owner-only', // owner authorizes copying a historical file into an edited message
   'session/create': 'owner-only', // owner creates a Session
+  'session/roots': 'owner-only', // owner directory selections and active grants
+  'session/replaceRoots': 'owner-only', // owner saves pending directory selections
+  'session/prepareRoots': 'owner-only', // owner previews a directory grant
+  'session/confirmRoots': 'owner-only', // owner confirms a directory grant
+  'session/cancelRoots': 'owner-only', // owner discards a directory preview
   'session/initializeDefaultModel': 'owner-only', // owner initializes a Session default model
   'session/openWorkspacePath': 'owner-only', // owner opens a Workspace path
   'session/search': 'owner-only', // owner searches across Sessions
@@ -135,6 +141,7 @@ export const VIEWER_ENDPOINT_CLASSES = {
   'workspace/insertSessionBefore': 'owner-only', // owner reorders Sessions
   'workspace/pinSession': 'owner-only', // owner pins a Session
   'workspace/rename': 'owner-only', // owner renames a Workspace
+  'workspace/setRoots': 'owner-only', // owner saves future Session directory defaults
   'workspace/unarchiveSession': 'owner-only', // owner unarchives a Session
   'workspace/unpinSession': 'owner-only', // owner unpins a Session
   'workspaceFiles/changes': 'owner-only', // owner Workspace file access

@@ -49,7 +49,7 @@ describe('conversation reference drop area', () => {
     const f = fixture()
     try {
       expect(f.dispatch(f[destination], 'dragenter').defaultPrevented).toBe(true)
-      expect(f.show).toHaveBeenLastCalledWith({ left: 280, top: 95, width: 920, height: 705 })
+      expect(f.show).toHaveBeenLastCalledWith({ kind: 'session', area: { left: 280, top: 95, width: 920, height: 705 } })
       expect(f.data.dropEffect).toBe('copy')
       expect(f.dispatch(f[destination], 'drop').defaultPrevented).toBe(true)
       expect(f.insert).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ appearance: 'session', label: 'Source' }))

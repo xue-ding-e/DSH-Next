@@ -60,6 +60,10 @@ A plugin calls `ctx.sandboxPolicy.registerWritableRoot(session, directory)` thro
 
 Registration and disposal affect subsequent policy resolutions and the next model request's logged context. Other Sessions, including subagent Sessions, and agentless calls receive no such grant. Grants are not saved or inherited through Session history; a resumed or forked Session needs its own registration. Already-resolved operations and persistent processes keep their original permissions, including directories whose registration has been removed. Start a new process to use the current grants. `read-only` remains read-only. On Windows, `write` and `edit` honor extra directories, while sandboxed processes ignore them and keep workspace and private-temp access; see [sandbox-local](../sandbox-local/README.md#known-limitations-and-deferred-work).
 
+### Confirming a Session's additional directories
+
+Workspace defaults are saved as pending Session selections. An authenticated owner previews the physical paths and current policy, then confirms once while the Agent, terminals, jobs, and subagents are idle. Saving another selection, changing mode or execution providers, replacing the Agent, and restarting the Host withdraw the grant. Session replay retains the selection and primary cwd. Reference directories expand path discovery without conferring write access. Backends that cannot apply additional roots to confined processes refuse extra write requests in this flow.
+
 ### Switching a session's mode
 
 A session's mode can be switched at runtime through a UI policy control or an explicit switch; the switch is recorded in the session log and takes effect on the session's next confined call. The switch survives restart through replay, and each session keeps its own mode — two sessions never see each other's state. A switched session keeps its immutable workspace cwd as its workspace root.
@@ -96,6 +100,7 @@ The `sandbox:policy` contribution states the mode's capability-neutral file-effe
 |---|---|
 | [`src/index.ts`](src/index.ts) | Plugin entry: `SandboxPolicyService`, `Config` schema, policy resolution and context contribution |
 | [`src/session-mode.ts`](src/session-mode.ts) | The `sandbox/mode` event, its fold, and the write path |
+| [`src/session-roots.ts`](src/session-roots.ts) | Session directory selections and their replay projection |
 
 </details>
 

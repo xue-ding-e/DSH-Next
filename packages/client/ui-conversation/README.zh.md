@@ -53,6 +53,8 @@ target package 通过 declaration merge 扩展 snapshot 与 Location data map，
 <a id="sent-user-text"></a>
 ## 已发送用户文本
 
+将工作区文件树条目放到对话区域，会在输入框选区后插入经核验的路径引用。拖放只编辑草稿，保留已有文字和附件。
+
 `UiConversation.userText` 注册同步 `match(text, from, context)` 规则。每次调用提供一个业务或 Text 候选；计算器选择起点最早的候选，仅在同起点时使用 `order` 和稳定 ID。每个调用者拥有自己的查询缓存。`Context.read(key)` 只使变化 Facts 的读取者失效，未来候选和无匹配结果在已记录的搜索范围内复用。输入和输出使用 readonly 类型，不在运行时冻结。详见 [UserText 类型](src/client/contract/user-text.ts)与[设计决策](../../../.agents/notes/implemented/architecture/2026-10-10-user-text-json-nodes.zh.md)。
 
 业务扩展本包 `/client` 入口的 `UserTextDataMap` 和 `UserTextFacts`，通过 `ctx.uiConversation.userText` 注册匹配器，并向 `conversation.user.text.node` 贡献 renderer。Session 作用域的 `conversation.user.text` Factory 拥有这个行内 keyed Slot。空白规则也通过同一调度器返回普通 Text 候选，trim 在同起点的边缘空白冲突中胜过 collapse。节点注册自行提供动作，`interactive` 和 CSS `ellipsis` 仍为 React Props。缺少 renderer 时显示原文片段，匹配失败时保留完整原文并报告规则错误。

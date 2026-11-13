@@ -1148,6 +1148,18 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     description: 'Host capability for cancellable file-reference discovery.',
     methods: [
       {
+        signature: 'captureScope(_agent: Agent): () => boolean',
+        description: 'Capture the provider\'s current discovery scope for an authorized Agent.',
+        parameters: [{ name: '_agent', description: 'exact active Agent.' }],
+        returns: 'a final synchronous guard; unsupported providers refuse path drops.',
+      },
+      {
+        signature: 'captureCandidate(_agent: Agent, _candidate: FileReferenceCandidate): () => boolean',
+        description: 'Capture the identity of a provider-issued candidate.',
+        parameters: [{ name: '_agent', description: 'authorized Agent used to list the candidate.' }, { name: '_candidate', description: 'candidate returned by list.' }],
+        returns: 'a final synchronous guard; unsupported providers refuse path drops.',
+      },
+      {
         signature: 'abstract list( agent: Agent, query: string, signal: AbortSignal, ): Promise<FileReferenceCandidate[]>',
         description: 'List file and directory candidates for one agent\'s working directory.',
         parameters: [{ name: 'agent', description: 'target agent whose session cwd bounds discovery.' }, { name: 'query', description: 'path text following `@` or `@"`.' }, { name: 'signal', description: 'caller cancellation.' }],
@@ -2779,6 +2791,12 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     description: 'Abstract process-sandbox service. confine must return enforcing argv or fail closed at wrap or runner-execution time; silent unconfined passthrough is forbidden. Functional probes arbitrate multi-runner chains and may be skipped for a sole candidate, whose own refusal remains the fail-closed end.',
     methods: [
       {
+        signature: 'supportsAdditionalWritableRoots(_mode: SandboxMode): boolean',
+        description: 'Report whether this provider\'s process confinement honors additional write roots.',
+        parameters: [{ name: '_mode', description: 'current file-effect mode.' }],
+        returns: 'whether the provider supports additional roots in this mode.',
+      },
+      {
         signature: 'abstract confine(argv: readonly string[], policy: SandboxPolicy, signal?: AbortSignal): Promise<ConfinedArgv>',
         description: 'Wrap `argv` so it executes confined under `policy` on this host; the caller spawns the returned argv in place of its own.',
         parameters: [{ name: 'argv', description: 'the exact argv the caller is about to spawn (program plus arguments), NOT a shell string — a shell-shaped consumer passes `[\'bash\', \'-c\', command]`.' }, { name: 'policy', description: 'the file-effect policy this execution runs under, carried per call (see {@link SandboxPolicy}).' }, { name: 'signal', description: 'cancellation while the provider resolves the policy and runner.' }],
@@ -2812,6 +2830,53 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         parameters: [{ name: 'request', description: 'optional session and approved mode override.' }],
         returns: 'the fully resolved per-call mode and absolute workspace root.',
         throws: ['`SandboxInvalidRootError` (`SANDBOX_INVALID_ROOT`) when the session\'s recorded cwd is relative or contains a NUL byte.'],
+      },
+      {
+        signature: 'initializeRequestedRoots(session: Session, roots: readonly SessionRootRequest[]): void',
+        description: 'Record pending directory defaults before the Agent is published.',
+        parameters: [{ name: 'session', description: 'the fresh Session from Agent setup.' }, { name: 'roots', description: 'complete directory selection to record.' }],
+        throws: ['if this Session already has a selection or has started a turn.'],
+      },
+      {
+        signature: 'requestedRootsOf(session: Session): readonly SessionRootRequest[] | null',
+        description: 'Read pending selections without touching the filesystem.',
+        parameters: [{ name: 'session', description: 'Session with prepared projection state.' }],
+        returns: 'the detached selection, or null if none has been recorded.',
+      },
+      {
+        signature: 'confirmedRootsOf(session: Session): readonly SessionRootRequest[]',
+        description: 'Read directory selections approved in this process for the exact Session.',
+        parameters: [{ name: 'session', description: 'the active Session instance.' }],
+        returns: 'approved selections, or an empty list when no current grant exists.',
+      },
+      {
+        signature: 'directoryState(agent: Agent): SessionDirectoryState',
+        description: 'Report directory selections and active grants to the authenticated owner.',
+        parameters: [{ name: 'agent', description: 'the exact active Agent.' }],
+        returns: 'current selection, effective roots, and backend support.',
+      },
+      {
+        signature: 'async replaceRequestedRoots(agent: Agent, roots: readonly SessionRootRequest[], revision: number | null, assertQuiescent: () => void): Promise<SessionDirectoryState>',
+        description: 'Replace the pending selection at the supplied revision and revoke its live grant.',
+        parameters: [{ name: 'agent', description: 'the exact active Agent.' }, { name: 'roots', description: 'complete replacement selection.' }, { name: 'revision', description: 'the observed revision, or null before a selection exists.' }, { name: 'assertQuiescent', description: 'synchronous activity check owned by the caller.' }],
+        returns: 'updated directory state.',
+      },
+      {
+        signature: 'prepareRootApproval(agent: Agent, assertQuiescent: () => void): Promise<RootApprovalPreview>',
+        description: 'Prepare a one-use preview for the authenticated owner.',
+        parameters: [{ name: 'agent', description: 'the exact active Agent.' }, { name: 'assertQuiescent', description: 'synchronous activity check repeated at confirmation.' }],
+        returns: 'the preview for the current Peer and policy revision.',
+      },
+      {
+        signature: 'async confirmRootApproval(agent: Agent, nonce: string): Promise<RootApprovalReceipt>',
+        description: 'Confirm a matching preview and publish the updated directory state.',
+        parameters: [{ name: 'agent', description: 'the exact active Agent.' }, { name: 'nonce', description: 'the current Peer\'s one-use preview nonce.' }],
+        returns: 'the live grant receipt.',
+      },
+      {
+        signature: 'cancelRootApproval(agent: Agent, nonce: string): void',
+        description: 'Discard the current Peer\'s matching preview.',
+        parameters: [{ name: 'agent', description: 'the exact active Agent.' }, { name: 'nonce', description: 'the preview to discard.' }],
       },
       {
         signature: 'registerWritableRoot(session: Session, directory: string): () => void',
@@ -2941,6 +3006,35 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         description: 'Create one ordinary Session for a new conversation, reusing the named blank Session while it is reusable.',
         parameters: [{ name: 'request', description: 'optional blank Session to reuse, location, and Agent preset.' }],
         returns: 'the created or reused Session identity and its preset when configured.',
+      },
+      {
+        signature: '@Remote(\'roots\') roots(request: SessionRootsRequest, signal: AbortSignal): Promise<SessionRootsState>',
+        description: 'Read current directory selections and live grants for the authenticated owner.',
+        parameters: [{ name: 'request', description: 'active Session identity.' }, { name: 'signal', description: 'caller lifetime.' }],
+        returns: 'the selection and its effective authority.',
+      },
+      {
+        signature: '@Remote(\'replaceRoots\') replaceRoots(request: SessionRootsReplaceRequest, signal: AbortSignal): Promise<SessionRootsState>',
+        description: 'Save a pending directory selection and revoke its previous live grant.',
+        parameters: [{ name: 'request', description: 'Session, observed revision, and replacement selection.' }, { name: 'signal', description: 'caller lifetime.' }],
+        returns: 'the committed selection and current authority.',
+      },
+      {
+        signature: '@Remote(\'prepareRoots\') prepareRoots(request: SessionRootsRequest, signal: AbortSignal): Promise<SessionRootsPreview>',
+        description: 'Preview the exact selection that would be enabled by confirmation.',
+        parameters: [{ name: 'request', description: 'active Session identity.' }, { name: 'signal', description: 'caller lifetime.' }],
+        returns: 'a short-lived preview bound to the current owner Peer.',
+      },
+      {
+        signature: '@Remote(\'confirmRoots\') confirmRoots(request: SessionRootsConfirmRequest, signal: AbortSignal): Promise<SessionRootsReceipt>',
+        description: 'Confirm a one-use preview while the Agent and its resources are idle.',
+        parameters: [{ name: 'request', description: 'active Session identity and preview nonce.' }, { name: 'signal', description: 'caller lifetime.' }],
+        returns: 'the process-local grant.',
+      },
+      {
+        signature: '@Remote(\'cancelRoots\') cancelRoots(request: SessionRootsConfirmRequest, signal: AbortSignal): Promise<void>',
+        description: 'Discard the caller\'s matching preview.',
+        parameters: [{ name: 'request', description: 'active Session identity and preview nonce.' }, { name: 'signal', description: 'caller lifetime.' }],
       },
       {
         signature: '@Remote(\'selectModel\') selectModel(request: SessionSelectModelRequest): Promise<SessionSelectModelValue>',
@@ -3102,6 +3196,12 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     summary: 'Host Remote adapter over the composed file-reference provider.',
     description: 'Host Remote adapter over the composed file-reference provider.',
     methods: [
+      {
+        signature: '@Remote async resolveDrop( agent: Agent, sourceSessionId: SessionId, path: string, kind: \'file\' | \'directory\', signal: AbortSignal, ): Promise<FileReferenceCandidate>',
+        description: 'Resolve a path-only drag through both Sessions\' current file discovery scopes. No file bytes are read, uploaded, or granted additional tool access.',
+        parameters: [{ name: 'agent', description: 'destination Agent authorized by the Gateway.' }, { name: 'sourceSessionId', description: 'origin identity, authorized before its Agent lookup.' }, { name: 'path', description: 'absolute source path; never rebound relative to the destination.' }, { name: 'kind', description: 'expected entry kind from the source listing.' }, { name: 'signal', description: 'cancellation before any result is staged by the caller.' }],
+        returns: 'one current path-only candidate; later reads remain normal tool operations.',
+      },
       {
         signature: '@Remote list( agent: Agent, query: string, signal: AbortSignal, ): Promise<FileReferenceCandidate[]>',
         description: 'List file and directory candidates for one Agent\'s working directory.',
@@ -3943,6 +4043,12 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         parameters: [{ name: 'caller', description: 'exact live Agent whose subagent ancestry selects the tree.' }],
         returns: 'the live root; ordinary Session forks lead independent trees.',
         throws: ['when the caller or its runtime owner is unavailable.'],
+      },
+      {
+        signature: 'hasOwnerActivity(owner: Agent): boolean',
+        description: 'Inspect work that can outlive the owner\'s current turn.',
+        parameters: [{ name: 'owner', description: 'exact active Agent.' }],
+        returns: 'whether its tree has pending, resident, or closing work.',
       },
       {
         signature: 'namesOf(agent: Agent): SubagentMemberNames',
@@ -4803,6 +4909,12 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         returns: 'the updated Workspace projection.',
       },
       {
+        signature: '@Remote(\'setRoots\') setRoots(request: WorkspaceRootsRequest): Promise<WorkspaceValue>',
+        description: 'Save directory defaults on the authenticated owner\'s Workspace.',
+        parameters: [{ name: 'request', description: 'Workspace and complete directory selection.' }],
+        returns: 'the updated Workspace; saving does not grant execution access.',
+      },
+      {
         signature: '@Remote(\'delete\') delete(request: WorkspaceDeleteRequest): Promise<WorkspaceDeleteValue>',
         description: 'Remove one Workspace registration while retaining files and Sessions.',
         parameters: [{ name: 'request', description: 'Workspace identity to remove.' }],
@@ -5118,6 +5230,14 @@ export const EVENT_API: readonly EventApiEntry[] = [
     summary: 'A Session became visible or its Agent was created or disposed.',
     description: 'A Session became visible or its Agent was created or disposed. Consumers upsert the summary and replace its current running and availability state.',
     parameters: [{ name: 'summary', description: 'current list row for the Session.' }],
+  },
+  {
+    name: 'api-session/directories-changed',
+    mode: 'emit',
+    signature: '\'api-session/directories-changed\'(sessionId: SessionId): void',
+    summary: 'An active Session\'s directory authority or requested selection changed.',
+    description: 'An active Session\'s directory authority or requested selection changed.',
+    parameters: [{ name: 'sessionId', description: 'Session whose directory facts must be refreshed.' }],
   },
   {
     name: 'api-session/error',
@@ -5462,6 +5582,14 @@ export const EVENT_API: readonly EventApiEntry[] = [
     summary: 'The configured index sources changed.',
     description: 'The configured index sources changed.',
     parameters: [],
+  },
+  {
+    name: 'sandbox/directories-changed',
+    mode: 'emit',
+    signature: '\'sandbox/directories-changed\'(sessionId: SessionId): void',
+    summary: 'An owner saved a directory selection or changed its live authorization.',
+    description: 'An owner saved a directory selection or changed its live authorization.',
+    parameters: [{ name: 'sessionId', description: 'affected Session.' }],
   },
   {
     name: 'schedule/changed',
@@ -8608,6 +8736,14 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export type ReviewVerdict = \'approved\' | \'changes-requested\' | \'commented\' | \'dismissed\';',
   },
   {
+    name: 'RootApprovalPreview',
+    declaration: 'export interface RootApprovalPreview {\n    readonly sessionId: SessionId;\n    readonly nonce: string;\n    readonly expiresAt: number;\n    readonly roots: readonly SessionRootRequest[];\n    readonly mode: SandboxMode;\n    readonly workspaceRoot: string;\n    readonly deploymentWritableRoots: readonly string[];\n    readonly rootsRevision: number;\n    readonly modeRevision: number;\n    readonly lifetime: \'live-agent\';\n}',
+  },
+  {
+    name: 'RootApprovalReceipt',
+    declaration: 'export interface RootApprovalReceipt {\n    readonly sessionId: SessionId;\n    readonly additionalWritableRoots: readonly string[];\n    readonly lifetime: \'live-agent\';\n}',
+  },
+  {
     name: 'RpcId',
     declaration: 'export type RpcId = Branded<\'rpc-id\'>;',
   },
@@ -8894,6 +9030,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'SessionCreateValue',
     declaration: 'export interface SessionCreateValue {\n    readonly sessionId: SessionId;\n    readonly agentPreset?: string;\n}',
+  },
+  {
+    name: 'SessionDirectoryState',
+    declaration: 'export interface SessionDirectoryState {\n    readonly sessionId: SessionId;\n    readonly primaryPath: string;\n    readonly roots: readonly SessionRootRequest[] | null;\n    readonly rootsRevision: number | null;\n    readonly mode: SandboxMode;\n    readonly deploymentWritableRoots: readonly string[];\n    readonly confirmedRoots: readonly SessionRootRequest[];\n    readonly activeWritableRoots: readonly string[];\n    readonly writeSupported: boolean;\n    readonly lifetime: \'live-agent\';\n}',
   },
   {
     name: 'SessionEditRequest',
@@ -9278,6 +9418,34 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'SessionResultRange',
     declaration: 'export interface SessionResultRange {\n    from?: number;\n    to?: number;\n}',
+  },
+  {
+    name: 'SessionRootRequest',
+    declaration: 'export interface SessionRootRequest {\n    readonly path: string;\n    readonly access: \'reference\' | \'write\';\n}',
+  },
+  {
+    name: 'SessionRootsConfirmRequest',
+    declaration: 'export interface SessionRootsConfirmRequest extends SessionRootsRequest {\n    readonly nonce: string;\n}',
+  },
+  {
+    name: 'SessionRootsPreview',
+    declaration: 'export type SessionRootsPreview = import(\'@deepseek-ai/dsh-sandbox-policy/types\').RootApprovalPreview;',
+  },
+  {
+    name: 'SessionRootsReceipt',
+    declaration: 'export type SessionRootsReceipt = import(\'@deepseek-ai/dsh-sandbox-policy/types\').RootApprovalReceipt;',
+  },
+  {
+    name: 'SessionRootsReplaceRequest',
+    declaration: 'export interface SessionRootsReplaceRequest extends SessionRootsRequest {\n    readonly roots: readonly import(\'@deepseek-ai/dsh-sandbox-policy/types\').SessionRootRequest[];\n    readonly expectedRevision: number | null;\n}',
+  },
+  {
+    name: 'SessionRootsRequest',
+    declaration: 'export interface SessionRootsRequest {\n    readonly sessionId: SessionId;\n}',
+  },
+  {
+    name: 'SessionRootsState',
+    declaration: 'export type SessionRootsState = import(\'@deepseek-ai/dsh-sandbox-policy/types\').SessionDirectoryState;',
   },
   {
     name: 'SessionSearchCursor',
@@ -9841,7 +10009,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'SubagentRuntime',
-    declaration: 'export class SubagentRuntime extends TypertRemoteService {\n    static Config;\n    static inject;\n    constructor(ctx: Context, private config: Config);\n    resolveMaxDepth(configured?: number | \'provider-managed\'): number | undefined;\n    startActivation(spec: SubagentActivationSpec & {\n        readonly childId: SessionId;\n    }): Promise<SubagentActivation & {\n        readonly messageId: MessageId;\n    }>;\n    startActivation(spec: SubagentActivationSpec): Promise<SubagentActivation>;\n    rootOf(caller: Agent): Agent;\n    namesOf(agent: Agent): SubagentMemberNames;\n    async resolveName(caller: Agent, name: string, signal: AbortSignal): Promise<SessionId>;\n    async waitForTreeWork(root: Agent): Promise<boolean>;\n    async sendMessage(sender: Agent, targetId: SessionId, content: ContentBlock[], options: SubagentSendMessageOptions): Promise<MessageId>;\n    interrupt(targetSessionId: SessionId, authority: SubagentInterruptAuthority): void;\n    async drainDescendants(parents: readonly Agent[]): Promise<void>;\n    listDescendants(rootSessionId: SessionId, signal?: AbortSignal): Promise<SubagentDescendantListEntry[]>;\n    @Remote({ name: \'prompt\', resources: { session: request => request.childSessionId } })\n    async prompt(request: SubagentPromptRequest, signal: AbortSignal): Promise<SubagentPromptReceipt>;\n    @Remote({ name: \'interruptByUser\', resources: { session: childSessionId => childSessionId } })\n    interruptByUser(childSessionId: SessionId): SubagentInterruptReceipt;\n  /* …truncated — full shape in source */',
+    declaration: 'export class SubagentRuntime extends TypertRemoteService {\n    static Config;\n    static inject;\n    constructor(ctx: Context, private config: Config);\n    resolveMaxDepth(configured?: number | \'provider-managed\'): number | undefined;\n    startActivation(spec: SubagentActivationSpec & {\n        readonly childId: SessionId;\n    }): Promise<SubagentActivation & {\n        readonly messageId: MessageId;\n    }>;\n    startActivation(spec: SubagentActivationSpec): Promise<SubagentActivation>;\n    rootOf(caller: Agent): Agent;\n    hasOwnerActivity(owner: Agent): boolean;\n    namesOf(agent: Agent): SubagentMemberNames;\n    async resolveName(caller: Agent, name: string, signal: AbortSignal): Promise<SessionId>;\n    async waitForTreeWork(root: Agent): Promise<boolean>;\n    async sendMessage(sender: Agent, targetId: SessionId, content: ContentBlock[], options: SubagentSendMessageOptions): Promise<MessageId>;\n    interrupt(targetSessionId: SessionId, authority: SubagentInterruptAuthority): void;\n    async drainDescendants(parents: readonly Agent[]): Promise<void>;\n    listDescendants(rootSessionId: SessionId, signal?: AbortSignal): Promise<SubagentDescendantListEntry[]>;\n    @Remote({ name: \'prompt\', resources: { session: request => request.childSessionId } })\n    async prompt(request: SubagentPromptRequest, signal: AbortSignal): Promise<SubagentPromptReceipt>;\n    @Remote({ name: \'interruptByUser\', resources: { session: childSessionId => childSessionId } })\n    interruptByUser(childSessi /* …truncated — full shape in source */',
   },
   {
     name: 'SubagentSendMessageOptions',
@@ -10733,7 +10901,11 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'Workspace',
-    declaration: 'export interface Workspace {\n    readonly id: WorkspaceId;\n    readonly path: string;\n    readonly sourcePaths: readonly string[];\n    readonly primaryPath: string;\n    readonly title: string;\n    readonly createdAt: string;\n    readonly updatedAt: string;\n    readonly sessionIds: readonly SessionId[];\n    setTitle(title: string): Promise<void>;\n    configure(title: string, sourcePaths?: readonly string[]): Promise<void>;\n    attachSession(sessionId: SessionId): Promise<void>;\n    insertSessionBefore(sessionId: SessionId, beforeSessionId?: SessionId): Promise<void>;\n    detachSession(sessionId: SessionId): Promise<void>;\n    status(): Promise<\'ok\' | \'missing-dir\'>;\n}',
+    declaration: 'export interface Workspace {\n    readonly id: WorkspaceId;\n    readonly path: string;\n    readonly sourcePaths: readonly string[];\n    readonly primaryPath: string;\n    readonly additionalRoots: readonly WorkspaceAdditionalRoot[];\n    setAdditionalRoots(roots: readonly WorkspaceAdditionalRoot[]): Promise<void>;\n    readonly title: string;\n    readonly createdAt: string;\n    readonly updatedAt: string;\n    readonly sessionIds: readonly SessionId[];\n    setTitle(title: string): Promise<void>;\n    configure(title: string, sourcePaths?: readonly string[]): Promise<void>;\n    attachSession(sessionId: SessionId): Promise<void>;\n    insertSessionBefore(sessionId: SessionId, beforeSessionId?: SessionId): Promise<void>;\n    detachSession(sessionId: SessionId): Promise<void>;\n    status(): Promise<\'ok\' | \'missing-dir\'>;\n}',
+  },
+  {
+    name: 'WorkspaceAdditionalRoot',
+    declaration: 'export interface WorkspaceAdditionalRoot {\n    readonly path: string;\n    readonly access: \'reference\' | \'write\';\n}',
   },
   {
     name: 'WorkspaceArchiveSessionRequest',
@@ -10868,6 +11040,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface WorkspaceRenameRequest {\n    readonly workspaceId: WorkspaceId;\n    readonly title: string;\n    readonly sourcePaths?: readonly string[];\n}',
   },
   {
+    name: 'WorkspaceRootsRequest',
+    declaration: 'export interface WorkspaceRootsRequest {\n    readonly workspaceId: WorkspaceId;\n    readonly roots: readonly WorkspaceAdditionalRoot[];\n}',
+  },
+  {
     name: 'WorkspaceUnarchiveSessionRequest',
     declaration: 'export interface WorkspaceUnarchiveSessionRequest {\n    readonly sessionId: SessionId;\n}',
   },
@@ -10881,7 +11057,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'WorkspaceView',
-    declaration: 'export interface WorkspaceView {\n    readonly workspaceId: WorkspaceId;\n    readonly path: string;\n    readonly sourcePaths?: readonly string[];\n    readonly title: string;\n    readonly sessionIds: readonly SessionId[];\n    readonly createdAt: string;\n    readonly updatedAt: string;\n}',
+    declaration: 'export interface WorkspaceView {\n    readonly workspaceId: WorkspaceId;\n    readonly path: string;\n    readonly sourcePaths?: readonly string[];\n    readonly additionalRoots?: readonly WorkspaceAdditionalRoot[];\n    readonly title: string;\n    readonly sessionIds: readonly SessionId[];\n    readonly createdAt: string;\n    readonly updatedAt: string;\n}',
   },
   {
     name: 'WorktreeCleanup',

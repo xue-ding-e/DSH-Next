@@ -337,6 +337,7 @@
       "@deepseek-ai/dsh-client-ui-message-feedback": ["./packages/client/ui-message-feedback/src"],
       "@deepseek-ai/dsh-client-ui-agent-preset": ["./packages/client/ui-agent-preset/src"],
       "@deepseek-ai/dsh-client-ui-permission-presets": ["./packages/client/ui-permission-presets/src"],
+      "@deepseek-ai/dsh-client-ui-permission-presets/client": ["./packages/client/ui-permission-presets/src/client/index.ts"],
       "@deepseek-ai/dsh-client-ui-skill": ["./packages/client/ui-skill/src"],
       "@deepseek-ai/dsh-client-ui-subagent": ["./packages/client/ui-subagent/src"],
       "@deepseek-ai/dsh-client-ui-agent-team": ["./packages/client/ui-agent-team/src"],
@@ -428,6 +429,8 @@
       "@deepseek-ai/dsh-native-command/types": ["./packages/util/native-command/src/types.ts"],
       "@deepseek-ai/dsh-message-quotes/client": ["./packages/session/message-quotes/src/client/index.ts"],
       "@deepseek-ai/dsh-ptc-runtime-node/configuration": ["./packages/ptc-runtime/ptc-runtime-node/src/configuration.ts"],
+      "@deepseek-ai/dsh-sandbox/types": ["./packages/sandbox/sandbox/src/types.ts"],
+      "@deepseek-ai/dsh-sandbox-policy/types": ["./packages/sandbox/sandbox-policy/src/types.ts"],
       // BEGIN generated package aliases — pnpm run gen-tsconfig-paths
       "@deepseek-ai/dsh-acp": ["./packages/acp/acp/src"],
       "@deepseek-ai/dsh-acp-app": ["./packages/bundle/acp-app/src"],

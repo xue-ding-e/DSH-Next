@@ -919,6 +919,45 @@ resolveAgent(sessionId: SessionId): Promise<ApiSessionAgentResult>
 @Remote('create') create(request: SessionCreateRequest): Promise<SessionCreateValue>
 
 /**
+ * Read current directory selections and live grants for the authenticated owner.
+ * @param request - active Session identity.
+ * @param signal - caller lifetime.
+ * @returns the selection and its effective authority.
+ */
+@Remote('roots') roots(request: SessionRootsRequest, signal: AbortSignal): Promise<SessionRootsState>
+
+/**
+ * Save a pending directory selection and revoke its previous live grant.
+ * @param request - Session, observed revision, and replacement selection.
+ * @param signal - caller lifetime.
+ * @returns the committed selection and current authority.
+ */
+@Remote('replaceRoots') replaceRoots(request: SessionRootsReplaceRequest, signal: AbortSignal): Promise<SessionRootsState>
+
+/**
+ * Preview the exact selection that would be enabled by confirmation.
+ * @param request - active Session identity.
+ * @param signal - caller lifetime.
+ * @returns a short-lived preview bound to the current owner Peer.
+ */
+@Remote('prepareRoots') prepareRoots(request: SessionRootsRequest, signal: AbortSignal): Promise<SessionRootsPreview>
+
+/**
+ * Confirm a one-use preview while the Agent and its resources are idle.
+ * @param request - active Session identity and preview nonce.
+ * @param signal - caller lifetime.
+ * @returns the process-local grant.
+ */
+@Remote('confirmRoots') confirmRoots(request: SessionRootsConfirmRequest, signal: AbortSignal): Promise<SessionRootsReceipt>
+
+/**
+ * Discard the caller's matching preview.
+ * @param request - active Session identity and preview nonce.
+ * @param signal - caller lifetime.
+ */
+@Remote('cancelRoots') cancelRoots(request: SessionRootsConfirmRequest, signal: AbortSignal): Promise<void>
+
+/**
  * Select one Session-local model after explicitly resuming the Session; save the default in the background.
  * @param request - Session identity and requested model selection.
  * @returns the normalized selection installed for the Session, without waiting for default persistence.
@@ -1305,6 +1344,25 @@ A Session became visible or its Agent was created or disposed. Consumers upsert 
  */
 'api-session/added'(summary: SessionSummary): void
 ```
+
+Source: [`packages/api/session-controller/src/types.ts`](../../packages/api/session-controller/src/types.ts)
+
+<a id="api-sessiondirectories-changed--emit"></a>
+
+#### `api-session/directories-changed` — emit
+
+An active Session's directory authority or requested selection changed.
+
+```ts cordis-catalog
+/**
+ * An active Session's directory authority or requested selection changed.
+ * @mode emit
+ * @param sessionId - Session whose directory facts must be refreshed.
+ */
+'api-session/directories-changed'(sessionId: SessionId): void
+```
+
+Types: [SessionId](core.zh.md)
 
 Source: [`packages/api/session-controller/src/types.ts`](../../packages/api/session-controller/src/types.ts)
 

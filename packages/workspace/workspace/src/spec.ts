@@ -10,11 +10,18 @@ import { brandString } from '@deepseek-ai/dsh-brand'
 import type { SessionId } from '@deepseek-ai/dsh-session'
 import { defineDomain, domainTable } from '@deepseek-ai/dsh-storage-domain'
 import type { WorkspaceId } from './types.ts'
+import { fullyQualifiedWorkspacePath } from './paths.ts'
 
 /** Workspace id schema at the durable boundary; branding has no runtime representation. */
 const workspaceId = z.string().transform(value => value as WorkspaceId)
 
 const sessionId = z.string().transform(value => brandString<SessionId>(value))
+
+/** Durable selection defaults for future Sessions. */
+export const workspaceAdditionalRoots = z.array(z.object({
+  path: z.string().refine(path => fullyQualifiedWorkspacePath(path) && !path.includes('\0')),
+  access: z.enum(['reference', 'write']),
+}).strict())
 
 /**
  * Durable shape of one workspace record. `path` is the `fs.realpath` canon
@@ -27,6 +34,8 @@ export const workspaceRecord = z.object({
   sourcePaths: z.array(z.string()).min(1).optional(),
   /** Removed source directories retained only to validate already-accounted Sessions. */
   retainedSourcePaths: z.array(z.string()).optional(),
+  /** Optional directory defaults. A write entry requires separate Session approval. */
+  additionalRoots: workspaceAdditionalRoots.optional(),
   title: z.string(),
   sessionIds: z.array(sessionId),
   createdAt: z.string(),

@@ -31,6 +31,7 @@ import { buildModelCatalog, hasProviderApiKey } from './catalog.ts'
 import { SessionSkillCatalog } from './skill-catalog.ts'
 import { SessionMediaReferences } from './media-references.ts'
 import { ArchivedSessionGate } from './archived-session-gate.ts'
+import { cancelSessionRoots, confirmSessionRoots, prepareSessionRoots, readSessionRoots, replaceSessionRoots } from './root-permissions.ts'
 import type {
   ModelCatalog,
   SessionWorkspacePathApplication,
@@ -66,6 +67,7 @@ import type {
   SessionProjectionsValue,
   SessionUpdateQueueRequest,
   SessionUpdateQueueValue,
+  SessionRootsConfirmRequest, SessionRootsPreview, SessionRootsReceipt, SessionRootsReplaceRequest, SessionRootsRequest, SessionRootsState,
 } from './types.ts'
 
 export type * from './types.ts'
@@ -245,6 +247,12 @@ export class SessionController extends TypertRemoteService {
     ctx.on('agent/error', ({ agent, error }) => {
       ctx.emit('api-session/error', agent.id, errorChain(error))
     })
+    ctx.on('sandbox/directories-changed', (sessionId) => {
+      ctx.emit('api-session/directories-changed', sessionId)
+    })
+    ctx.on('session/event', (session, event) => {
+      if (event.type === 'sandbox/mode') ctx.emit('api-session/directories-changed', session.id)
+    })
     ctx.on('session/event', (session, event) => {
       if (event.type !== 'user/message' || event.data.source.kind !== 'user') return
       ctx.emit('api-session/activity', session.id, event.time)
@@ -311,6 +319,65 @@ export class SessionController extends TypertRemoteService {
   @Remote('create')
   create(request: SessionCreateRequest): Promise<SessionCreateValue> {
     return this.commands.create(request)
+  }
+
+  /**
+   * Read current directory selections and live grants for the authenticated owner.
+   * @param request - active Session identity.
+   * @param signal - caller lifetime.
+   * @returns the selection and its effective authority.
+   */
+  @Remote('roots')
+  roots(request: SessionRootsRequest, signal: AbortSignal): Promise<SessionRootsState> {
+    signal.throwIfAborted()
+    return readSessionRoots(this.ctx, request.sessionId)
+  }
+
+  /**
+   * Save a pending directory selection and revoke its previous live grant.
+   * @param request - Session, observed revision, and replacement selection.
+   * @param signal - caller lifetime.
+   * @returns the committed selection and current authority.
+   */
+  @Remote('replaceRoots')
+  replaceRoots(request: SessionRootsReplaceRequest, signal: AbortSignal): Promise<SessionRootsState> {
+    signal.throwIfAborted()
+    return replaceSessionRoots(this.ctx, request.sessionId, request.roots, request.expectedRevision)
+  }
+
+  /**
+   * Preview the exact selection that would be enabled by confirmation.
+   * @param request - active Session identity.
+   * @param signal - caller lifetime.
+   * @returns a short-lived preview bound to the current owner Peer.
+   */
+  @Remote('prepareRoots')
+  prepareRoots(request: SessionRootsRequest, signal: AbortSignal): Promise<SessionRootsPreview> {
+    signal.throwIfAborted()
+    return prepareSessionRoots(this.ctx, request.sessionId)
+  }
+
+  /**
+   * Confirm a one-use preview while the Agent and its resources are idle.
+   * @param request - active Session identity and preview nonce.
+   * @param signal - caller lifetime.
+   * @returns the process-local grant.
+   */
+  @Remote('confirmRoots')
+  confirmRoots(request: SessionRootsConfirmRequest, signal: AbortSignal): Promise<SessionRootsReceipt> {
+    signal.throwIfAborted()
+    return confirmSessionRoots(this.ctx, request.sessionId, request.nonce)
+  }
+
+  /**
+   * Discard the caller's matching preview.
+   * @param request - active Session identity and preview nonce.
+   * @param signal - caller lifetime.
+   */
+  @Remote('cancelRoots')
+  cancelRoots(request: SessionRootsConfirmRequest, signal: AbortSignal): Promise<void> {
+    signal.throwIfAborted()
+    return cancelSessionRoots(this.ctx, request.sessionId, request.nonce)
   }
 
   /**

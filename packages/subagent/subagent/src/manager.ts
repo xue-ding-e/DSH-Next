@@ -244,6 +244,18 @@ export class SubagentManager {
   }
 
   /**
+   * Inspect pending, resident, and closing work for the exact Agent's tree.
+   * @param owner - an active tree member.
+   * @returns whether the tree has resources that can outlive the caller's turn.
+   */
+  hasOwnerActivity(owner: Agent): boolean {
+    this.assertAdmitting(owner)
+    const root = this.rootOf(owner)
+    return [...this.materializations].some(item => item.root === root)
+      || [...this.resident.values()].some(item => item.root === root)
+  }
+
+  /**
    * Join progressing subagent tree work for its root, leaving idle parked inboxes resident.
    * @param root - exact live subagent tree root; ordinary members return false.
    * @returns whether work was joined and the host must recheck root completion.

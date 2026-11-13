@@ -65,6 +65,8 @@ ctx.workspaceRegistry.list() // shows the project, newest first
 
 `path` 始终是登记时的原始规范目录。`sourcePaths` 默认为该目录，其首项是 `primaryPath`，Session 控制器以它作为新 Session 的初始 cwd。编辑来源不会改变现有 Session 记录的 cwd。`status()` 检查原始登记目录，与主要来源无关。
 
+附加目录默认设置与有序来源目录分开保存。参考目录不申请写权限，写入目录需要在新会话中确认。保存默认设置不会改变已有会话的权限。
+
 <a id="first-use-workspace"></a>
 ### 首次使用工作区
 

@@ -53,6 +53,8 @@ Target packages declaration-merge their snapshot and Location data maps, then re
 <a id="sent-user-text"></a>
 ## Sent user text
 
+Dropping a workspace file-tree entry over the conversation inserts an approved path reference after the composer selection. A drop changes only the draft and preserves existing text and attachments.
+
 `UiConversation.userText` registers synchronous `match(text, from, context)` rules. Each call offers one business or Text candidate; the evaluator selects the earliest start and uses `order` and stable ID only for same-start ties. Each caller owns its query cache. `Context.read(key)` invalidates only readers of changed Facts, while future candidates and no-match results are reused within their recorded search ranges. Inputs and outputs use readonly types without runtime freezing. See the [UserText types](src/client/contract/user-text.ts) and [design decision](../../../.agents/notes/implemented/architecture/2026-10-10-user-text-json-nodes.md).
 
 Businesses extend `UserTextDataMap` and `UserTextFacts` on this package's `/client` entry, register a matcher through `ctx.uiConversation.userText`, and contribute their renderer to `conversation.user.text.node`. The session-scoped `conversation.user.text` Factory owns this inline keyed Slot. Whitespace rules also return ordinary Text candidates through the same scheduler; trim wins same-start edge collisions with collapse. Node registrations supply their own actions; `interactive` and CSS `ellipsis` remain React Props. Missing renderers display the original fragment; matching failures retain the complete original text and report the rule error.

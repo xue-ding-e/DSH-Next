@@ -29,6 +29,25 @@ export abstract class FileReferenceService extends Service {
   }
 
   /**
+   * Capture the provider's current discovery scope for an authorized Agent.
+   * @param _agent - exact active Agent.
+   * @returns a final synchronous guard; unsupported providers refuse path drops.
+   */
+  captureScope(_agent: Agent): () => boolean {
+    return () => false
+  }
+
+  /**
+   * Capture the identity of a provider-issued candidate.
+   * @param _agent - authorized Agent used to list the candidate.
+   * @param _candidate - candidate returned by list.
+   * @returns a final synchronous guard; unsupported providers refuse path drops.
+   */
+  captureCandidate(_agent: Agent, _candidate: FileReferenceCandidate): () => boolean {
+    return () => false
+  }
+
+  /**
    * List file and directory candidates for one agent's working directory.
    * @param agent - target agent whose session cwd bounds discovery.
    * @param query - path text following `@` or `@"`.

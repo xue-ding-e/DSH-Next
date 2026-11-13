@@ -35,7 +35,7 @@ import {
 import { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import { SandboxPreparationError, SandboxProvider, SandboxUnavailableError, canonicalPath } from '@deepseek-ai/dsh-sandbox'
-import type { ConfinedArgv, ConfinedSandboxMode, RunnerFailureRule, SandboxEnforcement, SandboxPolicy } from '@deepseek-ai/dsh-sandbox'
+import type { ConfinedArgv, ConfinedSandboxMode, RunnerFailureRule, SandboxEnforcement, SandboxMode, SandboxPolicy } from '@deepseek-ai/dsh-sandbox'
 import type { SessionId } from '@deepseek-ai/dsh-session'
 import { AclWriteGrant, isTempRootInsideWorkspace, registerAclDiagnosisSkill, tempWriteSid, workspaceWriteSid } from '@deepseek-ai/dsh-sandbox-windows-acl'
 import { assertNever } from '@deepseek-ai/dsh-util-values'
@@ -359,6 +359,17 @@ export class LocalSandboxProvider extends SandboxProvider {
       denialSignatures: DENIAL_SIGNATURES[selected.runner],
       runnerFailureRules: RUNNER_FAILURE_RULES[selected.runner],
     })
+  }
+
+  override supportsAdditionalWritableRoots(mode: SandboxMode): boolean {
+    if (mode !== 'workspace-write') return false
+    if (this.runnerCommand !== undefined) return true
+    try {
+      return this.selectRunner(mode).runner !== 'windows-acl'
+    } catch (error) {
+      if (error instanceof SandboxUnavailableError) return false
+      throw error
+    }
   }
 
   /** The selected rung's runner invocation (program + profile arguments) for one policy. */

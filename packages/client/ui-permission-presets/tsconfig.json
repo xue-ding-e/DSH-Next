@@ -8,6 +8,11 @@
     "src"
   ],
   "references": [
+    { "path": "../resources" },
+    { "path": "../ui-workspace" },
+    { "path": "../../api/workspace-controller/tsconfig.client.json" },
+    { "path": "../../sandbox/sandbox-policy" },
+    { "path": "../../typert/protocol" },
     {
       "path": "../locale/tsconfig.client.json"
     },

@@ -12,6 +12,8 @@ import type {
   ISessions, SessionBinding, SessionFace,
 } from '@deepseek-ai/dsh-api-session-controller/client'
 import type { SessionId, SessionSeq } from '@deepseek-ai/dsh-session/types'
+import type { ClientRemote } from '@deepseek-ai/dsh-api-remotes/client'
+import { formatFileMention } from '@deepseek-ai/dsh-file-reference/grammar'
 import type { TranslateNS } from '@deepseek-ai/dsh-client-locale/client'
 import type { InboxState } from '@deepseek-ai/dsh-agent/types'
 import type { ModelSelectionProjection } from '@deepseek-ai/dsh-agent/types'
@@ -141,6 +143,23 @@ export class InputHub implements SessionInputResolver {
       inbox: session.projections.faceOf('inbox') as ObservableSnapshot<InboxState | undefined>,
       defaultSink: (text, attachmentIds, mode, signal, accept) => this.sink(session, text, attachmentIds, mode, signal, accept),
       quoteRemoveLabel: () => this.t('quote.remove'),
+      droppedFileUnavailable: () => this.t('input.dropFileUnavailable'),
+      resolveDroppedFile: async (source, signal) => {
+        if (session.getSnapshot().blank) throw new Error('A file reference requires an active Session')
+        const remote = this.rootCtx.get('remote.fileReferences') as ClientRemote['fileReferences'] | undefined
+        if (remote === undefined) throw new Error('File reference lookup is unavailable')
+        const result = await remote.resolveDrop(session.sessionId, source.sessionId, source.path, source.kind, signal)
+        if (!result.ok) throw new Error(result.error.message)
+        const candidate = result.value
+        const mention = formatFileMention(candidate, false)
+        if (mention === undefined) throw new Error('The selected path cannot be represented as a reference')
+        const name = candidate.path.split('/').filter(Boolean).at(-1) ?? candidate.path
+        const directory = candidate.kind === 'directory'
+        return {
+          source: 'reference', ref: mention, clipboardText: mention,
+          label: directory ? `${name}/` : name, appearance: directory ? 'folder' : 'file',
+        }
+      },
       quoteInsertionAllowed: () => {
         const state = session.getSnapshot()
         return !state.removed && (state.subagent === null

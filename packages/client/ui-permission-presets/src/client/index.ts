@@ -16,12 +16,18 @@
  * created later through the host Settings API.
  */
 import type { Context as ClientContext } from '@deepseek-ai/cordis'
+import type {} from '@deepseek-ai/dsh-client-resources/client'
+import type {} from '@deepseek-ai/dsh-api-workspace-controller/client'
+import { DirectoryCommands, directoryAddress } from './directories.ts'
+import { SessionDirectories, type SessionDirectoriesInjected } from './SessionDirectories.tsx'
+import { directoryDictionaries } from './directories-locales.ts'
+export type { SessionDirectoriesInjected, SessionDirectoriesProps } from './SessionDirectories.tsx'
 import type { SessionFace } from '@deepseek-ai/dsh-api-session-controller/client'
 import type { SessionId } from '@deepseek-ai/dsh-api-remotes/client'
 import type { PermissionCatalog, PermissionSelection } from '@deepseek-ai/dsh-permission-presets/client'
 // Direct dependency: catalog settlements are fenced by the actual connection
 // generation rather than by a parallel domain counter.
-import type {} from '@deepseek-ai/dsh-client-connection/client'
+import type { ConnectionHandle } from '@deepseek-ai/dsh-client-connection/client'
 // Type-only: pulls the locale plugin's Context merge (ctx.locale).
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 // Type-only: the settings slot types (this package registers a General row).
@@ -111,6 +117,38 @@ function optionsOf(
  * @param ctx - client root context.
  */
 export function apply(ctx: ClientContext): void {
+  ctx.inject(['resources', 'workspaces', 'remote.session'], (scope) => {
+    const directories = new DirectoryCommands(scope.remote.session)
+    scope.effect(() => scope.resources.register(directories.provider), 'ui-permission: directory resources')
+    scope.effect(() => () => { directories.dispose() }, 'ui-permission: directory requests')
+    scope.effect(() => scope.locale.register('permission.directories', directoryDictionaries), 'ui-permission: directory copy')
+    scope.remote.$on('api-session/directories-changed', (sessionId) => { directories.invalidate(sessionId) })
+    scope.remote.$on('api-session/removed', (sessionId) => { directories.replaceLifetime(sessionId) })
+    scope.remote.$on('api-session/added', (summary) => { directories.replaceLifetime(summary.sessionId) })
+    const connection = scope.get('connection') as ConnectionHandle
+    scope.effect(() => connection.generation.subscribe(() => { directories.reset() }), 'ui-permission: directory connection')
+    scope.slots.inject('conversation.session.header.utilities', () => scope.slots.register({
+      name: 'conversation.session.header.utilities', id: 'session-directories', order: 150,
+      locale: 'permission.directories',
+      children: { 'session.directories.directoryFlow': { kind: 'single', scope: 'root' } },
+      inject: (sessionId: SessionId): SessionDirectoriesInjected => ({
+        sessionId, address: directoryAddress(sessionId),
+        hooks: {
+          workspaceList: scope.workspaces.list, directoryLifetime: directories.lifetimeOf(sessionId),
+          directoryConnection: directories.connection, directoryChange: directories.changes,
+          directoryFlow: {
+            getSnapshot: () => scope.slots.entries('session.directories.directoryFlow').length > 0,
+            subscribe: listener => scope.slots.subscribe('session.directories.directoryFlow', listener),
+          },
+        },
+        replace: (roots, revision) => directories.replace(sessionId, roots, revision),
+        saveDefaults: async (workspaceId, roots) => { await scope.workspaces.setRoots(workspaceId, roots) },
+        prepare: () => directories.prepare(sessionId), confirm: nonce => directories.confirm(sessionId, nonce),
+        cancel: nonce => directories.cancel(sessionId, nonce), abort: () => { directories.abort(sessionId) },
+        refresh: () => { directories.invalidate(sessionId) },
+      }),
+    }, SessionDirectories))
+  })
   const command = ctx.get('commandUi') as CommandUiContract
   const sessions = ctx.sessions
   const accessDictionaries = {

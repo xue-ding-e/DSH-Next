@@ -3,6 +3,7 @@ import type { LexicalEditor } from 'lexical'
 import type { QuoteSummary } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { InputState } from './input.ts'
 import type { InputSubmitMode } from './composer-submission.ts'
+import type { SessionId } from '@deepseek-ai/dsh-session/types'
 
 /** Pick-time draft span guarded by the input revision. */
 export interface TokenSpan {
@@ -22,6 +23,13 @@ export interface ReferenceInsert {
 
 /** Custom drag payload used when a Session row is dropped into the composer. */
 export const SESSION_REFERENCE_DRAG_TYPE = 'application/x-dsh-session-reference'
+
+/** Path-only source of a file-tree drag; the Host resolves its current identity. */
+export interface FileReferenceDrag {
+  readonly sessionId: SessionId
+  readonly path: string
+  readonly kind: 'file' | 'directory'
+}
 
 /** Persisted reference data without the current editor's occurrence identity. */
 export type DraftReference = Omit<Occurrence, 'occurrenceId'>
@@ -95,6 +103,12 @@ export interface ComposerKeyboard {
   paste(text: string): void
   /** Insert a structured reference after the current selection, preserving existing text and chips. */
   insertReferenceAtCaret(reference: ReferenceInsert): boolean
+  /**
+   * Resolve and insert a file-tree reference without sending or uploading it.
+   * @param source - file-tree source and path.
+   * @param signal - mounted composer's lifetime.
+   */
+  insertDroppedFileReference?(source: FileReferenceDrag, signal: AbortSignal): Promise<void>
   /**
    * The live selection as a detect-coordinate span (menu-launcher synthetic
    * hits replace it on pick); an absent selection answers a collapsed span at

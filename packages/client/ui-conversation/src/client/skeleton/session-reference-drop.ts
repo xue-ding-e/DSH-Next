@@ -1,8 +1,9 @@
 /** Native conversation drops owned by one mounted composer. */
 import { brandString } from '@deepseek-ai/dsh-brand'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
+import { FILE_REFERENCE_DRAG_TYPE } from '@deepseek-ai/dsh-file-reference/grammar'
 import { formatSessionReferenceMention } from '@deepseek-ai/dsh-session-reference/uri'
-import { SESSION_REFERENCE_DRAG_TYPE, type ReferenceInsert } from '../contract/draft-editor.ts'
+import { SESSION_REFERENCE_DRAG_TYPE, type FileReferenceDrag, type ReferenceInsert } from '../contract/draft-editor.ts'
 
 /** Viewport coordinates of the receiving conversation and its right panel. */
 export interface SessionDropArea {
@@ -10,6 +11,26 @@ export interface SessionDropArea {
   readonly top: number
   readonly width: number
   readonly height: number
+}
+
+/** One receiving region and the kind of reference currently offered to it. */
+export interface ReferenceDropFeedback {
+  readonly area: SessionDropArea
+  readonly kind: 'session' | 'file'
+}
+
+function filePayload(value: string): FileReferenceDrag | undefined {
+  try {
+    const raw: unknown = JSON.parse(value)
+    if (typeof raw !== 'object' || raw === null || !('sessionId' in raw) || !('path' in raw) || !('kind' in raw)) return undefined
+    const { sessionId, path, kind } = raw
+    if (typeof sessionId !== 'string' || sessionId === '' || typeof path !== 'string' || path === ''
+      || (kind !== 'file' && kind !== 'directory')) return undefined
+    return { sessionId: brandString<SessionId>(sessionId), path, kind }
+  } catch (_error) {
+    // Invalid drag data never reaches the Host.
+    return undefined
+  }
 }
 
 function referencePayload(value: string): { sessionId: string; reference: ReferenceInsert } | undefined {
@@ -38,7 +59,8 @@ export function installSessionReferenceDrop(card: HTMLElement, options: {
   readonly canAccept: () => boolean
   readonly sessionId: SessionId | undefined
   readonly insert: (reference: ReferenceInsert) => boolean
-  readonly show: (area: SessionDropArea | null) => void
+  readonly insertFile?: ((source: FileReferenceDrag, signal: AbortSignal) => Promise<void>) | undefined
+  readonly show: (feedback: ReferenceDropFeedback | null) => void
 }): () => void {
   const document = card.ownerDocument
   const view = document.defaultView
@@ -48,6 +70,7 @@ export function installSessionReferenceDrop(card: HTMLElement, options: {
   if (main === null && frame !== null) return () => {}
   let active = false
   let area: SessionDropArea | null = null
+  const lifetime = new AbortController()
   const reset = (): void => { active = false; area = null; options.show(null) }
   const acceptsTarget = (target: EventTarget | null): boolean => {
     if (!(target instanceof Element) || target.closest('[role="dialog"], [aria-modal="true"]') !== null) return false
@@ -55,11 +78,19 @@ export function installSessionReferenceDrop(card: HTMLElement, options: {
     const region = target.closest('[data-main-column], [data-rightbar-col]')
     return region !== null && frame.contains(region)
   }
-  const transfer = (event: DragEvent): DataTransfer | null => event.dataTransfer !== null
-    && Array.from(event.dataTransfer.types).includes(SESSION_REFERENCE_DRAG_TYPE) ? event.dataTransfer : null
+  const transfer = (event: DragEvent): { data: DataTransfer; kind: ReferenceDropFeedback['kind'] } | null => {
+    const data = event.dataTransfer
+    if (data === null) return null
+    const types = Array.from(data.types)
+    if (types.includes(SESSION_REFERENCE_DRAG_TYPE)) return { data, kind: 'session' }
+    if (options.sessionId !== undefined && options.insertFile !== undefined
+      && types.includes(FILE_REFERENCE_DRAG_TYPE)) return { data, kind: 'file' }
+    return null
+  }
   const over = (event: DragEvent): void => {
-    const data = transfer(event)
-    if (data === null) return
+    const offered = transfer(event)
+    if (offered === null) return
+    const { data, kind } = offered
     if (!acceptsTarget(event.target)) { if (active) reset(); return }
     event.preventDefault()
     event.stopPropagation()
@@ -72,7 +103,7 @@ export function installSessionReferenceDrop(card: HTMLElement, options: {
     const top = content?.top ?? bounds.top
     area = { left: bounds.left, top, width: (frame?.getBoundingClientRect().right ?? bounds.right) - bounds.left,
       height: Math.max(0, bounds.bottom - top) }
-    options.show(area)
+    options.show({ area, kind })
   }
   const leave = (event: DragEvent): void => {
     if (transfer(event) === null || !active) return
@@ -81,14 +112,22 @@ export function installSessionReferenceDrop(card: HTMLElement, options: {
       || event.clientX >= area.left + area.width || event.clientY >= area.top + area.height)) reset()
   }
   const drop = (event: DragEvent): void => {
-    const data = transfer(event)
-    if (data === null) return
+    const offered = transfer(event)
+    if (offered === null) return
+    const { data, kind } = offered
     reset()
     if (!acceptsTarget(event.target)) return
     event.preventDefault()
     event.stopPropagation()
     data.dropEffect = 'none'
     if (!options.canAccept()) return
+    if (kind === 'file') {
+      const payload = filePayload(data.getData(FILE_REFERENCE_DRAG_TYPE))
+      if (payload === undefined) return
+      data.dropEffect = 'copy'
+      void options.insertFile?.(payload, lifetime.signal)
+      return
+    }
     const payload = referencePayload(data.getData(SESSION_REFERENCE_DRAG_TYPE))
     if (payload === undefined || payload.sessionId === options.sessionId) return
     if (options.insert(payload.reference)) data.dropEffect = 'copy'
@@ -103,6 +142,7 @@ export function installSessionReferenceDrop(card: HTMLElement, options: {
   view?.addEventListener('blur', reset)
   view?.addEventListener('resize', reset)
   return () => {
+    lifetime.abort()
     if (active) reset()
     document.removeEventListener('dragenter', over, true)
     document.removeEventListener('dragover', over, true)

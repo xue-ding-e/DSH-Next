@@ -11,7 +11,7 @@ import {
   WorkspaceOrderInvalidError,
   WorkspaceUnknownSessionError,
 } from '@deepseek-ai/dsh-workspace'
-import { RemoteError, remoteErrorOf } from '@deepseek-ai/dsh-typert-protocol'
+import { RemoteError, remoteErrorOf, type RemoteInvocation } from '@deepseek-ai/dsh-typert-protocol'
 import { workspaceView } from './feed.ts'
 import type {
   WorkspaceArchiveSessionRequest,
@@ -26,6 +26,7 @@ import type {
   WorkspacePinSessionRequest,
   WorkspacePinValue,
   WorkspaceRenameRequest,
+  WorkspaceRootsRequest,
   WorkspaceUnarchiveSessionRequest,
   WorkspaceUnpinSessionRequest,
   WorkspaceValue,
@@ -94,6 +95,27 @@ export class WorkspaceCommands {
           if (!(error instanceof WorkspaceSourcesInvalidError)) throw error
           throw new RemoteError('gateway/bad-request', `cannot save Workspace: ${errorMessage(error)}`, {}, { cause: error })
         }
+      }
+      return { workspace: workspaceView(workspace) }
+    })
+  }
+
+  /**
+   * Save defaults in the same mutation order as source directory changes.
+   * @param request - Workspace identity and complete directory defaults.
+   * @param invocation - authenticated owner lifetime.
+   * @returns the durable Workspace projection.
+   */
+  setRoots(request: WorkspaceRootsRequest, invocation: RemoteInvocation): Promise<WorkspaceValue> {
+    return this.enqueue(async () => {
+      invocation.signal.throwIfAborted()
+      invocation.peer.signal.throwIfAborted()
+      const workspace = this.requireWorkspace(request.workspaceId)
+      try {
+        await workspace.setAdditionalRoots(request.roots)
+      } catch (error) {
+        if (!(error instanceof WorkspaceSourcesInvalidError)) throw error
+        throw new RemoteError('gateway/bad-request', error.message, {}, { cause: error })
       }
       return { workspace: workspaceView(workspace) }
     })

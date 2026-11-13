@@ -109,6 +109,8 @@ export interface FileTreeInput {
    * @returns the handlers spread onto the row's button.
    */
   readonly rowTriggerProps?: ((entry: TreeEntry, kind: 'file' | 'directory') => ContextMenuTriggerProps) | undefined
+  /** Add a path-only reference to a native drag initiated on an entry. */
+  readonly onReferenceDrag?: (entry: TreeEntry, kind: 'file' | 'directory', transfer: DataTransfer) => void
 }
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
@@ -228,6 +230,8 @@ function Entry({ node, tree }: { node: TreeNode; tree: TreeContext }): ReactNode
       <li className={css.item} data-files-entry="directory" data-files-path={entry.path}>
         <div className={css.row}>
           <button type="button" className={clsx(css.action, hidden)} aria-expanded={expanded} onClick={() => { input.onToggle(entry, !expanded) }}
+            draggable={input.onReferenceDrag !== undefined}
+            onDragStart={(event) => { input.onReferenceDrag?.(entry, 'directory', event.dataTransfer) }}
             {...input.rowTriggerProps?.(entry, 'directory')}>
             {expanded ? <IconFolderOpenRegular className={css.icon} /> : <IconFolderCloseRegular className={css.icon} />}
             {label}
@@ -244,6 +248,8 @@ function Entry({ node, tree }: { node: TreeNode; tree: TreeContext }): ReactNode
       <li className={css.item} data-files-entry="file" data-files-path={entry.path}>
         <div className={clsx(css.row, current && css.current)}>
           <button type="button" className={clsx(css.action, hidden)} aria-current={current || undefined}
+            draggable={input.onReferenceDrag !== undefined}
+            onDragStart={(event) => { input.onReferenceDrag?.(entry, 'file', event.dataTransfer) }}
             ref={current ? input.currentRef : undefined}
             {...input.rowTriggerProps?.(entry, 'file')}
             onClick={() => { input.onOpen(entry) }}>

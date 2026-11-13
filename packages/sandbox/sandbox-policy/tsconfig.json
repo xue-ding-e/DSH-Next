@@ -21,6 +21,12 @@
       "path": "../../core/agent"
     },
     {
+      "path": "../../fs/fs"
+    },
+    {
+      "path": "../../typert/protocol"
+    },
+    {
       "path": "../sandbox"
     },
     {

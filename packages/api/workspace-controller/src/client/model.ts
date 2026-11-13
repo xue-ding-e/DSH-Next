@@ -4,6 +4,7 @@ import { notifySubscribers } from '@deepseek-ai/dsh-client-store'
 import type {} from '@deepseek-ai/dsh-api-workspace-controller/remote'
 import { isRemoteFailure } from '@deepseek-ai/dsh-api-gateway/client'
 import type { RemoteFailure, RemoteResult, TypertClientRemote } from '@deepseek-ai/dsh-typert-protocol'
+import type { WorkspaceAdditionalRoot } from '@deepseek-ai/dsh-workspace/types'
 import type {
   WorkspaceArchiveSessionRequest,
   WorkspaceArchiveValue,
@@ -121,6 +122,18 @@ export class ClientWorkspaceModel implements WorkspaceFollowSink {
    */
   async rename(workspaceId: WorkspaceId, title: string, sourcePaths?: readonly string[]): Promise<RemoteResult<WorkspaceValue>> {
     const result = await this.remote.rename({ workspaceId, title, ...(sourcePaths === undefined ? {} : { sourcePaths }) })
+    if (result.ok) this.upsert(result.value.workspace)
+    return result
+  }
+
+  /**
+   * Save defaults and publish the authoritative Workspace row.
+   * @param workspaceId - target Workspace.
+   * @param roots - complete directory selection for new Sessions.
+   * @returns the generated Remote result.
+   */
+  async setRoots(workspaceId: WorkspaceId, roots: readonly WorkspaceAdditionalRoot[]): Promise<RemoteResult<WorkspaceValue>> {
+    const result = await this.remote.setRoots({ workspaceId, roots })
     if (result.ok) this.upsert(result.value.workspace)
     return result
   }

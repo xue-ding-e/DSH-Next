@@ -4,6 +4,7 @@ import type { Context as ClientContext } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-api-remote-access/client'
 // Type-only: pulls the SlotMap merge declaring the directory-flow holes.
 import type {} from '@deepseek-ai/dsh-client-ui-workspace/client'
+import type {} from '@deepseek-ai/dsh-client-ui-permission-presets/client'
 // Type-only: pulls the SlotRegistry service merge (ctx.slots).
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import type { NativeFlowInjected } from './flow.ts'
@@ -26,6 +27,10 @@ export function apply(ctx: ClientContext): void {
   }).__DSH_DIRECTORY_PICKER__
   const pick = desktop === undefined ? () => ctx.uiWorkspace.pickDirectory() : () => desktop.pick()
   const injected = (): NativeFlowInjected => ({ pick })
+  ctx.remoteAccess.whenAccess('directoryPicker/pick', () =>
+    ctx.slots.inject('session.directories.directoryFlow', () => ctx.slots.register({
+      name: 'session.directories.directoryFlow', inject: injected,
+    }, NativeDirectoryFlow)))
   // Both declaration lifetimes must be live before the pair installs; the
   // generator makes the two registrations one transactional effect. The
   // outer/inner nesting order is arbitrary; neither hole has precedence.

@@ -47,6 +47,16 @@ interface Workspace {
   /** Primary source directory used when creating a Session. */
   readonly primaryPath: string
 
+  /** Defaults for new Sessions; they carry no active access grant. */
+  readonly additionalRoots: readonly WorkspaceAdditionalRoot[]
+
+  /**
+   * Replace directory defaults without changing any existing Session.
+   * @param roots - existing directories and their requested use.
+   * @returns resolution after validation and durability.
+   */
+  setAdditionalRoots(roots: readonly WorkspaceAdditionalRoot[]): Promise<void>
+
   /** Display title. Defaults to the final path segment, or a filesystem root's own spelling; duplicates are allowed. */
   readonly title: string
 
@@ -395,6 +405,13 @@ Host service backing the generated `ctx.remote.workspace` namespace.
  * @returns the updated Workspace projection.
  */
 @Remote('rename') rename(request: WorkspaceRenameRequest): Promise<WorkspaceValue>
+
+/**
+ * Save directory defaults on the authenticated owner's Workspace.
+ * @param request - Workspace and complete directory selection.
+ * @returns the updated Workspace; saving does not grant execution access.
+ */
+@Remote('setRoots') setRoots(request: WorkspaceRootsRequest): Promise<WorkspaceValue>
 
 /**
  * Remove one Workspace registration while retaining files and Sessions.

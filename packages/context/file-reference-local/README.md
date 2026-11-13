@@ -43,6 +43,8 @@ The defaults suit a typical workspace, so the minimal mount needs no configurati
 
 Typing `@` in a host UI returns up to `maxResults` ranked path candidates for the addressed agent. A query containing `/` lists the matching directory's entries directly; a bare query fuzzy-ranks the bounded recursive index. Directory candidates keep the mention open with a trailing slash. After any tool result the agent's index is marked stale: the next query still answers from it and its replacement builds in the background, so a rebuild never sits in front of the caret.
 
+An active Session can discover its confirmed additional directories. Their candidates use absolute paths so equal names remain distinct. File-tree drops recheck the discovery scope and physical identities of the path and its parents before returning a reference.
+
 ### Configuration
 
 | Field | Default | Meaning |
