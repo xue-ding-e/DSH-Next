@@ -45,6 +45,10 @@ description: "在本地或 Windows／macOS Actions 中生成 Desktop 安装包�
 
 Next 安装包通过 `electron-updater` 使用 `xue-ding-e/DSH-Next` 的公开 GitHub Releases feed。封装的 Next 元数据独立于上游配置标识该仓库及其 ID。release tag 使用单个 `v` 前缀（`v<version>`）；provider 会跳过 `semver.valid` 拒绝的 tag。已安装的预发布通道筛选匹配的 tag，例如 `rc`，并比较完整安装版本，禁止降级。Windows 发布工作流提供 `dsh-next-<version>-win-x64-unsigned.exe`、校验和、通道 feed（`rc` 版本使用 `rc.yml`）及内容相同的 `latest.yml` 回退。本机构建及 provider 回归不代表已安装应用的下载、替换或重启验收通过；须在发布主机上执行[已安装更新流程](../tests/installed-update/README.zh.md)。
 
+`electron-builder` 只为拥有更新器的打包目标写入 `app-update.yml`，因此 `--dir` 构建装出的应用会报告自己没有打包更新源并拒绝所有检查。Next 因此在 `afterPack` 中为每个目标（包括后续用于封安装包的目录构建）把 GitHub feed 封入 `resources`，使本机构建与发布产物走同一条自动更新路径。该钩子校验既有文件而非重写，因此不会与本次运行发布的 feed 产生分歧。
+
+[Next Windows 发布工作流](../../../.github/workflows/next-release.yml) 在推送到 `main` 时运行，也可以手动在 `main` 上启动。发布版本由产品版本、UTC 日期和 Actions 运行编号组成。安装包、校验和与更新清单上传齐全后，预发布版本才会公开。
+
 Next 默认使用 `~/.dsh-next`，也可通过绝对路径 `DSH_NEXT_HOME` 指定目录。它拒绝与官方默认 home、继承的自定义 `DSH_HOME` 或应用安装目录发生规范路径重叠，包括已有软链接或 junction 祖先。同身份重装保留数据；Next 卸载只移除应用文件，明确保留 profile、偏好设置和缓存。
 
 默认 Next home 不存在时，Desktop 或 Next CLI 会一次性复制已解析的上游 home，保留源目录，并排除 `cache` 和 `dsh-runtimes`。已有 Next home 不会合并或覆盖；显式指定 `DSH_NEXT_HOME` 时跳过自动转移。转移诊断写入 stderr，CLI stdout 继续承载命令输出。保留独立离线备份，验证会话和设置后再依赖副本。若数据格式被拒绝，保留源目录与 Next 副本，不要强制降级。profile 备份可能含有凭据，不得随构建产物上传。

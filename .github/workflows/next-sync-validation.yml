@@ -52,6 +52,7 @@ jobs:
           packages/api/session-controller/tests/queue-recall-replay.host.spec.ts
           packages/api/session-controller/tests/queue-recall-jsonl.host.spec.ts
           packages/sandbox/sandbox-policy/tests
+          packages/session/session-persistence-jsonl/tests/zstd.spec.ts
           packages/session/working-directory/tests
           packages/client/ui-conversation/tests/input-bar.client.spec.tsx
           packages/client/ui-chat/tests/chat-view.client.spec.tsx
@@ -73,3 +74,5 @@ jobs:
         env:
           DSH_SNAPSHOT: replay
         run: pnpm run test:web:built apps/web/tests/default-workspace.e2e.ts apps/web/tests/sidebar-organization.e2e.ts
+      - name: Verify session storage and workspace startup
+        run: pnpm run test:expected apps/cli/tests/profiles/web/tests/session-artifact-startup.expected.e2e.ts

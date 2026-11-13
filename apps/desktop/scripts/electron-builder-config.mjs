@@ -22,6 +22,7 @@ import {
 } from './windows-sign.mjs'
 import { resolveDesktopAutoUpdateConfig } from './desktop-auto-update-environment.mjs'
 import { isNextDesktopPackage } from './next-package-environment.mjs'
+import { ensureNextAppUpdateConfig } from './next-app-update-config.mjs'
 import { NEXT_DESKTOP_IDENTITY } from '../src/next-distribution.ts'
 import { resolveDesktopBuildCommit } from './desktop-build-commit.mjs'
 import { desktopBuildVersionChannel, resolveDesktopBuildVersion } from './desktop-build-version.mjs'
@@ -222,6 +223,12 @@ export function createElectronBuilderConfig(
       const resourcesDir = context.packager.getResourcesDir(context.appOutDir)
       if (resolvedPlatform === 'darwin' && update !== undefined && !next) {
         await writeMacOSAppUpdateConfig(resourcesDir, resolveMacOSAppUpdateFeed(context.packager.config.publish),
+          context.packager.appInfo.updaterCacheDirName)
+      }
+      // electron-builder writes the feed only for targets that own an updater, so a directory build
+      // would install an application that can never check. The Next feed is the public release list.
+      if (update !== undefined && next) {
+        await ensureNextAppUpdateConfig(resourcesDir, context.packager.config.publish,
           context.packager.appInfo.updaterCacheDirName)
       }
       // The bundled runtime declares whichever version prepared it: the product version for an ordinary

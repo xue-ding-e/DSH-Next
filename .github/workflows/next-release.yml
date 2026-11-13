@@ -1,7 +1,8 @@
 name: DSH Next · Build and release
 
-# Release only by explicit manual dispatch; source sync must not publish.
 on:
+  push:
+    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -13,6 +14,7 @@ concurrency:
 
 jobs:
   windows:
+    if: github.repository == 'xue-ding-e/DSH-Next' && github.ref == 'refs/heads/main'
     runs-on: windows-latest
     timeout-minutes: 180
     defaults:
@@ -64,6 +66,12 @@ jobs:
       - name: Build unsigned DSH Next installer
         run: pnpm run package:desktop:win:x64 -- --next --unsigned --build-version $env:NEXT_VERSION
 
+      - name: Verify session log encoding
+        run: pnpm exec vitest run packages/session/session-persistence-jsonl/tests/zstd.spec.ts
+
+      - name: Verify session storage and workspace startup
+        run: pnpm run test:expected apps/cli/tests/profiles/web/tests/session-artifact-startup.expected.e2e.ts
+
       - name: Verify release asset
         run: |
           $dir = 'apps/desktop/.desktop-build/targets/win-x64/unsigned-artifacts'
@@ -99,5 +107,8 @@ jobs:
         run: |
           $dir = 'apps/desktop/.desktop-build/targets/win-x64/unsigned-artifacts'
           $installer = Join-Path $dir "dsh-next-$env:NEXT_VERSION-win-x64-unsigned.exe"
-          gh release create $env:NEXT_TAG --repo $env:GITHUB_REPOSITORY --target $env:GITHUB_SHA --title "DSH Next $env:NEXT_VERSION" --prerelease --notes "Automated DSH Next Windows x64 build from $env:GITHUB_SHA. The installer is unsigned; verify SHA256SUMS before installation."
+          gh release create $env:NEXT_TAG --repo $env:GITHUB_REPOSITORY --target $env:GITHUB_SHA --title "DSH Next $env:NEXT_VERSION" --draft --prerelease --notes "Automated DSH Next Windows x64 build from $env:GITHUB_SHA. The installer is unsigned; verify SHA256SUMS before installation."
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           gh release upload $env:NEXT_TAG $installer (Join-Path $dir 'SHA256SUMS') (Join-Path $dir "$env:NEXT_CHANNEL.yml") (Join-Path $dir 'latest.yml') --repo $env:GITHUB_REPOSITORY
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          gh release edit $env:NEXT_TAG --repo $env:GITHUB_REPOSITORY --draft=false
