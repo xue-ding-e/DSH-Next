@@ -192,7 +192,7 @@ describe.skipIf(MODE === 'record')('web e2e: file and session references through
 
   it.each([
     ['recent', 'content', 1680], ['workspace', 'content', 1680],
-    ['recent', 'rightbar', 1680], ['workspace', 'rightbar', 1680],
+    ['recent', 'rightbar', 1680], ['workspace', 'rightbar', 1680], ['search', 'content', 1680],
   ] as const)('drags a %s conversation onto %s at %ipx without losing its draft or reordering the sidebar', async (origin, destinationArea, width) => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-reference-drag'))
     await page.setViewportSize({ width, height: 1000 })
@@ -202,9 +202,13 @@ describe.skipIf(MODE === 'record')('web e2e: file and session references through
       const group = page.getByRole('treeitem', { name: /Ungrouped/ })
       if (await group.getAttribute('aria-expanded') !== 'true') await group.click()
     }
-    const source = origin === 'recent'
-      ? page.getByRole('region', { name: 'Recent', exact: true }).locator(`[data-row-key="recent-session:${SOURCE_SESSION_ID}"]`)
-      : page.locator(`[data-row-key="session:${SOURCE_SESSION_ID}"]`)
+    const search = page.getByPlaceholder('Search session names', { exact: true })
+    if (origin === 'search') {
+      await page.getByRole('button', { name: 'Search sessions', exact: true }).click()
+      await search.fill(SOURCE_SESSION_ID)
+    }
+    const prefix = origin === 'recent' ? 'recent-session' : origin === 'search' ? 'search-session' : 'session'
+    const source = page.locator(`[data-row-key="${prefix}:${SOURCE_SESSION_ID}"]`)
     await source.waitFor()
     await writeComposerDraft(page, input, 'Keep this draft. ')
     if (destinationArea === 'rightbar') await page.getByRole('button', { name: 'Open right sidebar', exact: true }).click()
@@ -251,6 +255,7 @@ describe.skipIf(MODE === 'record')('web e2e: file and session references through
     expect(await input.textContent()).toContain('Continue typing')
     expect(await page.evaluate(() => localStorage.getItem('dsh.workspace.view.v5'))).toBe(order)
     await writeComposerDraft(page, input, '')
+    if (origin === 'search') await search.press('Escape')
     if (destinationArea === 'rightbar') await page.getByRole('button', { name: 'Collapse right sidebar', exact: true }).click()
     await page.emulateMedia({ colorScheme: 'light' })
     await page.setViewportSize({ width: 1680, height: 1000 })

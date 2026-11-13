@@ -300,7 +300,13 @@ describe('workspace browser rows', () => {
     expect(screen.getByText('matching message excerpt')).toBeTruthy()
     expect(row.querySelector('[data-state="ongoing"]')).toBeTruthy()
     expect(screen.getByText('进行中')).toBeTruthy()
-    expect(row.hasAttribute('draggable')).toBe(false)
+    expect(row.getAttribute('draggable')).toBe('true')
+    const transfer = { effectAllowed: '', setData: vi.fn() }
+    fireEvent.dragStart(row, { dataTransfer: transfer })
+    expect(transfer.effectAllowed).toBe('copy')
+    expect(transfer.setData).toHaveBeenCalledWith('application/x-dsh-session-reference',
+      expect.stringContaining('"sessionId":"result"'))
+    expect(onOpen).not.toHaveBeenCalled()
     fireEvent.click(row)
     expect(onOpen).toHaveBeenCalledWith(result.id)
   })

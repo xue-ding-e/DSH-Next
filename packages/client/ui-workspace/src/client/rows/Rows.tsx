@@ -560,14 +560,23 @@ export function SearchResultItem({
 } & Pick<WorkspaceBrowserProps, 'useSessionAccess'>) {
   const selected = result.id === currentId
   const canUnarchive = useSessionAccess(result.id, 'workspace/unarchiveSession')
+  const canRead = useSessionAccess(result.id, 'session/page')
+  const referenceDraggable = !result.archived && canRead
+  const title = result.title || t('session.untitled')
   const statuses = sessionStatuses(result, t)
   const primaryStatus = statuses[0]
   return (
     <div
       className={clsx(css.searchResultRow, selected && css.selected, result.archived && css.archived)}
       role="treeitem"
+      data-row-key={`search-session:${result.id}`}
       aria-selected={selected}
       aria-description={result.archived ? t('toast.archivedNotOpenable') : undefined}
+      draggable={referenceDraggable}
+      onDragStart={referenceDraggable ? (event) => {
+        event.dataTransfer.effectAllowed = 'copy'
+        writeSessionReference(event.dataTransfer, result.id, title)
+      } : undefined}
       onClick={() => { onOpen(result.id) }}
     >
       <span className={css.searchResultHeading}>
@@ -579,7 +588,7 @@ export function SearchResultItem({
             <SessionStatusDots statuses={statuses} />
           )}
         </span>
-        <span className={css.searchResultTitle}>{result.title || t('session.untitled')}</span>
+        <span className={css.searchResultTitle}>{title}</span>
         {result.archived && canUnarchive && (
           <span className={css.rowActions}>
             <Tooltip label={t('actions.unarchive')} side="bottom" align="end" delayMs={500} portal>

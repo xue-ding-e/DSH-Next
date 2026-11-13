@@ -32,7 +32,7 @@ export function createContextMenuBindings<Target extends object = ContextMenuTar
           const keyboard = event.button === -1 || (event.clientX === 0 && event.clientY === 0)
           const handledAt = keyboardAnchors.get(event.currentTarget)
           keyboardAnchors.delete(event.currentTarget)
-          if (keyboard && handledAt !== undefined && event.timeStamp - handledAt < 100) {
+          if (event.button === -1 && handledAt !== undefined && event.timeStamp - handledAt < 100) {
             event.preventDefault()
             event.stopPropagation()
             return

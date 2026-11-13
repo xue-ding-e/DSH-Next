@@ -2927,7 +2927,7 @@ describe('WorkspaceBrowser', () => {
     expect(screen.queryByRole('dialog', { name: '删除工作区' })).toBeNull()
   })
 
-  it('search hides drag affordances (rows are not draggable during search)', () => {
+  it('allows search results to be copied as conversation references', () => {
     const sessions = sessionState([summary('needle-a', 2, { displayTitle: 'Needle A' })])
     mount({
       useSessions: hook(sessions),
@@ -2935,7 +2935,12 @@ describe('WorkspaceBrowser', () => {
     })
     fireEvent.change(screen.getByPlaceholderText('搜索会话名称'), { target: { value: 'needle' } })
     const row = screen.getByText('Needle A').closest('[role="treeitem"]') as HTMLElement
-    expect(row.hasAttribute('draggable')).toBe(false)
+    expect(row.getAttribute('draggable')).toBe('true')
+    const transfer = { effectAllowed: '', setData: vi.fn() }
+    fireEvent.dragStart(row, { dataTransfer: transfer })
+    expect(transfer.effectAllowed).toBe('copy')
+    expect(transfer.setData).toHaveBeenCalledWith('application/x-dsh-session-reference',
+      expect.stringContaining('"sessionId":"needle-a"'))
   })
 })
 
