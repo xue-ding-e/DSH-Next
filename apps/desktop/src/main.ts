@@ -1130,7 +1130,7 @@ async function main(): Promise<void> {
           return
         }
         if (state.phase !== 'available' && !(state.phase === 'error' && state.failedOperation === 'download')) return
-        if (nextDistribution === undefined && manual) {
+        if (manual) {
           const result = await ordinaryMessageBox({ title: locale.messages.updateCheckTitle,
             message: formatDesktopMessage(locale.messages.updateAvailable, { version: state.version ?? '' }),
             detail: locale.messages.updateDetail,
@@ -1204,18 +1204,9 @@ async function main(): Promise<void> {
     return policy
   }
 
-  const checkAndInstallNextUpdate = async (): Promise<void> => {
-    if (nextDistribution === undefined || quitting) return
-    const state = await updateSchedule.check()
-    if (state.phase !== 'available' || state.version === undefined) return
-    const result = await downloadUpdate(state.version)
-    if (result.phase === 'error') console.error(`Next desktop update failed: ${result.message}`)
-  }
-
   const automaticCheck = (): void => {
     if (!quitting) void mandatoryPolicy?.check('foreground-or-resume').catch((error: unknown) => { console.error(error) })
-    if (!quitting) void (nextDistribution === undefined ? updateSchedule.check() : checkAndInstallNextUpdate())
-      .catch((error: unknown) => { console.error(error) })
+    if (!quitting) void updateSchedule.check().catch((error: unknown) => { console.error(error) })
   }
   powerMonitor.on('resume', automaticCheck)
   app.on('will-quit', () => {

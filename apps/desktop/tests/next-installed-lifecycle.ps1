@@ -61,7 +61,11 @@ function Read-Protocol {
     if ($null -ne $key) { try { return $key.GetValue('') } finally { $key.Close() } }
 }
 
-function Start-Installed([string]$ExpectedVersion) {
+function Start-Installed([string]$ExpectedVersion, [string[]]$Update = @()) {
+    $registration = Get-ItemProperty -LiteralPath $uninstall
+    if ($registration.DisplayVersion -cne $ExpectedVersion -or $registration.InstallLocation.TrimEnd('\') -ine $install) {
+        throw 'The runtime test requires its own registered installation at the expected version.'
+    }
     $env:DSH_NEXT_HOME = $nextHome
     $env:DSH_HOME = $officialHome
     $cli = Join-Path $cliDirectory 'dsh-next.cmd'
@@ -69,9 +73,35 @@ function Start-Installed([string]$ExpectedVersion) {
     if ($LASTEXITCODE -ne 0 -or ($reported -join ' ') -notmatch '^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$') {
         throw "The installed dsh-next launcher did not report the expected product version."
     }
-    & node (Join-Path $PSScriptRoot '..\..\web\tests\next-installed-startup.mjs') $root $exe $ExpectedVersion
+    & node (Join-Path $PSScriptRoot '..\..\web\tests\next-installed-startup.mjs') $root $exe $ExpectedVersion @Update
     if ($LASTEXITCODE -ne 0) { throw "Installed Electron startup failed for $ExpectedVersion." }
     if ((Read-Protocol) -cne $ownedCommand) { throw 'The installed app did not register its own protocol.' }
+}
+
+function Wait-ForUpdaterRestart {
+    $timer = [Diagnostics.Stopwatch]::StartNew()
+    do {
+        $registration = Get-ItemProperty -LiteralPath $uninstall
+        if ($registration.DisplayVersion -cne $Version -or $registration.InstallLocation.TrimEnd('\') -ine $install) {
+            Start-Sleep -Milliseconds 200
+            continue
+        }
+        foreach ($row in Get-CimInstance Win32_Process -Filter "Name='DSH Next.exe'") {
+            if ($row.ExecutablePath -ine $exe -or $row.CommandLine -notmatch '(?:^|\s)--updated(?:\s|$)') { continue }
+            $process = Get-Process -Id $row.ProcessId -ErrorAction SilentlyContinue
+            if ($null -eq $process) { continue }
+            try {
+                if ($process.HasExited -or $process.Path -ine $exe) { continue }
+                Write-Output "Installer restarted $Version (PID $($process.Id))."
+                # This disposable account owns the process, which was launched without Playwright.
+                $process.Kill($true)
+                if (-not $process.WaitForExit(15000)) { throw 'The restarted application did not stop.' }
+                return
+            } finally { $process.Dispose() }
+        }
+        Start-Sleep -Milliseconds 200
+    } while ($timer.Elapsed.TotalSeconds -lt 180)
+    throw 'The updater did not install and relaunch the candidate.'
 }
 
 function Invoke-CommandWorker([string]$Operation, [string]$Expected = '') {
@@ -118,7 +148,8 @@ $registeredCommand = Invoke-CommandWorker 'install' $beforeCommand.fingerprint
 if (-not $registeredCommand.managed -or -not $registeredCommand.available -or $registeredCommand.activeCommand -ine (Join-Path $cliDirectory 'dsh-next.cmd')) {
     throw 'The installed command did not become available through PATH.'
 }
-Install-Next $Installer
+Start-Installed $baselineVersion @($Installer, $Version)
+Wait-ForUpdaterRestart
 Start-Installed $Version
 Assert-Data
 $installedHash = (Get-FileHash -LiteralPath $asar -Algorithm SHA256).Hash
@@ -136,4 +167,4 @@ $commandKey = New-Item -Path "$protocol\shell\open\command" -Force
 try { $commandKey.SetValue('', $foreignCommand) } finally { $commandKey.Close() }
 Remove-Next
 if ((Read-Protocol) -cne $foreignCommand) { throw 'Uninstall removed the foreign protocol handler.' }
-Write-Output "Verified installed Next $baselineVersion -> $Version, repair, Host startup, and both uninstall ownership cases."
+Write-Output "Verified in-app update and automatic restart $baselineVersion -> $Version, repair, Host startup, and both uninstall ownership cases."

@@ -1673,21 +1673,34 @@ describe('desktop main startup', () => {
     vi.stubEnv('DSH_NEXT_UPSTREAM_HOME', undefined)
   }
 
-  it('automatically downloads and installs a Next update from the GitHub feed', async () => {
+  it('uses the standard download and restart confirmations for Next releases', async () => {
     configureNext()
-    harness.updateState = { phase: 'available', version: '1.0.1' }
-    harness.updateDownload.mockImplementation(async (version) => {
-      harness.updateState = { phase: 'ready', version }
-      return harness.updateState
-    })
-    harness.updateInstall.mockImplementation(async (version) => {
-      harness.updateState = { phase: 'installing', version }
-      return harness.updateState
-    })
+    const version = '0.2.2-rc.2.20261114.1'
+    harness.updateState = { phase: 'available', version }
+    harness.updateDownload.mockResolvedValue({ phase: 'ready', version })
+    harness.updateInstall.mockResolvedValue({ phase: 'installing', version })
     const host = await readyForUpdate()
     expect(host.environment?.DSH_HOME).toBe(join(harness.app.getPath('userData'), 'next-home'))
-    await vi.waitFor(() => { expect(harness.updateDownload).toHaveBeenCalledWith('1.0.1', 0) })
-    expect(harness.updateInstall).toHaveBeenCalledWith('1.0.1', 0)
+    expect(harness.updateCheck).toHaveBeenCalledWith(false)
+    expect(harness.updateDownload).not.toHaveBeenCalled()
+    expect(harness.updateInstall).not.toHaveBeenCalled()
+
+    const confirmation = Promise.withResolvers<{ response: number }>()
+    harness.dialog.showMessageBox.mockImplementation(({ buttons }: Electron.MessageBoxOptions) =>
+      buttons?.includes(en.updateDownload) ? confirmation.promise : Promise.resolve({ response: 0 }))
+    const action = applicationMenuItems().find(item => item.label === en.checkUpdatesMenu)
+    Reflect.apply(action!.click!, undefined, [])
+    const operation = Promise.resolve(invoke(DESKTOP_IPC.updatesOpen, 'app'))
+    try {
+      await vi.waitFor(() => expect(harness.dialog.showMessageBox).toHaveBeenCalledWith(
+        expect.objectContaining({ buttons: [en.updateDownload] })))
+      expect(harness.updateDownload).not.toHaveBeenCalled()
+    } finally {
+      confirmation.resolve({ response: 0 })
+      await operation
+    }
+    expect(harness.updateDownload).toHaveBeenCalledExactlyOnceWith(version, 0)
+    expect(harness.updateInstall).toHaveBeenCalledExactlyOnceWith(version, 0)
   })
 
   it.each(['stable', 'unsupported'])('keeps the Next package channel when official preferences contain %s', async (channel) => {
