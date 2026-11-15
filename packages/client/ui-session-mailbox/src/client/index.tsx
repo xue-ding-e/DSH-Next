@@ -8,6 +8,7 @@ import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import type { PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type { RemoteResult } from '@deepseek-ai/dsh-typert-protocol'
+import { Button } from '@deepseek-ai/dsh-client-ui-primitives'
 import mailboxRemote from '@deepseek-ai/dsh-api-session-mailbox-controller/remote'
 import { draftPartition, sessionDraftStore, type MailboxDraftStore } from './drafts.ts'
 import { MailboxDialog } from './MailboxDialog.tsx'
@@ -51,7 +52,7 @@ function MailboxAction({ sessionId, useSessions, t, openPanel, onReset }: Props)
     return [{ id, title: session.displayTitle }]
   }))
   return <>
-    <button type="button" onClick={() => {
+    <Button size="sm" onClick={() => {
       if (opening.current) return
       opening.current = true
       const selectedEpoch = epoch.current
@@ -63,7 +64,7 @@ function MailboxAction({ sessionId, useSessions, t, openPanel, onReset }: Props)
       }).finally(() => {
         if (epoch.current === selectedEpoch) opening.current = false
       })
-    }}>{t('title')}</button>
+    }}>{t('title')}</Button>
     {failed && <span role="status">{t('unavailable')}</span>}
     {panel && <MailboxDialog key={sessionId} sessionId={sessionId} targets={targets}
       remote={panel.mailbox} drafts={panel.drafts} t={t} close={() => { setPanel(undefined) }} />}

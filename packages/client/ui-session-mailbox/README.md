@@ -21,7 +21,7 @@ This reference describes the Web conversation-header mailbox action. It mounts t
 <a id="mailbox-usage"></a>
 ## Explicit interaction
 
-Choose a destination and enter text, then confirm queue-only sending. Neither sending nor reading starts an Agent. Running destinations are not interrupted. Opening the panel does not read an inbox; the user explicitly requests the current Session's inbox and separately acknowledges a displayed receipt. Archive, deletion and permission decisions remain Host checks rather than UI-only filters.
+Choose a destination from the theme-aware menu, enter text and select **Send to mailbox**. The menu scrolls within the available window space; arrow keys select a row and Escape returns to the destination control. Neither sending nor reading starts an Agent. Running destinations are not interrupted. Opening the panel does not read an inbox; **Read inbox** requests the current Session's messages and **Mark as read** acknowledges a displayed receipt. The inbox shows known sender titles and localized receipt states. Archive, deletion and permission decisions remain Host checks.
 
 One UI action obtains a short-lived exact-route grant, prepares one immutable operation, consumes it and releases the grant. Closing the modal, changing the selected Session or resetting the connection aborts the interaction; a grant reply arriving after cancellation is also revoked. Repeated clicks do not create concurrent submissions. Revocation and closing do not retract messages that already committed.
 

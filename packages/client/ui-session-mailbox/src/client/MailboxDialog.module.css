@@ -1,27 +1,235 @@
+.dialog {
+  width: min(520px, 100%);
+  max-height: 100%;
+}
+
+.content {
+  min-height: 0;
+  overflow-y: auto;
+  --dsh-scrollbar-thumb: var(--dsw-alias-scrollbar-bg-l2);
+  --dsh-scrollbar-thumb-hover: var(--dsw-alias-scrollbar-hover-l2);
+}
+
 .body {
-  display: grid;
-  gap: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  font-size: 14px;
+  line-height: 22px;
+  color: var(--dsw-alias-label-primary);
 }
-.body label {
-  display: grid;
-  gap: 0.375rem;
+
+.notice,
+.hint,
+.empty {
+  margin: 0;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 13px;
+  line-height: 20px;
 }
-.body textarea {
-  min-height: 8rem;
-  resize: vertical;
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
 }
-.body select, .body textarea {
+
+.targetAnchor {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+}
+
+.target,
+.message {
   box-sizing: border-box;
   width: 100%;
-  color: inherit;
-  background: transparent;
+  border: 0.5px solid var(--dsw-alias-border-l4);
+  border-radius: var(--dsw-radius-md);
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
 }
-.body ul {
-  max-height: 18rem;
-  overflow: auto;
-  padding-inline-start: 1.25rem;
+
+.target {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 40px;
+  padding: 8px 12px;
+  text-align: start;
+  cursor: pointer;
 }
-.body pre {
+
+.target svg {
+  flex: none;
+}
+
+.targetTitle {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.target[data-placeholder] {
+  color: var(--dsw-alias-label-secondary);
+}
+
+.targetMenu {
+  width: min(anchor-size(width), calc(100vw - 24px));
+  max-width: min(480px, calc(100vw - 24px));
+  max-height: min(280px, calc(100dvh - 48px));
+}
+
+.message {
+  display: block;
+  min-height: 112px;
+  max-height: 224px;
+  padding: 10px 12px;
+  resize: vertical;
+}
+
+.message::placeholder {
+  color: var(--dsw-alias-label-dimmed);
+}
+
+.target:focus-visible,
+.message:focus {
+  outline: none;
+  border-color: var(--dsw-alias-state-business-primary);
+}
+
+.target:disabled,
+.message:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.sendActions,
+.receiptActions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.status {
+  margin: 0;
+  overflow-wrap: anywhere;
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.status:empty {
+  display: none;
+}
+
+.pending {
+  display: grid;
+  gap: 6px;
+  padding: 12px;
+  border-radius: var(--dsw-radius-md);
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-label-secondary);
+  font-size: 13px;
+  line-height: 20px;
+  overflow-wrap: anywhere;
+}
+
+.pending p {
+  margin: 0;
+}
+
+.pending summary {
+  cursor: pointer;
+}
+
+.pending code {
+  font-size: 12px;
+}
+
+.inbox {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-top: 16px;
+  border-top: 0.5px solid var(--dsw-alias-border-l2);
+}
+
+.inboxHeader {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.inboxHeader h3 {
+  margin: 0;
+  font-size: 14px;
+  line-height: 22px;
+  font-weight: 500;
+}
+
+.empty {
+  padding-block: 12px;
+  text-align: center;
+}
+
+.records {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.record {
+  min-width: 0;
+  padding: 12px;
+  border-radius: var(--dsw-radius-md);
+  background: var(--dsw-alias-bg-layer-1);
+}
+
+.recordHeader {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 4px 12px;
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.sender {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.receiptState {
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.recordText {
+  margin: 8px 0;
+  font: inherit;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
+}
+
+@media (hover: hover) {
+  .target:hover:not(:disabled) {
+    background: var(--dsw-alias-interactive-bg-hover);
+  }
+}
+
+@media (pointer: coarse) {
+  .target,
+  .message {
+    font-size: 16px;
+  }
 }
