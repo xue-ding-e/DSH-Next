@@ -105,7 +105,7 @@ jobs:
           -t 'profile Loader|bundled Computer Use|bundled dependency'
 
   windows-installer:
-    if: github.repository == 'xue-ding-e/DSH-Next' && github.event_name == 'workflow_dispatch'
+    if: github.repository == 'xue-ding-e/DSH-Next'
     runs-on: windows-latest
     timeout-minutes: 35
     steps:
