@@ -83,6 +83,11 @@ async function bench(): Promise<SlotTestRuntime> {
   // Directory picking goes through the probe occupant; the namespace only has
   // to be there for ui-workspace's inject to settle.
   runtime.remote.provideNamespaces({ directoryPicker: {} })
+  // The community build opens workspace folders through `remote.session`.
+  runtime.ctx.provide('remote.session', {
+    canOpenWorkspacePath: async () => ({ ok: true as const, value: false }),
+    openWorkspacePath: async () => ({ ok: true as const, value: { opened: true as const } }),
+  } as never)
   const locale = new LocaleRuntime(runtime.ctx)
   runtime.ctx.provide('locale', locale)
   runtime.slots.installLocale(locale)
@@ -130,8 +135,10 @@ describe('workspace.picker Factory', () => {
       runtime.workspaces.stub('create', () => new Promise<WorkspaceView>((settle) => { resolve = settle }))
       openMenu()
       fireEvent.click(screen.getByRole('menuitem', { name: ADD }))
-      // Raising the flow closes the menu; the occupant's pick starts the adoption.
+      // Raising the flow closes the menu; the community surface first offers its
+      // own folder-drop dialog, then hands the pick to the directory-flow occupant.
       expect(screen.queryByRole('menu')).toBeNull()
+      fireEvent.click(screen.getByRole('button', { name: '选择文件夹' }))
       fireEvent.click(screen.getByRole('button', { name: 'probe pick' }))
       expect(runtime.workspaces.calls.filter(call => call.method === 'create')).toEqual([
         { method: 'create', args: [{ path: '/tmp/project' }] },
