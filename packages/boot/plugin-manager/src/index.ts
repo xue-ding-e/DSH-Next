@@ -28,7 +28,7 @@ import {
 import { OPTIONAL_BUNDLES, OFFICIAL_ON_DEMAND_CATALOG, PROTECTED_PLUGINS } from '@deepseek-ai/dsh-official-bundles'
 import type {} from '@deepseek-ai/dsh-hmr'
 import type { ProfileContext, ProfileManifest } from '@deepseek-ai/dsh-app-boot'
-import { bundleManifest, readProfileRegistry, registryArguments, runProfilePnpm, saveManifest, viewProfilePackage } from './operations.ts'
+import { bundleManifest, installationBundle, readProfileRegistry, registryArguments, runProfilePnpm, saveManifest, viewProfilePackage } from './operations.ts'
 import { classifyInstallFailure } from './install-failure.ts'
 import { officialBundleInstallTarget } from './official-install-target.ts'
 import { dependencySpec, InvalidInstallSpecError, parseInstallSpec, pinnedGitOrigin, type ParsedInstallSpec } from './install-spec.ts'
@@ -952,7 +952,8 @@ export class PluginManager extends TypertRemoteService {
   }
 
   /**
-   * Install a package using the same pnpm implementation as dsh plugin. GitHub
+   * Select an installation-provided bundle when the spec names its package or exact version.
+   * Other bundles install using the same pnpm implementation as dsh plugin. GitHub
    * repositories get a connection check bounded by githubConnectionTimeoutMs before pnpm starts;
    * only network failures or timeouts stop installation, and a stop streams the check's diagnostic
    * as the installation's install-log run under its request id, while pnpm owns authentication and transport fallback. An
@@ -978,8 +979,32 @@ export class PluginManager extends TypertRemoteService {
       if (spec.trim() === '' || spec.startsWith('-')) throw new ManagementFailure('invalid-spec')
       if (stopped()) throw new InstallCancelledError()
       const before = readProfileManifest('dsh', this.profile.dir).dependencies ?? {}
-      // With HMR, an installed package is removed before another version is installed, so its plugins stop first.
       const known = specPackageName(spec, before, this.profile.dir)
+      if (known !== undefined) {
+        const bundled = installationBundle(known, this.profile.installAnchor)
+        if (bundled !== undefined) {
+          const { version } = bundled
+          const requested = spec.trim()
+          if (requested !== known && (version === undefined || requested !== `${known}@${version}`)) {
+            throw new ManagementFailure('already-installed')
+          }
+          if (options?.expected !== undefined && (options.expected.name !== known || options.expected.version !== version)) {
+            throw new ManagementFailure('unexpected-package')
+          }
+          control.phase = 'applying'
+          announce('applying')
+          result.bundle = known
+          if (version !== undefined) result.version = version
+          result.target = known
+          result.stage = 'enable'
+          if (options?.enabled === false) return
+          return this.configure(async () => {
+            await this.selectBundle(known, true)
+            Object.assign(result, await this.publishAndReload(this.bundleRows(known).map(row => row.id)))
+          })
+        }
+      }
+      // With HMR, an installed package is removed before another version is installed, so its plugins stop first.
       if (this.ownerContext.get('hmr') !== undefined && known !== undefined && Object.hasOwn(before, known)) {
         throw new ManagementFailure('already-installed')
       }

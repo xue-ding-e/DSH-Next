@@ -561,6 +561,21 @@ describe('runtime resolution', { concurrent: false }, () => {
     )
   })
 
+  it.each([false, true])('resolves DSH packages for the profile Loader with a declared override: %s', async (declared) => {
+    const f = fixture()
+    const name = '@deepseek-ai/dsh-core'
+    const local = join(f.profile.dir, 'node_modules', name)
+    pkg(local, name, 2)
+    if (declared) pkg(f.profile.dir, 'dsh-profile-web', 0, { [name]: '*' })
+    const registration = installRuntimeInterception(await resolutionOf(f))
+    registrations.push(registration)
+
+    const tree = `${pathToFileURL(f.profile.dir).href}/`
+    expect(registration.packageDir(name, tree)).toBe(declared ? local : f.installed)
+    expect(await importFrom(name, tree)).toMatchObject({ marker: declared ? 2 : 1 })
+    expect(await importFrom(name, pathToFileURL(join(f.profile.dir, 'ordinary.mjs')).href)).toMatchObject({ marker: 2 })
+  })
+
   it('preserves an npm alias package self-reference', async () => {
     const f = fixture()
     file(f.installAnchor, JSON.stringify({

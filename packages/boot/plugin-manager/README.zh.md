@@ -51,6 +51,8 @@ kind: "package-reference"
 
 已发布的安装提供 `package@<当前 DSH 版本>`。源码 Web 与开发 Desktop 提供 `link:<工作区包的绝对目录>`，目录来自当前 CLI 的安装位置，包括其开发符号链接。包名通过工作区清单解析；当前工作目录和预发布版本后缀不用于选择 checkout。包、bundle patch 或已构建入口缺失时报告诊断，不回退到注册表。使用 `pnpm install` 和 `pnpm run build` 准备 checkout。链接包使用该 checkout 的依赖与 peer；代码改变后仍需重新构建并重启。即使版本相同，注册表副本或其他 checkout 的链接也可能需要替换。
 
+对于 DSH 安装自带的组合包，`installBundle` 接受包名或内置的精确版本，直接选择内置副本，无需运行 pnpm。传入 `enabled: false` 会保留当前选择。`dsh plugin add` 会拒绝再安装一份内置组合包。可在「插件」中启用它，或在 profile 清单的 `dsh.profile.bundles` 中选择它。
+
 官方按需安装调用和其他组合包相同的 `installBundle` 操作。注册表目标使用 `saveExact: true`；开发目标保留普通 `link:` 依赖。显式更新先删除已安装的包，再以当前 `enabled` 选择状态安装目标；没有 HMR 时，自启动起运行的组合包无法删除，因此安装直接覆盖它并报告 `restart-required`。删除之后安装失败或被取消时，该包保持未安装，重新安装的组合包排在选择列表末尾。关闭仅取消选择配置层，移除使用原有移除检查。安装失败恢复 profile 清单和锁文件；安装成功后激活失败可能保留已保存的依赖和选择。原有 peer 兼容性检查继续生效，不增加仅针对官方条目的版本准入规则。
 
 `listBundles` 用 `update` 标明 `updateBundle` 如何替换组合包：以自身包名、按注册表 spec 保存（不是 `npm:` 别名）的第三方 profile 依赖为 `registry`，按固定到完整 40 位提交的 Git spec 保存的为 `git`；两者都要求清单声明 semver 版本，且不承载插件管理。以分支、标签或范围保存的 Git spec 不可更新，因为更新失败后重新安装它无法恢复被移除的版本。`listVersions(name, options)` 读取 `registry` 组合包较新的已发布版本。一次 `pnpm view <name> versions time dist-tags` 按注册表计划询问，计划从 `options.registry` 开始，否则从本进程上次安装该包所用的注册表开始，否则从配置的注册表开始。随后从作答的注册表逐个读取比已安装版本新的最新 `versionListLimit` 个版本，每个版本一次 `pnpm view <name>@<version>`，同时最多 `versionLookupConcurrency` 个，因为 pnpm 对范围只打印最高的匹配版本。列表按从新到旧排列，带有各版本的 dist-tag、发布时间、预发布标记、弃用说明、是否声明组合包，以及在其 `engines.dsh` 或 DSH peer 拒绝当前运行版本且没有豁免时的 `incompatible` 记录；`omitted` 统计未列出的新版本数，`attempts` 列出问过的每个注册表及其失败原因。拒绝为 `not-updatable`、`not-found`、`network` 或 `unknown`；任一版本查询失败都会拒绝整个列表。官方组合包跟随 DSH 版本，不会列出；`git` 组合包以 `not-updatable` 拒绝，因为 Git 仓库不发布版本列表，其新版本由插件索引列出。

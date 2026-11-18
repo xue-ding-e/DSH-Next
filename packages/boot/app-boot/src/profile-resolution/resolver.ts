@@ -586,9 +586,14 @@ class ResolutionRouter {
     if (layer.kind === 'linked') return this.routeLinked(request, name, parent, resolution, flavor, cjs)
 
     const target = resolution.entries.get(name)
+    // Loader trees resolve entries from a directory URL. An undeclared hoist there cannot replace a DSH package.
+    const useInstallation = target?.scope === 'installation' && layer.active && name.startsWith('@deepseek-ai/')
+      && parent.endsWith(sep) && !resolution.localPackageNames.has(name)
+      && !parent.slice(layer.localPrefix.length).split(sep).includes('node_modules')
+    const searchPaths = useInstallation ? [] : createRequire(parent).resolve.paths(name) as string[]
     const candidates: string[] = []
     const localSearchPaths: string[] = []
-    for (const searchPath of createRequire(parent).resolve.paths(name) as string[]) {
+    for (const searchPath of searchPaths) {
       if (!searchPath.startsWith(layer.localPrefix)) break
       localSearchPaths.push(searchPath)
       const candidate = localPackageCandidate(searchPath, name, flavor)

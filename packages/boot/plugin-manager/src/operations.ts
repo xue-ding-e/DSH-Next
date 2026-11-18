@@ -2,7 +2,7 @@
 import { once } from 'node:events'
 import { existsSync, readFileSync } from 'node:fs'
 import { mkdir, mkdtemp, open, rm } from 'node:fs/promises'
-import { join, resolve } from 'node:path'
+import { dirname, join, resolve } from 'node:path'
 import { execa } from 'execa'
 import type { EntryOptions } from '@deepseek-ai/cordis-plugin-loader'
 import { withFileLock, writeFileAtomic } from '@deepseek-ai/dsh-atomic-write'
@@ -82,6 +82,22 @@ export function bundleManifest(name: string, dir: string, anchor: string): Profi
   const packageDir = resolveBundleDir('dsh', name, anchor, dir)
   const manifest = readProfileManifest('dsh', packageDir)
   return manifest.dsh?.bundle?.patch === undefined ? undefined : manifest
+}
+
+/** Read a bundle supplied as a dependency of the running installation.
+ * @param name Bundle package name.
+ * @param anchor Running installation's package.json.
+ * @returns The installation's bundle manifest, or undefined for a name it does not supply as a bundle.
+ */
+export function installationBundle(name: string, anchor: string): ProfileManifest | undefined {
+  const installationDir = dirname(anchor)
+  const installation = readProfileManifest('dsh', installationDir)
+  if (!Object.hasOwn(installation.dependencies ?? {}, name)) return undefined
+  return bundleManifest(name, installationDir, anchor)
+}
+
+function bundledInstallRefusal(name: string): string {
+  return `${name} is supplied by this DSH installation. Enable it in Plugins or select it in dsh.profile.bundles.`
 }
 
 /** Atomically save a profile manifest while retaining unrelated fields.
@@ -173,17 +189,19 @@ function namedSpecs(args: readonly string[]): string[] {
  * range selects and its dsh requirements (`engines` and peerDependencies). A git or tarball spec needs the fetch itself, so the
  * check after installation is what judges it.
  * @param dir Profile directory the lookup runs in.
- * @param spec Anchored install spec.
+ * @param parsed Anchored and parsed install spec.
  * @param options Pnpm executable, prefix arguments, the caller's bound and signal.
  * @param environment Environment of the caller's pnpm invocations.
  * @param flags Flags of the run itself, so the lookup asks the registry that run will use.
  * @returns The package manifest, or undefined when reading it would need the installation itself.
  */
 async function namedSpecManifest(
-  dir: string, spec: string, options: PackageOperationOptions, environment: Readonly<Record<string, string | undefined>>,
+  dir: string,
+  parsed: ReturnType<typeof parseInstallSpec>,
+  options: PackageOperationOptions,
+  environment: Readonly<Record<string, string | undefined>>,
   flags: readonly string[],
 ): Promise<object | undefined> {
-  const parsed = parseInstallSpec(spec)
   if (parsed.kind === 'path') {
     const filename = join(parsed.path, 'package.json')
     return existsSync(filename) ? JSON.parse(readFileSync(filename, 'utf8')) as object : undefined
@@ -356,7 +374,7 @@ export async function runProfilePnpm(
     options.onOutput?.(diagnostic, 'stderr')
     append(Buffer.from(diagnostic))
     await log.close()
-    return { exitCode: 1, output: output.toString('utf8'), truncated, logPath, incompatible }
+    return { exitCode: 1, output: output.toString('utf8'), truncated, logPath, ...incompatible.length > 0 ? { incompatible } : {} }
   }
   // An install command names the packages it adds, so their manifests are read and checked before
   // pnpm runs: an incompatible version is never installed, and the one already in use keeps working.
@@ -368,8 +386,18 @@ export async function runProfilePnpm(
     // A spec whose manifest cannot be read or validated is left to the run itself and to the check
     // after installation, which reports what it could not validate.
     try {
-      const manifest = await namedSpecManifest(dir, anchorPathSpec(raw, context.cwd), options, environment, registryFlags)
+      const parsed = parseInstallSpec(anchorPathSpec(raw, context.cwd))
+      if (parsed.kind === 'registry' && installationBundle(parsed.name, context.installAnchor) !== undefined) {
+        preflight.push(bundledInstallRefusal(parsed.name))
+        continue
+      }
+      const manifest = await namedSpecManifest(dir, parsed, options, environment, registryFlags)
       if (manifest === undefined) continue
+      const name = (manifest as ProfileManifest).name
+      if (parsed.kind === 'path' && name !== undefined && installationBundle(name, context.installAnchor) !== undefined) {
+        preflight.push(bundledInstallRefusal(name))
+        continue
+      }
       const issue = evaluatePluginCompatibility(manifest, exemptions)
       if (issue !== undefined && !issue.exempted) {
         preflight.push(pluginCompatibilityWarning(issue))
@@ -507,6 +535,10 @@ export async function runProfilePnpm(
         const issues: IncompatiblePlugin[] = []
         try {
           const manifest = readProfileManifest('dsh', packageDir)
+          if (!untouched && installationBundle(name, context.installAnchor) !== undefined) {
+            fail('unexpected-package', bundledInstallRefusal(name))
+            continue
+          }
           const installedAs = `${name}@${String(manifest.version)}`
           const wanted = expected === undefined ? undefined : `${expected.name}@${expected.version}`
           // The expected package is checked even when the run left it as it was, as adding its saved spec again does.

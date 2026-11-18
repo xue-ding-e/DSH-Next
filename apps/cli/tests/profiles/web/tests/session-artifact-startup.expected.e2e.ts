@@ -47,6 +47,34 @@ async function fixture(root: string, id: string) {
 
 const history = (sessionId: string) => ({ request: { address: { kind: 'session', sessionId } } })
 
+it('opens saved sessions and workspaces with an incompatible storage package hoisted into the profile', async (test) => {
+  await withDefaultWeb(test, async ({ root, url }) => {
+    const rpc = await connect(url, test.signal)
+    expect(await rpc('session/list', { _request: {} })).toMatchObject({
+      ok: true, value: { items: [{ sessionId: restoredId }] },
+    })
+    expect(await rpc('workspace/create', { request: { path: join(root, 'project') } })).toMatchObject({
+      ok: true, value: { created: false, workspace: { title: 'project', sessionIds: [restoredId] } },
+    })
+    const newFolder = join(root, 'new-folder')
+    await mkdir(newFolder)
+    expect(await rpc('workspace/create', { request: { path: newFolder } })).toMatchObject({
+      ok: true, value: { created: true, workspace: { title: 'new-folder' } },
+    })
+  }, { prepare: async (root) => {
+    const files = await fixture(root, restoredId)
+    await writeFile(files.compressed, files.framed)
+    const name = '@deepseek-ai/dsh-storage-domain'
+    const hoisted = join(root, 'home', 'profiles', 'web', 'node_modules', name)
+    await mkdir(hoisted, { recursive: true })
+    await writeFile(join(hoisted, 'package.json'), JSON.stringify({
+      name, version: '0.0.1', type: 'module', exports: './index.js',
+      peerDependencies: { '@deepseek-ai/dsh-storage': '0.0.1' },
+    }))
+    await writeFile(join(hoisted, 'index.js'), 'throw new Error("incompatible storage provider was imported")\n')
+  } })
+})
+
 it('reports a duplicate plaintext artifact at startup without changing either file', async (test) => {
   await withDefaultWeb(test, async ({ root, url }) => {
     const rpc = await connect(url, test.signal)

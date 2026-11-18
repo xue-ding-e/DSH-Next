@@ -784,6 +784,38 @@ it('installs only valid bundle declarations and honors installation without acti
   expect((await manager.listBundles()).find(row => row.name === 'another-bundle')?.enabled).toBe(true)
 })
 
+it('enables bundled Computer Use without installing a profile copy', async () => {
+  const { manager, dir, bundle, profile, ctx } = await fixture()
+  const name = '@deepseek-ai/dsh-cua-bundle'
+  bundle(name, [{ id: 'offered-cua', name: './plugin.mjs', config: { service: 'bundledCua' } }], profile.home)
+  writeFileSync(profile.installAnchor, JSON.stringify({ name: 'installation', dependencies: { [name]: '1.0.0' } }))
+  const lockfile = join(dir, 'pnpm-lock.yaml')
+  writeFileSync(lockfile, 'existing lockfile\n')
+  const pnpm = vi.spyOn(operations, 'runProfilePnpm')
+  onTestFinished(() => { pnpm.mockRestore() })
+
+  expect(await manager.installBundle(`${name}@0.2.2-alpha.2`)).toMatchObject({
+    application: 'failed', changed: false, error: { code: 'already-installed' },
+  })
+  expect(await manager.installBundle(name, { expected: { name, version: '0.2.2-alpha.2' } })).toMatchObject({
+    application: 'failed', changed: false, error: { code: 'unexpected-package' },
+  })
+  expect(await manager.installBundle(`${name}@1.0.0`, { enabled: false })).toMatchObject({
+    application: 'applied', changed: false, stage: 'enable', bundle: name, version: '1.0.0',
+  })
+  expect(ctx.get('bundledCua')).toBeUndefined()
+  expect(await manager.installBundle(name)).toMatchObject({
+    application: 'applied', changed: true, stage: 'enable', bundle: name, version: '1.0.0',
+  })
+  expect(ctx.get('bundledCua')).toBe(true)
+  expect(pnpm).not.toHaveBeenCalled()
+  expect(readProfileManifest('test', dir)).toMatchObject({
+    dependencies: { extra: '1.0.0' }, dsh: { profile: { bundles: ['core', 'extra', name] } },
+  })
+  expect(Object.keys(readProfileManifest('test', dir).dependencies ?? {})).toEqual(['extra'])
+  expect(readFileSync(lockfile, 'utf8')).toBe('existing lockfile\n')
+})
+
 it('reports blocked scripts after a failed installation and retries only after explicit profile build approval', async () => {
   const { manager, dir, bundle } = await fixture()
   const policy = join(dir, 'pnpm-workspace.yaml')

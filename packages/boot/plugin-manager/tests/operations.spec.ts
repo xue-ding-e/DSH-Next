@@ -341,6 +341,25 @@ it('installs a compatible path spec', async () => {
   expect(readProfileManifest('test', dir).dsh?.profile?.bundles).toEqual(['plugin'])
 })
 
+it.each(['registry', 'directory', 'tarball'] as const)('refuses a bundled dependency from %s in a profile install', async (kind) => {
+  const { home, dir, context, pnpm } = fixture()
+  const name = 'bundled-plugin'
+  install(home, name)
+  writeFileSync(context.installAnchor, JSON.stringify({ dependencies: { [name]: '1.0.0' } }))
+  const manifestPath = join(dir, 'package.json')
+  const original = readFileSync(manifestPath, 'utf8')
+  const spec = kind === 'registry' ? `${name}@0.2.2-alpha.2`
+    : kind === 'directory' ? join(home, 'node_modules', name) : 'https://example.com/bundle.tgz'
+  pnpm.mutate = (target) => { install(target, name) }
+
+  const result = await runProfilePnpm(context, ['add', spec], { execution: 'service', outputBytes: 8192 })
+  expect(result.exitCode).toBe(1)
+  expect(result.output).toContain(`${name} is supplied by this DSH installation`)
+  expect(readFileSync(manifestPath, 'utf8')).toBe(original)
+  expect(command.run.mock.calls.map(call => call[1])).toEqual(kind === 'tarball'
+    ? [['add', spec], ['install', '--config.lockfile=false']] : [])
+})
+
 it('runs the install with the caller\'s flags and its path specs anchored', async () => {
   const { context, pnpm } = fixture()
   pnpm.mutate = (target) => { install(target, 'extra') }
