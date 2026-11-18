@@ -96,6 +96,13 @@ jobs:
           apps/web/tests/context-menus.e2e.ts
       - name: Verify session storage and workspace startup
         run: pnpm run test:expected apps/cli/tests/profiles/web/tests/session-artifact-startup.expected.e2e.ts
+      - name: Verify bundled plugin installation and resolution
+        run: >-
+          pnpm exec vitest run
+          packages/boot/app-boot/tests/profile-resolution.spec.ts
+          packages/boot/plugin-manager/tests/manager.spec.ts
+          packages/boot/plugin-manager/tests/operations.spec.ts
+          -t 'profile Loader|bundled Computer Use|bundled dependency'
 
   windows-installer:
     if: github.repository == 'xue-ding-e/DSH-Next' && github.event_name == 'workflow_dispatch'
