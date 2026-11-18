@@ -301,7 +301,8 @@ Manage profile files and apply their declared reload lifecycle.
 @Remote setBundleEnabled(name: string, enabled: boolean): Promise<ChangeResult>
 
 /**
- * Install a package using the same pnpm implementation as dsh plugin. GitHub
+ * Select an installation-provided bundle when the spec names its package or exact version.
+ * Other bundles install using the same pnpm implementation as dsh plugin. GitHub
  * repositories get a connection check bounded by githubConnectionTimeoutMs before pnpm starts;
  * only network failures or timeouts stop installation, and a stop streams the check's diagnostic
  * as the installation's install-log run under its request id, while pnpm owns authentication and transport fallback. An
