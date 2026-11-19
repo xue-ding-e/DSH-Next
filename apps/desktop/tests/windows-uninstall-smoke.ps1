@@ -31,7 +31,7 @@ function Wait-Text([string]$Text) {
     } while ($timer.Elapsed.TotalSeconds -lt 20)
     throw "Missing '$Text': $([InstallerCapture]::VisibleText($process.Id))"
 }
-function Wait-Exit {
+function Wait-Exit([string]$Mode) {
     if (-not $process.WaitForExit(30000)) { $process.Kill(); $process.WaitForExit(); throw 'Uninstaller timed out' }
     if ($process.ExitCode -ne 0) { throw "Uninstall failed: $($process.ExitCode)" }
     $process.Dispose()
@@ -39,7 +39,10 @@ function Wait-Exit {
     # The NSIS uninstaller hands its section to a temporary copy; the launched process exits before removal completes.
     $timer = [Diagnostics.Stopwatch]::StartNew()
     while (Test-Path -LiteralPath $installPath) {
-        if ($timer.Elapsed.TotalSeconds -gt 20) { throw 'Application directory remained' }
+        if ($timer.Elapsed.TotalSeconds -gt 20) {
+            $remaining = (Get-ChildItem -LiteralPath $installPath -Force -Name) -join ', '
+            throw "Application directory remained after $Mode uninstall. Entries: $remaining"
+        }
         Start-Sleep -Milliseconds 100
     }
 }
@@ -74,12 +77,12 @@ try {
             $welcome = Wait-Text $welcomeText
             $window = [InstallerCapture]::TopLevel($welcome)
             [void][InstallerCapture]::SaveNative($window, (Join-Path $OutputDirectory 'uninstall-welcome.png'), $false)
-            [InstallerCapture]::Click([InstallerCapture]::GetDlgItem($window, 1))
+            [InstallerCapture]::ClickDialogButton($window, 1)
             $finishedText = $copy.finished
             [void](Wait-Text $finishedText)
-            [InstallerCapture]::Click([InstallerCapture]::GetDlgItem($window, 1))
+            [InstallerCapture]::ClickDialogButton($window, 1)
         }
-        Wait-Exit
+        Wait-Exit $mode
         $retained = $mode -in @('upgrade', 'replaced')
         # A DSH_HOME inside the Electron directory protects that directory (and its scope) but not the other roots.
         $userDataRetained = $retained -or $mode -eq 'home-inside'

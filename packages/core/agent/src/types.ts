@@ -5,7 +5,7 @@
  */
 
 import type { Branded } from '@deepseek-ai/dsh-brand'
-import type { MessageId, ReasoningEffortId } from '@deepseek-ai/dsh-llm/brand'
+import type { MessageId, ReasoningEffortId } from '@deepseek-ai/dsh-llm/types'
 import type { UserMessage } from '@deepseek-ai/dsh-llm/types'
 // Type-only: the Workspace registry's archive-admission family map this registry merges `turn` into.
 import type {} from '@deepseek-ai/dsh-workspace/types'

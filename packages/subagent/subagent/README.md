@@ -25,7 +25,7 @@ Use `dsh-subagent` to delegate work through named providers and collect managed 
 <a id="use-this-package"></a>
 ## Use this package
 
-Each start accepts an optional `cwd`; relative paths resolve against the parent's current working directory, and omission captures that current directory. The child keeps its parent's origin metadata and permission roots. A child-owned directory value follows any inherited history, survives continuation and restart, and is independent of later parent changes.
+Each start accepts an optional Host-chosen `cwd`; a relative path resolves against the parent's current directory, and omission starts the child in that directory. The child keeps its parent's origin metadata and enters its starting directory through `ctx.workingDirectory.set`. A child-owned directory value follows any inherited history, survives continuation and restart, and is independent of later parent changes.
 
 This package is the contract every delegation setup shares. You enable it by mounting the service together with one or more provider backends and the model-facing delegation tool; from then on, an agent can delegate work and the service routes each request to the named provider.
 
@@ -81,7 +81,11 @@ In-process spawn accepts an independent `agentPreset`; fork and external backend
 
 `hasOwnerActivity(owner)` includes queued delivery, cold restoration, and resident or closing children. A Host delivery whose root is still being resolved counts as active until ownership is known.
 
-Starting without the `agents` service rejects with `CONTINUATION_UNAVAILABLE`; an available runtime rejects a missing or replaced parent with `UNAUTHORIZED`. Providers implementing neither execution method are rejected at registration with `UNSUPPORTED_CAPABILITY`; unsupported requested capabilities reject creation with the same code. If a provider is removed or replaced while directory resolution is pending, creation rejects with `PROVIDER_CHANGED` before invoking either provider; retry the delegation against the current registration. The caller signal cancels only unpublished work; after publication, `dispose()` cancels the exact activation and waits for its resource cleanup. Creation descendants continue independently; hosts must await `drainDescendants([root])` before disposing the root handle to stop all members and await pending startup. `result` settles after teardown and notifications, carrying output, optional structured data, and a stop reason; capture failures reject it after teardown. Cleanup failures reject `dispose()` and mark the lifecycle end as failed; the result promise and parent notification retain the captured execution result.
+Each `SubagentError` carries a code from `SubagentErrorCode`. See the conditions in [`src/error.ts`](src/error.ts). Starting without `agents` fails with `CONTINUATION_UNAVAILABLE`. A missing or replaced parent fails with `UNAUTHORIZED`. Providers that implement neither execution method fail registration with `UNSUPPORTED_CAPABILITY`, which also applies when creation requests an unsupported capability. If a provider is removed or replaced during directory resolution, creation fails with `PROVIDER_CHANGED` before dispatch. Retry against the current provider registration.
+
+Creating a child beyond the requested depth fails with `SubagentDepthError` and code `DEPTH_EXCEEDED`. An invalid runtime `subagentDepth` fails with `INVALID_DEPTH`. Selecting a preset requires the preset service (`PRESET_UNAVAILABLE`), and an unknown or unloadable preset retains the registry's `RemoteError` code. Local children require the working-directory service (`WORKING_DIRECTORY_UNAVAILABLE`). An out-of-process child needs an absolute, enterable cwd (`INVALID_CWD`). A corrupt persisted descriptor prevents cold restoration (`NOT_RESUMABLE`). Calling `structured_output` with pending input fails with `STRUCTURED_OUTPUT_PENDING_INPUT`.
+
+The caller signal cancels unpublished work. After publication, `dispose()` cancels the exact activation and waits for resource cleanup. Descendants continue independently. Hosts must await `drainDescendants([root])` before disposing the root handle to stop all members and wait for pending startups. `result` settles after teardown and notifications with output, optional structured data, and a stop reason. Capture failures reject it after teardown. Cleanup failures reject `dispose()` and mark the lifecycle end as failed. The result promise and parent notification retain the captured execution result.
 
 -----
 
@@ -120,7 +124,7 @@ This section explains how the service is built and where the observable behavior
 
 ### Provider preparation and structured output
 
-The service validates requested capabilities and binds execution to that exact provider instance before creation. The manager receives the bound operation rather than a provider lookup. Local providers supply only `prepareContinuable()`: spawn returns fresh state and fork returns a completed-turn seed. The manager captures the parent model settings, delegated permissions, and composition before creating the child. External providers retain `start()` as a transport adapter and retain their own permission systems. The common manager owns their published execution. Structured tools, instructions, validation, and terminal guards belong to one local activation; they are not persisted as resume configuration. The child can submit its structured result after consuming accepted input. Work that depends on descendants must explicitly wait for their results. Staging a result closes further input through tool-result policy and any enclosing PTC execution; a rejected result reopens input, while a committed result keeps it closed. Later cold resume has no structured schema.
+The service validates requested capabilities and binds execution to that exact provider instance before creation. The manager receives the bound operation rather than a provider lookup. Local providers supply only `prepareContinuable()`: spawn returns fresh state and fork returns an unmodified completed-turn prefix. The manager forwards that prefix as the seed and its length as the fork cut. The manager captures the parent model settings, delegated permissions, and composition before creating the child. External providers retain `start()` as a transport adapter and retain their own permission systems. The common manager owns their published execution. Structured tools, instructions, validation, and terminal guards belong to one local activation; they are not persisted as resume configuration. The child can submit its structured result after consuming accepted input. Work that depends on descendants must explicitly wait for their results. Staging a result closes further input through tool-result policy and any enclosing PTC execution; a rejected result reopens input, while a committed result keeps it closed. Later cold resume has no structured schema.
 
 External providers mint a fresh `SubagentRun.id` for each execution in the runtime's shared Session id namespace, across all parents and providers. A collision with a resident Agent, Session, or activation rejects startup with `DUPLICATE_CHILD` and disposes the new external handle without replacing the existing execution.
 
@@ -172,6 +176,20 @@ Read these pages when the package-level contract is not enough. They move from t
 <a id="model-experience"></a>
 ## Model Experience
 
+### Message authorship
+
+#### What the model sees
+
+Local continuable agents receive initial delegated tasks and later agent-to-agent messages with the `agent-message` source and the actual sender's Session id. Both start with `Agent <sender name> sent a message: ` followed by the supplied content blocks. Direct human messages keep their original content and `user` source. The child delegation-scope statement below tells the child that user messages without the agent prefix come from the human user and that it answers them in its reply. Root input and retained history are unchanged.
+
+#### Token effect
+
+One short author prefix per initial delegated task or agent-to-agent message. Human input adds no attribution tokens; the authorship rule is part of the child's fixed delegation statement.
+
+#### KV Cache effect
+
+The initial task follows any inherited history; later messages append without changing retained history.
+
 ### Settlement notice
 
 #### What the model sees
@@ -215,7 +233,7 @@ Every in-process child's runtime-context snapshot carries the `subagent:delegati
 ##### The delegation-scope statement
 
 ```markdown
-You are a delegated subagent: your permission scope was fixed when you were started and cannot be widened from inside this session — operations that require approval are rejected automatically. When the job needs access beyond that scope, do not retry the denied operation; state the limitation in your reply so the delegating agent can handle it.
+You are a delegated subagent: your permission scope was fixed when you were started and cannot be widened from inside this session — operations that require approval are rejected automatically. When the task needs access beyond that scope, do not retry the denied operation; state the limitation in your reply so the delegating agent can handle it. Messages from other agents begin with "Agent <name> sent a message:". Other user messages come from the human user, who reads this conversation directly. You can still message other agents to coordinate, but answer the human user in your reply.
 ```
 
 #### Token effect

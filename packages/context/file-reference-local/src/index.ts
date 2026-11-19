@@ -37,6 +37,13 @@ export interface Config {
   excludedDirectories?: string[]
 }
 
+type DiscoveryScope = 'working-directory' | 'confirmed-roots'
+
+interface DirectorySearches {
+  readonly key: string
+  readonly searches: Map<string, WorkspaceFileSearch>
+}
+
 /** Local-filesystem owner of the file-reference discovery service. */
 export class LocalFileReferenceService extends FileReferenceService {
   static inject = ['agents', 'workingDirectory']
@@ -48,7 +55,7 @@ export class LocalFileReferenceService extends FileReferenceService {
 
   private readonly candidateChecks = new WeakMap<FileReferenceCandidate, { agent: Agent; valid: () => boolean }>()
   private readonly config: FileSearchConfig
-  private readonly searches = new Map<Agent, { key: string; searches: Map<string, WorkspaceFileSearch> }>()
+  private readonly searches = new Map<Agent, Map<DiscoveryScope, DirectorySearches>>()
   private readonly promptFibers = new Map<Agent, ReturnType<Context['inject']>>()
   private readonly promptDisposals = new Set<Promise<void>>()
 
@@ -89,17 +96,26 @@ export class LocalFileReferenceService extends FileReferenceService {
     for (const agent of ctx.agents.list()) installPrompt(agent)
     ctx.on('agent/created', async ({ agent }) => { await installPrompt(agent) })
     ctx.on('agent/disposed', ({ agent }) => {
-      this.searches.get(agent)?.searches.forEach((search) => { search.dispose() })
+      for (const { searches } of this.searches.get(agent)?.values() ?? []) {
+        for (const search of searches.values()) search.dispose()
+      }
       this.searches.delete(agent)
       disposePrompt(agent)
     })
     ctx.on('session/event', (session, event) => {
       if (event.type !== 'tool/result') return
       const agent = ctx.agents.get(session.id)
-      if (agent !== undefined) this.searches.get(agent)?.searches.forEach((search) => { search.invalidate() })
+      if (agent === undefined) return
+      for (const { searches } of this.searches.get(agent)?.values() ?? []) {
+        for (const search of searches.values()) search.invalidate()
+      }
     })
     ctx.effect(() => async () => {
-      for (const { searches } of this.searches.values()) searches.forEach((search) => { search.dispose() })
+      for (const scopes of this.searches.values()) {
+        for (const { searches } of scopes.values()) {
+          for (const search of searches.values()) search.dispose()
+        }
+      }
       this.searches.clear()
       const promptFibers = [...this.promptFibers.values()]
       this.promptFibers.clear()
@@ -112,27 +128,36 @@ export class LocalFileReferenceService extends FileReferenceService {
 
   /** Capture exact live identity and the existing policy owner's confirmed selection, never pending roots. */
   override captureScope(agent: Agent): () => boolean {
+    return this.captureDiscoveryScope(agent, 'confirmed-roots')?.valid ?? (() => false)
+  }
+
+  private captureDiscoveryScope(agent: Agent, scope: DiscoveryScope) {
     const session = agent.session
     const workingDirectory = agent.ctx.get('workingDirectory')
-    if (workingDirectory === undefined) return () => false
+    if (workingDirectory === undefined) return undefined
     const cwd = workingDirectory.get(session)
-    const policy = agent.ctx.get('sandboxPolicy')
+    const policy = scope === 'confirmed-roots' ? agent.ctx.get('sandboxPolicy') : undefined
     const confirmed = policy?.confirmedRootsOf(session)
-    const directories = [...new Set([cwd, ...confirmed?.map(root => root.path) ?? []])]
-    const disk = directories.map(rootIdentitySync)
+    const roots = [...new Set([cwd, ...confirmed?.map(root => root.path) ?? []])]
+    const disk = roots.map(rootIdentitySync)
     const fs = identity(agent.ctx.get('fs'))
     const provider = identity(this.ctx.get('fileReferences'))
-    const directory = identity(agent.ctx.get('workingDirectory'))
-    return () => this.ctx.agents.get(agent.id) === agent && agent.session === session
+    const directory = identity(workingDirectory)
+    const confirmedStillCurrent = (): boolean => {
+      if (scope === 'working-directory') return true
+      const currentPolicy = agent.ctx.get('sandboxPolicy')
+      if (identity(currentPolicy) !== identity(policy)) return false
+      const current = currentPolicy?.confirmedRootsOf(session)
+      return confirmed === undefined || confirmed.length === 0 ? (current?.length ?? 0) === 0 : current === confirmed
+    }
+    const valid = (): boolean => this.ctx.agents.get(agent.id) === agent && agent.session === session
       && identity(this.ctx.get('fileReferences')) === provider
       && identity(agent.ctx.get('workingDirectory')) === directory
       && agent.ctx.get('workingDirectory')?.get(session) === cwd
       && identity(agent.ctx.get('fs')) === fs
-      && directories.every((root, index) => rootIdentitySync(root) === disk[index])
-      && identity(agent.ctx.get('sandboxPolicy')) === identity(policy)
-      && (confirmed === undefined || confirmed.length === 0
-        ? (agent.ctx.get('sandboxPolicy')?.confirmedRootsOf(session).length ?? 0) === 0
-        : agent.ctx.get('sandboxPolicy')?.confirmedRootsOf(session) === confirmed)
+      && confirmedStillCurrent()
+      && roots.every((root, index) => rootIdentitySync(root) === disk[index])
+    return { cwd, roots, valid }
   }
 
   /** Retain only genuine list results, including every directory and the leaf identity. */
@@ -141,24 +166,38 @@ export class LocalFileReferenceService extends FileReferenceService {
     return captured?.agent === agent ? captured.valid : () => false
   }
 
-  override async list(
+  override listWorkingDirectory(agent: Agent, query: string, signal: AbortSignal): Promise<FileReferenceCandidate[]> {
+    return this.listInScope(agent, query, signal, 'working-directory')
+  }
+
+  override list(agent: Agent, query: string, signal: AbortSignal): Promise<FileReferenceCandidate[]> {
+    return this.listInScope(agent, query, signal, 'confirmed-roots')
+  }
+
+  private async listInScope(
     agent: Agent,
     query: string,
     signal: AbortSignal,
+    scope: DiscoveryScope,
   ): Promise<FileReferenceCandidate[]> {
     const workingDirectory = agent.ctx.get('workingDirectory')
     if (workingDirectory === undefined) return []
-    const cwd = await workingDirectory.ensure(agent, signal)
-    const valid = this.captureScope(agent)
-    if (!valid()) return []
-    const roots = [...new Set([cwd, ...agent.ctx.get('sandboxPolicy')?.confirmedRootsOf(agent.session).map(root => root.path) ?? []])]
+    const ensured = await workingDirectory.ensure(agent, signal)
+    const discovery = this.captureDiscoveryScope(agent, scope)
+    if (discovery === undefined || discovery.cwd !== ensured || !discovery.valid()) return []
+    const { cwd, roots, valid } = discovery
     const key = JSON.stringify(roots)
-    let cached = this.searches.get(agent)
+    let scopes = this.searches.get(agent)
+    if (scopes === undefined) {
+      scopes = new Map()
+      this.searches.set(agent, scopes)
+    }
+    let cached = scopes.get(scope)
     if (cached?.key !== key) {
       cached?.searches.forEach((search) => { search.dispose() })
       const config = { ...this.config, maxEntries: Math.max(1, Math.floor(this.config.maxEntries / roots.length)) }
       cached = { key, searches: new Map(roots.map(root => [root, new WorkspaceFileSearch(root, config)])) }
-      this.searches.set(agent, cached)
+      scopes.set(scope, cached)
     }
     const candidates = new Map<string, FileReferenceCandidate>()
     for (const [root, search] of cached.searches) {

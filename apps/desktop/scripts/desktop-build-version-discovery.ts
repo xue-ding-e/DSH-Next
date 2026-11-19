@@ -20,7 +20,7 @@
 import { readdir } from 'node:fs/promises'
 import { parse } from 'semver'
 import { desktopBuildVersionPrefix, validateDesktopBuildVersion } from './desktop-build-version.mjs'
-import { DESKTOP_AUTO_UPDATE_ENV, resolveDesktopUploadConfig } from './desktop-auto-update-environment.mjs'
+import { DESKTOP_AUTO_UPDATE_ENV, resolveDesktopUploadConfig } from '@deepseek-ai/dsh-desktop-publisher/desktop-auto-update-environment.mjs'
 import type { DesktopPackageTargetName } from './package-target.ts'
 
 /** How long the whole bucket listing may take before the suggestion falls back to local artifacts. */
@@ -100,7 +100,7 @@ async function remoteVersions(options: DesktopBuildVersionSuggestionOptions): Pr
   const secretKey = options.environment[update.secretKeyEnvName]?.trim()
   if (secretId === undefined || secretId === '' || secretKey === undefined || secretKey === '') return undefined
   // The SDK has no per-request abort, so its own timeout is what releases an unanswered socket.
-  const { createDesktopCos, DESKTOP_COS_REGION } = await import('./desktop-cos.ts')
+  const { createDesktopCos, DESKTOP_COS_REGION } = await import('@deepseek-ai/dsh-desktop-publisher/desktop-cos.ts')
   const cos = createDesktopCos({ secretId, secretKey }, LISTING_DEADLINE_MS)
   const deadline = Date.now() + LISTING_DEADLINE_MS
   const versions: string[] = []

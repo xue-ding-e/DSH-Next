@@ -47,7 +47,7 @@ Next 安装包通过 `electron-updater` 使用 `xue-ding-e/DSH-Next` 的公开 G
 
 `electron-builder` 只为拥有更新器的打包目标写入 `app-update.yml`，因此 `--dir` 构建装出的应用会报告自己没有打包更新源并拒绝所有检查。Next 因此在 `afterPack` 中为每个目标（包括后续用于封安装包的目录构建）把 GitHub feed 封入 `resources`，使本机构建与发布产物走同一条自动更新路径。该钩子校验既有文件而非重写，因此不会与本次运行发布的 feed 产生分歧。
 
-[Next Windows 发布工作流](../../../.github/workflows/next-release.yml) 在推送到 `main` 时运行，也可以手动在 `main` 上启动。发布版本由产品版本、UTC 日期和 Actions 运行编号组成。安装包、校验和与更新清单上传齐全后，预发布版本才会公开。
+[Next Windows 发布工作流](../../../.github/workflows/next-release.yml) 在推送到 `main` 时运行，也可从 `main` 手动触发并传入完整的 `source_sha`。省略时使用事件提交。工作流只构建当前分支尖端，并在发布前再次检查。检出、发布说明与标签都指向这个提交。该提交已有公开发布时跳过构建。已有草稿时，重试沿用草稿版本。新草稿版本由产品版本、UTC 日期和 Actions 运行编号组成。安装包、校验和与更新清单上传齐全后，预发布版本才会公开。
 
 Next 默认使用 `~/.dsh-next`，也可通过绝对路径 `DSH_NEXT_HOME` 指定目录。它拒绝与官方默认 home、继承的自定义 `DSH_HOME` 或应用安装目录发生规范路径重叠，包括已有软链接或 junction 祖先。同身份重装保留数据；Next 卸载只移除应用文件，明确保留 profile、偏好设置和缓存。
 
@@ -130,9 +130,11 @@ macOS 正式发布和本地未签名 DMG 都通过 [electron-builder 配置](../
 
 ## Windows Actions 打包
 
+本节和 macOS 打包一节中的官方工作流在 Next 中仅供查阅。社区 Windows 构建使用 [Next 发布工作流](#next-distribution)。
+
 runner 的受监督启动和恢复见 [Windows runner 机器准备](../windows-signing/README.zh.md#machine-setup)。
 
-`Package Desktop · Windows` [上游工作流，Next 中已停用](../../../.github/upstream-workflows/windows-package.yml.disabled) 选择专用 Windows x64 runner 标签 `dsh-win-package-trial`，并使用机器 preset `test` 或 `production`。选择 `signed`（默认）或 `unsigned`；签名模式复用现有 EV token 预检、签名缓存与失败 interlock，不发布或上传 release。`build_version` 默认为 `auto`，使用[发布版本](#release-versions)中的 CI 标识；显式值可以是源码产品版本，或扩展构建版本，例如产品 `0.2.1-alpha.1` 对应 `0.2.1-alpha.1.20261009.1`。版本前缀必须匹配所选源码；校验错误显示其当前示例。manifest 保持不变。
+`Package Desktop · Windows · x64` [手动工作流](../../../.github/upstream-workflows/windows-package.yml.disabled) 选择专用 Windows x64 runner 标签 `dsh-win-package-trial`，并使用机器 preset `test` 或 `production`。选择 `signed`（默认）或 `unsigned`；签名模式复用现有 EV token 预检、签名缓存与失败 interlock，不发布或上传 release。`version_mode` 默认为 `default`（production 使用 `follow-dsh`，test 使用 `build-number`）；`build-number` 使用[发布版本](#release-versions)中的 CI 标识。`manual` 模式必须填写 `build_version`，其他模式忽略该字段；其值可以是源码产品版本，或扩展构建版本，例如产品 `0.2.1-alpha.1` 对应 `0.2.1-alpha.1.20261009.1`。版本前缀必须匹配所选源码；校验错误显示其当前示例。manifest 保持不变。
 
 在 Actions 选择工作流、源码分支、preset、签名模式和版本，再点击 Run workflow。输入变更合并前，用 `gh workflow run windows-package.yml --ref <branch> -f source_ref=<branch> -f preset=test -f signing=unsigned -f version_mode=build-number` 测试已推送分支；合并后验证网页表单。它不监听 push 或 PR。日志和成功生成的 EXE 保留 14 天。依赖打包流程前检查日志和安装包；安装是独立操作。检出前，Node 删除 runner 专用源码目录，不跟随依赖 junction；工作流校验目标位置并拒绝链接祖先目录。不得指向日常开发目录。运行共享一个并发组，不取消正在进行的构建；最多保留一个待运行任务，新触发会替换它。仅在成功完成干净检出后上传诊断。机器配置位于 checkout 之外，不作为产物上传。
 
@@ -150,7 +152,11 @@ runner 的受监督启动和恢复见 [Windows runner 机器准备](../windows-s
 
 ## macOS 自托管打包
 
-`Package Desktop · macOS` [上游工作流，Next 中已停用](../../../.github/upstream-workflows/macos-package.yml.disabled) 使用带有 `dsh-mac-package-trial` 标签的 Apple Silicon runner。它选择 `test` 或 `production`，以 UTC 日期、运行编号和重试次数解析 `build_version=auto`，并复用现有签名、公证和打包运行时检查。安装包上传关闭重复 ZIP 压缩；诊断日志保留普通压缩。成功的 DMG／ZIP 与诊断日志保留 14 天；工作流不发布 release。操作人员须注册 runner，并验收完整 Actions 运行后再依赖该流程。 `zip_compression_level` 下拉选项默认为 `3`，也可选择 `7`；本次运行以该选项覆盖机器预设，只影响 ZIP 和自动升级下载，不影响 DMG。
+[Apple Silicon 工作流](../../../.github/upstream-workflows/macos-package.yml.disabled)与 [Intel 工作流](../../../.github/upstream-workflows/macos-intel-package.yml.disabled)在带有 `dsh-mac-package-trial` 标签的 Apple Silicon runner 上分别生成 arm64 和 x64 安装包，两者共用一个并发组。Intel 工作流在安装依赖前检查 Rosetta 能否执行；所选源码必须包含按目标架构校验的 macOS CI 适配脚本。两者均选择 `test` 或 `production`，并复用现有签名、公证和打包运行时检查。所选源码的 dsh 随附 Computer Use 组合包时，两者都在配置检查之后用 `scripts/cua-helper/package.ts` 和 `stage.ts` 构建、公证并放入两种架构的 helper，与 npm 发布的步骤相同；`skip_notarization` 不会跳过 helper 的公证。源码早于 helper 打包支持时只输出警告，该安装包中的 Computer Use 无法准备 helper。DMG、更新 ZIP、元数据 ZIP 和诊断日志可独立下载，保留 14 天，不发布 release。三个安装包相关产物共用前缀 `macos-<arch>-<mode>-<version>-<run_id>-<package_run_attempt>`（`arch` 为 `arm64` 或 `x64`），分别追加 `.dmg`、`-update.zip` 或 `-metadata.zip`。安装时只需下载 DMG。DMG 和更新 ZIP 的字节与原件一致，下载名包含原构建身份，不再套额外 ZIP，不保留下载副本的本地修改时间。元数据 ZIP 包含未修改的 manifest，以及当前模式生成的 blockmap、更新 YAML 和发布记录；manifest 中的名称指向原始留存文件。COS 发布和 rollout 继续使用打包机器上的这些原始文件。操作人员须验收完整 Actions 运行及目标架构上的安装，才能确认可交付。`compression_level` 下拉选项默认为 `3`，也可选择 `7`；本次运行以该选项覆盖机器预设，只影响 ZIP 和自动升级下载，不影响 DMG。
+
+两个 macOS 工作流都要求仓库变量 `DESKTOP_PUBLISH_RUNNERS`，包括 test 和未公证模式。独立 `upload-artifact` job 的安装包名称保留原构建 attempt。准备成功后优先上传 DMG；除非 job 被取消，单个上传失败不会跳过其他上传。打包成功但归档失败时，仅重跑该 job，以相同名称覆盖产物。参见[原机器路由与恢复](../publishing/ci/README.zh.md#recovery-and-records)。
+
+三个平台的表单均依次展示源码、环境、升级通道、版本模式、手动版本号、测试 release ID 和压缩等级，默认值一致。macOS 公证选项和 Windows 签名、缓存测量选项位于公共字段之后。
 
 运行 `node apps/desktop/scripts/setup-macos-packaging.mjs "$HOME/dsh-ci"` 创建私有 `runner/`、`packaging/{presets,secrets,certificates}` 和 `cache/macos-signatures` 目录，不覆盖已有文件；追加 `--check` 仅检查。在 checkout 外填写 [preset](../config/macos-packaging/test.env.example) 和[签名](../config/macos-packaging/macos-signing.env.example)模板，将秘密和证书文件权限设为 `0600`。`DSH_PACKAGING_CONFIG_DIR` 指定 `packaging` 的绝对目录，`DSH_PACKAGING_PRESET` 选择其中的 preset；缺少文件立即失败，不回退到 `.env.macos`。Mac 签名和仅准备构建读取 `secrets/macos-signing.env`，相对凭据路径以该文件所在目录为基准。公开 preset 拒绝签名凭据，签名文件不能覆盖公开配置。本地未签名 Mac 构建保留无需配置的行为。
 
@@ -271,7 +277,7 @@ Desktop 在本地打包工作区包，并通过目标捆绑的 Node 和 pnpm 安
 
 [Electron 外壳文件清单](../scripts/electron-builder-config.mjs)从单独收集的 `resources/app.asar/node_modules` 依赖中排除已识别的 JavaScript/CSS/TypeScript source map 和 TypeScript 构建缓存。这些排除规则保留运行时代码、原生模块、WASM、数据文件（包括普通 `.map` 资源）、许可证和 notices；[外壳归档测试](../tests/shell-file-selection.spec.ts)检查保留文件的字节和排除项。
 
-[Office 转换提供方](../../../packages/document/office-kit/README.zh.md)是 web-app 挂载的 Host 服务，因此所有加载 web-app 的应用（包括 `dsh web` 和 Desktop）都提供它以及 [Office 工具](../../../packages/document/tool-office/README.zh.md)。该提供方[自行解析 Kit 的引擎](../../../packages/document/office-kit/README.zh.md#understand-the-implementation)，包括把原生引擎清单映射到解包后的实体目录。Desktop 打包只负责携带和解包引擎：携带目标声明的原生引擎；kit 未声明匹配的原生目标时携带 WASM；目标引擎缺失时，准备阶段在打包前拒绝。完整的 Office 依赖（包括 JavaScript 库以及所选引擎的可执行文件、数据、许可证和声明）解包到 `resources/app.asar.unpacked/dsh/node_modules/` 下。Desktop 壳在 [main.ts](../src/main.ts) 中把主运行时位置传给 Host，由 Host 设为 `DSH_PRIMARY_RUNTIME`；两者都不传 Kit 位置。所有加载 web-app 的应用都提供 Office 技能，Desktop 从 `resources/app.asar` 内的技能包读取它们；只有 Desktop 挂载内置 Python 环境（`workspace-dependencies`）。在 macOS 上，原生 helper 获得 [LibreOffice UNO 桥](https://github.com/LibreOffice/core/blob/master/sysui/desktop/macosx/hardened_runtime.xcent.in)所需的 JIT 权限。`@deepseek-ai/dsh-experimental-cua-macos/native/bin` 下的 Computer Use helper 应用也整体解包到 `resources/app.asar.unpacked/dsh/node_modules/` 下，提供方打开该副本。
+[Office 转换提供方](../../../packages/document/office-kit/README.zh.md)是 web-app 挂载的 Host 服务，因此所有加载 web-app 的应用（包括 `dsh web` 和 Desktop）都提供它以及 [Office 工具](../../../packages/document/tool-office/README.zh.md)。该提供方[自行解析 Kit 的引擎](../../../packages/document/office-kit/README.zh.md#understand-the-implementation)，包括把原生引擎清单映射到解包后的实体目录。Desktop 打包只负责携带和解包引擎：携带目标声明的原生引擎；kit 未声明匹配的原生目标时携带 WASM；目标引擎缺失时，准备阶段在打包前拒绝。完整的 Office 依赖（包括 JavaScript 库以及所选引擎的可执行文件、数据、许可证和声明）解包到 `resources/app.asar.unpacked/dsh/node_modules/` 下。Desktop 壳在 [main.ts](../src/main.ts) 中把主运行时位置传给 Host，由 Host 设为 `DSH_PRIMARY_RUNTIME`；两者都不传 Kit 位置。所有加载 web-app 的应用都提供 Office 技能，Desktop 从 `resources/app.asar` 内的技能包读取它们；只有 Desktop 挂载内置 Python 环境（`workspace-dependencies`）。在 macOS 上，原生 helper 获得 [LibreOffice UNO 桥](https://github.com/LibreOffice/core/blob/master/sysui/desktop/macosx/hardened_runtime.xcent.in)所需的 JIT 权限。`@deepseek-ai/dsh-cua-macos/native/bin` 下的 Computer Use helper 应用也整体解包到 `resources/app.asar.unpacked/dsh/node_modules/` 下，提供方打开该副本。
 
 打包应用运行编译后的 JavaScript 和预生成的 Typert 元数据，不编译 TypeScript 插件。源码级调试导航和编辑器声明仍可从开发包中获取。[复制规则测试](../tests/runtime-file-policy.spec.ts)覆盖排除项和保留资源；[产物 smoke](../tests/fixtures/runtime-payload-smoke.mjs) 在 Host smoke 和最终清单验证之前，使用 Electron RunAsNode 执行。产物 smoke 解析搜索工具使用的 ripgrep 可执行文件，并验证文本搜索和文件枚举。Windows 签名构建在依赖签名后运行这些检查；其他构建在 `prepare:dsh` 中运行。[Host smoke](../scripts/smoke-runtime.ts) 使用捆绑的 Python 创建 DOCX、XLSX 和 PPTX 输入，并通过真实 Office 提供方逐一执行：PDF 转换、PNG 渲染、转换为对应的 OpenDocument 格式，以及针对 XLSX 的重算，检查每个输出的签名。每个组装后的应用（包括目录包和未签名构建）都会针对 ASAR 重复产物和 Host 检查。归档完整性检查将归档内完整描述符与准备结果比对，并核对归档和解包目录中的文件内容与清单、归档内文件记录的执行标志，以及解包文件的物理权限。转换失败会在写入发布记录前终止打包；macOS DMG/ZIP 构建在公证前执行这些检查。
 

@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { SessionFace } from '@deepseek-ai/dsh-api-session-controller/client'
 import type { ImageAttachmentRef } from '@deepseek-ai/dsh-attachment'
-import { MessageId } from '@deepseek-ai/dsh-llm/brand'
+import { brandString } from '@deepseek-ai/dsh-brand'
+import type { MessageId } from '@deepseek-ai/dsh-llm/types'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import { RemoteError } from '@deepseek-ai/dsh-typert-protocol'
 import { canEditUserMessage, createUserMessageEdit } from '../src/client/chat/user-message-edit.ts'
@@ -13,7 +14,7 @@ const IMAGE: ImageAttachmentRef = {
   bytes: 1, width: 1, height: 1, name: 'diagram.png',
 }
 const MESSAGE: UserMessageNode = {
-  kind: 'user', seq: 7, time: 1000, messageId: MessageId('message-to-edit'), source: { kind: 'user' },
+  kind: 'user', seq: 7, time: 1000, messageId: brandString<MessageId>('message-to-edit'), source: { kind: 'user' },
   content: [{ type: 'text', text: 'original' }, { type: 'image', attachment: IMAGE }],
 }
 

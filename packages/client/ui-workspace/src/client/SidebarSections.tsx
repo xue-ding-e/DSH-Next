@@ -14,7 +14,7 @@ import css from './SidebarSections.module.css'
 /** Framework data and viewing actions shared by the three sidebar projections. */
 export type SidebarSectionsProps = SidebarSessionProps & Pick<WorkspaceBrowserProps,
   'wide' | 'useStore' | 'actions' | 'startSession' | 'requestSidebarSection'
-  | 'useSidebarSectionRequest' | 'closeSidebarSectionRequest' | 'requestSearch'>
+  | 'useSidebarSectionRequest' | 'closeSidebarSectionRequest' | 'requestSearch' | 'useRemoteAccess'>
 
 /**
  * Render a collapsible heading and its content in the same scrolling list.
@@ -22,7 +22,7 @@ export type SidebarSectionsProps = SidebarSessionProps & Pick<WorkspaceBrowserPr
  * @returns the section with portaled menus and independent header hit targets.
  */
 export function SidebarSectionFrame({ title, sectionId, expanded, onToggle, onNew, menuItems = [], selectedIds,
-  onMenuSelect, children, trailing, onAppend, ...props }: Pick<SidebarSectionsProps, 't' | 'useSessions'> & {
+  onMenuSelect, children, trailing, onAppend, ...props }: Pick<SidebarSectionsProps, 't' | 'useSessions' | 'useRemoteAccess'> & {
     title: string
     sectionId: string
     expanded: boolean
@@ -39,6 +39,7 @@ export function SidebarSectionFrame({ title, sectionId, expanded, onToggle, onNe
   const bodyId = useId()
   const [menuOpen, setMenuOpen] = useState(false)
   const list = props.useSessions(state => state)
+  const canStartSession = props.useRemoteAccess('session/create')
   return <section className={clsx(css.section, !expanded && css.collapsed)} aria-labelledby={headingId}
     data-sidebar-section={sectionId} data-sidebar-recent={sectionId === 'recent' ? '' : undefined}>
     <div className={css.header} data-sidebar-section-header="">
@@ -58,7 +59,7 @@ export function SidebarSectionFrame({ title, sectionId, expanded, onToggle, onNe
             </button>
           </Tooltip>} />}
         {trailing}
-        {onNew !== undefined && <Tooltip label={props.t('actions.newSession')} side="bottom" portal>
+        {canStartSession && onNew !== undefined && <Tooltip label={props.t('actions.newSession')} side="bottom" portal>
           <button type="button" className={css.iconButton} aria-label={props.t('actions.newSession')} onClick={onNew}>
             <IconNewChatOutlineRegular size={16} />
           </button>

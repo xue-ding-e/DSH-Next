@@ -16,11 +16,12 @@ export interface DesktopElectronBuilderConfig {
     { readonly from: string, readonly to: 'dsh/node_modules', readonly filter: readonly ['**/*'] },
   ]
   readonly extraMetadata: {
+    readonly version: string
     readonly dshDesktopAppId: string
     readonly dshDesktopUpdateChannel: string
     readonly name?: string
     readonly productName?: string
-    readonly dshNext?: { readonly schemaVersion: 1; readonly repository: string; readonly repositoryId: number; readonly updateMode: 'manual' }
+    readonly dshNext?: { readonly schemaVersion: 1; readonly repository: string; readonly repositoryId: number; readonly updateMode: 'auto' }
   }
   readonly asarUnpack: readonly string[]
   readonly extraResources: readonly [
@@ -56,6 +57,8 @@ export interface DesktopElectronBuilderConfig {
   readonly nsis: {
     readonly guid?: string
     readonly uninstallDisplayName: '${productName}'
+    readonly installerSidebar: string
+    readonly uninstallerSidebar: string
     readonly include: string
     readonly oneClick: false
     readonly perMachine: false
@@ -68,7 +71,10 @@ export interface DesktopElectronBuilderConfig {
   readonly afterPack: (context: AfterPackContext) => Promise<void>
   readonly afterSign: (context: AfterPackContext) => Promise<void>
   readonly artifactBuildCompleted: (artifact: { readonly file: string }) => Promise<void> | undefined
-  readonly publish: readonly [{ readonly provider: 'generic', readonly url: string }] | null
+  readonly publish: readonly [
+    { readonly provider: 'generic', readonly url: string }
+    | { readonly provider: 'github', readonly owner: string, readonly repo: string, readonly releaseType: 'prerelease', readonly channel: string },
+  ] | null
 }
 
 /**

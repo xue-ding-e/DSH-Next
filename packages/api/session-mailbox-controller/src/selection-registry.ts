@@ -1,6 +1,7 @@
 /** Bounded Host-owned route grants. Wire fields never manufacture browser authority. */
 import { randomUUID } from 'node:crypto'
 import type { Context } from '@deepseek-ai/cordis'
+import type { ConnectionAuthentication } from '@deepseek-ai/dsh-client-connection'
 import type { PeerScope } from '@deepseek-ai/dsh-typert-protocol'
 import { brandString } from '@deepseek-ai/dsh-brand'
 import { MailboxError, type MailboxId } from '@deepseek-ai/dsh-session-mailbox'
@@ -8,6 +9,7 @@ import { MailboxOutcomeUnavailableError, type HostMailboxAdapter } from '@deepse
 import type { MailboxOperation, MailboxRoute } from './types.ts'
 
 interface Grant {
+  readonly peer: PeerScope
   readonly route: MailboxRoute
   readonly cancel: AbortController
   readonly expires: number
@@ -16,32 +18,37 @@ interface Grant {
 interface Selection { readonly grant: Grant; readonly token: object }
 
 /**
- * One Host's short-lived grants. The captured browser Peer is supplied by Connection,
- * not by a method argument. Browser tabs share that principal and are not isolated.
+ * Short-lived grants for the Host's authenticated owner browsers. Each grant belongs to the exact Peer that issued it.
  */
 export class MailboxSelectionRegistry {
   private readonly grants = new Map<string, Grant>()
   private readonly selections = new Map<string, Selection>()
   private closed = false
 
-  /** @param browserPeer - exact Host Connection browser Peer, never a reconstructed identity.
+  /**
+   * @param authentication - Host verifier registry that owns authenticated browser Peers.
    * @param adapter - privately owned queue-only adapter.
    */
   constructor(
-    private readonly browserPeer: PeerScope,
+    private readonly authentication: Pick<ConnectionAuthentication, 'isAuthenticatedBrowserPeer'>,
     private readonly adapter: HostMailboxAdapter,
   ) {}
 
   /**
- * Admit a live invocation from the authenticated browser.
- * @param ctx - invocation Context.
- */
-  requireBrowser(ctx: Context): void {
+   * Admit a live invocation from the authenticated owner browser.
+   * @param ctx - invocation Context.
+   * @returns the Peer authorized for this call.
+   */
+  requireBrowser(ctx: Context): PeerScope {
     const call = ctx.invocation
-    if (this.closed || !call || call.peer !== this.browserPeer || call.signal.aborted
-      // oxlint-disable-next-line typescript/no-unnecessary-condition -- principal kinds are extensible in Host assemblies.
-      || this.browserPeer.signal.aborted || call.peer.principal.kind !== 'owner') throw new MailboxError('denied')
+    if (call === undefined || call.signal.aborted || !this.isOwnerBrowser(call.peer)) throw new MailboxError('denied')
     this.sweep()
+    return call.peer
+  }
+
+  private isOwnerBrowser(peer: PeerScope): boolean {
+    // oxlint-disable-next-line typescript/no-unnecessary-condition -- principal kinds are extensible in Host assemblies.
+    return !this.closed && peer.principal.kind === 'owner' && this.authentication.isAuthenticatedBrowserPeer(peer)
   }
 
   /** Expiration aborts active leases as well as removing unclaimed selections. */
@@ -66,7 +73,7 @@ export class MailboxSelectionRegistry {
  * @returns an expiring handle bound to the browser Peer.
  */
   grant(ctx: Context, route: MailboxRoute): string {
-    this.requireBrowser(ctx)
+    const peer = this.requireBrowser(ctx)
     if (!route.target || route.target.length > 256
       || route.action === 'send' && (!route.source || route.source.length > 256 || route.source === route.target)) throw new MailboxError('denied')
     if (this.grants.size >= 32) throw new MailboxError('denied')
@@ -77,7 +84,7 @@ export class MailboxSelectionRegistry {
     }, 30_000)
     timer.unref()
     this.grants.set(handle, {
-      route: Object.freeze({ ...route }), cancel: new AbortController(), expires: performance.now() + 30_000, timer,
+      peer, route: Object.freeze({ ...route }), cancel: new AbortController(), expires: performance.now() + 30_000, timer,
     })
     return handle
   }
@@ -90,9 +97,11 @@ export class MailboxSelectionRegistry {
  * @returns its single-use selection handle.
  */
   prepare(ctx: Context, handle: string, operation: MailboxOperation): string {
-    this.requireBrowser(ctx)
+    const peer = this.requireBrowser(ctx)
     const grant = this.grants.get(handle)
-    if (!grant || grant.route.action !== operation.action || this.selections.size >= 64) throw new MailboxError('denied')
+    if (grant === undefined || grant.peer !== peer || grant.route.action !== operation.action || this.selections.size >= 64) {
+      throw new MailboxError('denied')
+    }
     if (operation.action === 'send' && (operation.requestId.length === 0 || operation.requestId.length > 256
       || Buffer.byteLength(operation.text, 'utf8') > 16_384)) throw new MailboxError('denied')
     if (operation.action === 'ack' && (!operation.id || operation.id.length > 256)) throw new MailboxError('denied')
@@ -113,10 +122,12 @@ export class MailboxSelectionRegistry {
  * @returns the current inbox or the durable receipt.
  */
   async execute(ctx: Context, handle: string): ReturnType<HostMailboxAdapter['execute']> {
-    this.requireBrowser(ctx)
+    const peer = this.requireBrowser(ctx)
     const selected = this.selections.get(handle)
+    if (selected === undefined || selected.grant.peer !== peer || selected.grant.cancel.signal.aborted) {
+      throw new MailboxError('denied')
+    }
     this.selections.delete(handle)
-    if (!selected || selected.grant.cancel.signal.aborted) throw new MailboxError('denied')
     let result: Awaited<ReturnType<HostMailboxAdapter['execute']>>
     try { result = await this.adapter.execute(ctx, selected.token) } catch (error) {
       this.requireBrowser(ctx)
@@ -124,7 +135,7 @@ export class MailboxSelectionRegistry {
       throw error
     }
     this.sweep()
-    if (this.isRevoked(selected.grant) || this.closed || ctx.invocation?.signal.aborted) {
+    if (this.isRevoked(selected.grant) || !this.isOwnerBrowser(peer) || ctx.invocation?.signal.aborted) {
       if (selected.grant.route.action !== 'inbox') throw new MailboxOutcomeUnavailableError()
       throw new MailboxError('denied')
     }
@@ -139,9 +150,9 @@ export class MailboxSelectionRegistry {
  * @param handle - issued route handle.
  */
   revoke(ctx: Context, handle: string): void {
-    this.requireBrowser(ctx)
+    const peer = this.requireBrowser(ctx)
     const grant = this.grants.get(handle)
-    if (grant) this.remove(handle, grant)
+    if (grant?.peer === peer) this.remove(handle, grant)
   }
 
   /** Host unload invalidates all outstanding browser grants. */

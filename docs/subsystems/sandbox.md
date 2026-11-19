@@ -40,7 +40,7 @@ type SandboxEnforcement = 'full' | 'partial'
 
 ## Per-call policy
 
-The complete execution policy is resolved and carried per capability call. It includes `danger-full-access` so a consumer can resolve policy once before deciding whether to bypass confinement. Normal tool calls derive `workspaceRoot` from the calling session's immutable cwd; deployment configuration supplies the agentless fallback and explicit additional write grants. Under `workspace-write`, the calling Session's registered Workspace also grants access to its current source directories; removing a source withdraws that additional grant on the next call. Read-only mode remains read-only. Live Session registrations add effect-scoped directories to subsequent resolutions. The resolver preserves absolute execution-world spelling. Enforcing providers canonicalize the root where the files exist, so a cwd containing `symlink/..` identifies the directory where the paired subprocess provider actually runs.
+Each capability call carries its resolved execution policy, including `danger-full-access`. The calling Session's working directory supplies `workspaceRoot`. Without the working-directory service, the Session header supplies the directory. Calls without either directory use the configured root. A Host move changes the root used by subsequent calls. Under `workspace-write`, the Session's registered Workspace also grants writes to its current source directories. Removing a source or unloading the registry withdraws that extra grant on the next call. The resolver snapshots configured grants, confirmed Session write selections, and active Session registrations for the call. It preserves absolute execution-world spelling. Enforcing providers canonicalize the root where the files exist, so a cwd containing `symlink/..` identifies the directory where the paired subprocess provider actually runs.
 
 ```ts type-equiv
 /**
@@ -77,7 +77,7 @@ interface SandboxExecutionPolicy {
 ```ts type-equiv
 /** Inputs that select the sandbox policy for one capability call. */
 interface SandboxPolicyRequest {
-  /** Calling session; its immutable cwd supplies the root and its Workspace supplies current sources. */
+  /** Calling session. Its current directory supplies the root and its Workspace supplies current sources. */
   session?: Session
   /** Explicit approved mode override, which outranks session policy. */
   mode?: SandboxMode
@@ -208,22 +208,22 @@ Source: [`packages/sandbox/sandbox/src/index.ts`](../../packages/sandbox/sandbox
 
 ### `ctx.sandboxPolicy` — `SandboxPolicyService`
 
-The sandbox-policy service (`ctx.sandboxPolicy`). Owns the deployment default mode, fallback workspace root, session-scoped directory grants, and request-time policy section. Tool layers call resolve for each execution so a session's mode log and immutable cwd travel together to every enforcing capability.
+The sandbox-policy service (`ctx.sandboxPolicy`). Owns the deployment default mode, fallback workspace root, session-scoped directory grants, and request-time policy section. Tool layers call resolve for each execution so a session's mode and current directory reach every enforcing capability.
 
 ```ts cordis-catalog
 /**
  * Resolve the complete policy for one capability call. An approved explicit
  * mode outranks the session's last `sandbox/mode` event, which outranks the
- * deployment default. The immutable session cwd supplies the root, falling
- * back to configuration when absent. Under workspace-write, the optional
- * Workspace registry adds the owning Workspace's current source directories
- * to configured extra roots; removal or registry unload withdraws those
- * derived grants on the next call without changing the session root.
- * This Session's active registrations are snapshotted with those roots;
- * existing operations and processes keep their resolved policy.
+ * deployment default. The session's Host-managed working directory supplies the workspace-write
+ * root. Without the service, the session header supplies it when present. Otherwise the
+ * configured root applies. The owning Workspace contributes current source directories distinct
+ * from the current and original Session directories. Removing a source or unloading the registry
+ * withdraws that directory on the next call.
+ * Configured directories, live registrations, and confirmed grants are resolved per call.
+ * Existing operations and processes keep their resolved policy.
  * @param request - optional session and approved mode override.
  * @returns the fully resolved per-call mode and absolute workspace root.
- * @throws `SandboxInvalidRootError` (`SANDBOX_INVALID_ROOT`) when the session's recorded cwd is
+ * @throws `SandboxInvalidRootError` (`SANDBOX_INVALID_ROOT`) when the session's directory is
  *   relative or contains a NUL byte.
  */
 resolve(request: SandboxPolicyRequest = {}): SandboxExecutionPolicy

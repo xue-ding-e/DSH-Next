@@ -2,7 +2,8 @@ import { describe, expect, it, onTestFinished, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import { AgentModel, type Agent } from '@deepseek-ai/dsh-agent'
 import { AttachmentId, type FileAttachmentRef } from '@deepseek-ai/dsh-attachment'
-import { MessageId } from '@deepseek-ai/dsh-llm/brand'
+import { brandString } from '@deepseek-ai/dsh-brand'
+import type { MessageId } from '@deepseek-ai/dsh-llm/types'
 import { Session, SessionId, SessionStore, type UserMessage } from '@deepseek-ai/dsh-session'
 import { SessionQueryEngine, type SessionObservation } from '@deepseek-ai/dsh-session-query'
 import type {} from '@deepseek-ai/dsh-client-connection'
@@ -12,7 +13,7 @@ import { FileUploads } from '../src/index.ts'
 
 const FILE: FileAttachmentRef = { attachmentId: AttachmentId('history-file'), name: 'report.csv', bytes: 3 }
 const MESSAGE: UserMessage = {
-  id: MessageId('human-with-file'), role: 'user', source: { kind: 'user' },
+  id: brandString<MessageId>('human-with-file'), role: 'user', source: { kind: 'user' },
   content: [{ type: 'text', text: 'Original request' }, { type: 'file', attachment: FILE }],
 }
 
@@ -42,8 +43,8 @@ function fixture() {
   const query = new HistoryQuery(ctx)
   const source = sessions.create(SessionId('source'))
   source.append('user/message', MESSAGE, { surfaceOp: 'append' })
-  source.append('user/message', { ...MESSAGE, id: MessageId('other-message'), content: [{ type: 'text', text: 'No file' }] }, { surfaceOp: 'append' })
-  source.append('user/message', { ...MESSAGE, id: MessageId('injected'), source: { kind: 'system-prompt' } }, { surfaceOp: 'append' })
+  source.append('user/message', { ...MESSAGE, id: brandString<MessageId>('other-message'), content: [{ type: 'text', text: 'No file' }] }, { surfaceOp: 'append' })
+  source.append('user/message', { ...MESSAGE, id: brandString<MessageId>('injected'), source: { kind: 'system-prompt' } }, { surfaceOp: 'append' })
   const target = agentFor(ctx, sessions.create(SessionId('child')))
   const sourceAgent = agentFor(ctx, source)
   const live = new Map([[target.id, target], [sourceAgent.id, sourceAgent]])
@@ -89,7 +90,7 @@ describe('history-authorized file restaging', () => {
   it('preserves distinct stored names when one human message repeats the same file bytes', async () => {
     const f = fixture()
     const renamed = { ...FILE, name: 'second-report.csv' }
-    const repeated = { ...MESSAGE, id: MessageId('repeated-file'), content: [
+    const repeated = { ...MESSAGE, id: brandString<MessageId>('repeated-file'), content: [
       { type: 'file' as const, attachment: FILE }, { type: 'file' as const, attachment: renamed },
     ] }
     f.source.append('user/message', repeated, { surfaceOp: 'append' })
@@ -107,9 +108,9 @@ describe('history-authorized file restaging', () => {
     for (const request of [
       { ...f.request, sourceSessionId: other.id },
       { ...f.request, sourceSessionId: SessionId('missing') },
-      { ...f.request, messageId: MessageId('missing') },
-      { ...f.request, messageId: MessageId('other-message') },
-      { ...f.request, messageId: MessageId('injected') },
+      { ...f.request, messageId: brandString<MessageId>('missing') },
+      { ...f.request, messageId: brandString<MessageId>('other-message') },
+      { ...f.request, messageId: brandString<MessageId>('injected') },
       { ...f.request, attachmentId: AttachmentId('different-file') },
       { ...f.request, contentIndex: 0 },
       { ...f.request, contentIndex: 9 },
@@ -133,7 +134,7 @@ describe('history-authorized file restaging', () => {
     onTestFinished(() => { spy.mockRestore() })
     const signal = new AbortController().signal
     await f.service.stageHistory(f.target, f.request, signal)
-    await expect(f.service.stageHistory(f.target, { ...f.request, messageId: MessageId('missing') }, signal)).rejects.toThrow()
+    await expect(f.service.stageHistory(f.target, { ...f.request, messageId: brandString<MessageId>('missing') }, signal)).rejects.toThrow()
     expect(spy).toHaveBeenCalledWith(f.source.id, { projectionMode: 'none', signal })
     expect(released).toHaveBeenCalledTimes(2)
   })

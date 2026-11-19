@@ -26,6 +26,8 @@ const product = JSON.parse(await readFile(join(root, 'package.json'), 'utf8')).v
 const releaseVersion = `${desktopBuildVersionPrefix(product)}20261104.12`
 const releaseChannel = desktopBuildVersionChannel(releaseVersion)
 const commit = 'abcdef1234567'
+const sourceSha = commit.padEnd(40, '0')
+const workflow = load(await readFile(join(root, '.github/workflows/next-release.yml'), 'utf8'))
 const nativeConfig = new URL('../tsdown.config.ts', import.meta.url).href
 const clientMetadata = new URL('../src/client-metadata.ts', import.meta.url).href
 const tsdown = fileURLToPath(import.meta.resolve('tsdown/run'))
@@ -148,8 +150,7 @@ test('the real GitHub provider selects Next rc metadata and compares the complet
   }
 })
 
-test('release asset verification rejects either client version disagreeing with the published version', async () => {
-  const workflow = load(await readFile(join(root, '.github/workflows/next-release.yml'), 'utf8'))
+test('release asset verification checks the client version, display version and source commit', async () => {
   const verify = workflow.jobs.windows.steps.find(step => step.name === 'Verify release asset').run
   const temporary = await mkdtemp(join(tmpdir(), 'dsh-next-release-verification-'))
   try {
@@ -160,10 +161,10 @@ test('release asset verification rejects either client version disagreeing with 
     // Only the workflow's metadata verifier reads these fixture bytes; they are never an executable installer.
     await writeFile(join(artifacts, `dsh-next-${releaseVersion}-win-x64-unsigned.exe`), 'synthetic artifact bytes')
     const invoke = () => execFileSync('pwsh', ['-NoProfile', '-NonInteractive', '-Command', verify], {
-      cwd: temporary, env: { ...system, NEXT_VERSION: releaseVersion, NEXT_CHANNEL: releaseChannel },
+      cwd: temporary, env: { ...system, NEXT_VERSION: releaseVersion, NEXT_CHANNEL: releaseChannel, NEXT_SOURCE_SHA: sourceSha },
       encoding: 'utf8', stdio: 'pipe', timeout: 10_000, windowsHide: true,
     })
-    const environment = { DSH_CLIENT_VERSION: releaseVersion, DSH_CLIENT_BUILD_VERSION: releaseVersion }
+    const environment = { DSH_CLIENT_VERSION: releaseVersion, DSH_CLIENT_BUILD_VERSION: releaseVersion, DSH_CLIENT_COMMIT_HASH: sourceSha.slice(0, 7) }
     for (const field of Object.keys(environment)) {
       await writeFile(record, JSON.stringify({ environment: { ...environment, [field]: `${product}-abcdef1` } }))
       assert.throws(invoke, /Client build identity does not match release/u)
@@ -178,17 +179,18 @@ test('release asset verification rejects either client version disagreeing with 
 })
 
 test('the native PowerShell release step emits a version, tag and matching GitHub channel', async () => {
-  const workflow = load(await readFile(join(root, '.github/workflows/next-release.yml'), 'utf8'))
   const script = workflow.jobs.windows.steps.find(step => step.name === 'Resolve release version').run
   const temporary = await mkdtemp(join(tmpdir(), 'dsh-next-release-version-'))
   try {
     const output = join(temporary, 'output')
     const environment = join(temporary, 'environment')
-    execFileSync('pwsh', ['-NoProfile', '-NonInteractive', '-Command', script], {
-      cwd: root, env: { ...system, GITHUB_RUN_NUMBER: '12', GITHUB_OUTPUT: output, GITHUB_ENV: environment },
+    const invoke = (draftTag) => execFileSync('pwsh', ['-NoProfile', '-NonInteractive', '-Command', script], {
+      cwd: root, env: { ...system, GITHUB_RUN_NUMBER: '12', GITHUB_OUTPUT: output, GITHUB_ENV: environment, NEXT_DRAFT_TAG: draftTag },
       encoding: 'utf8', stdio: 'pipe', timeout: 10_000, windowsHide: true,
     })
-    const values = Object.fromEntries((await readFile(output, 'utf8')).trim().split(/\r?\n/u).map(line => line.split('=')))
+    const valuesFrom = async () => Object.fromEntries((await readFile(output, 'utf8')).trim().split(/\r?\n/u).map(line => line.split('=')))
+    invoke('')
+    const values = await valuesFrom()
     const prefix = desktopBuildVersionPrefix(product)
     assert.ok(values.version.startsWith(prefix), `release step emitted ${JSON.stringify(values)}; expected prefix ${prefix}`)
     assert.match(values.version.slice(prefix.length), /^\d{8}\.12$/u)
@@ -197,5 +199,136 @@ test('the native PowerShell release step emits a version, tag and matching GitHu
     assert.equal(await readFile(environment, 'utf8'), [
       `NEXT_VERSION=${values.version}`, `NEXT_TAG=${values.tag}`, `NEXT_CHANNEL=${values.channel}`, '',
     ].join(EOL))
+    await writeFile(output, '')
+    invoke(`v${releaseVersion}`)
+    assert.deepEqual(await valuesFrom(), { version: releaseVersion, tag: `v${releaseVersion}`, channel: releaseChannel })
+  } finally { await rm(temporary, { recursive: true, force: true }) }
+})
+
+test('the release selects the event or requested main commit and rejects off-main sources', async () => {
+  const script = workflow.jobs.windows.steps.find(step => step.id === 'source').run
+  const mock = `
+$ErrorActionPreference = 'Stop'
+function gh {
+  $global:LASTEXITCODE = 0
+  switch -Wildcard ($args[1]) {
+    '*/git/ref/heads/main' { $env:TEST_MAIN; return }
+    '*/compare/*' {
+      if ($args[1] -cne "repos/example/fixture/compare/$env:TEST_REQUEST...$env:TEST_MAIN") { throw 'Unexpected compare direction' }
+      $env:TEST_RELATION
+      return
+    }
+    default { throw "Unexpected GH call: $args" }
+  }
+}
+`
+  const temporary = await mkdtemp(join(tmpdir(), 'dsh-next-release-source-'))
+  try {
+    const other = 'b'.repeat(40)
+    const output = join(temporary, 'output')
+    const invoke = (request, relation) => execFileSync('pwsh', ['-NoProfile', '-NonInteractive', '-Command', mock + script], {
+      cwd: temporary, env: { ...system, GITHUB_REPOSITORY: 'example/fixture', TEST_MAIN: sourceSha,
+        GITHUB_SHA: sourceSha, REQUESTED_SOURCE_SHA: request, TEST_REQUEST: request, TEST_RELATION: relation, GITHUB_OUTPUT: output },
+      encoding: 'utf8', stdio: 'pipe', timeout: 10_000, windowsHide: true,
+    })
+    for (const request of ['', sourceSha.toUpperCase()]) {
+      await writeFile(output, '')
+      invoke(request, '')
+      assert.equal((await readFile(output, 'utf8')).trim(), `sha=${sourceSha}`)
+    }
+    await writeFile(output, '')
+    assert.match(invoke(other, 'ahead'), /skipped/u)
+    assert.equal(await readFile(output, 'utf8'), '')
+    assert.throws(() => invoke(other, 'diverged'), /outside the history of main/u)
+    assert.throws(() => invoke('main', ''), /full 40-character Git commit SHA/u)
+  } finally { await rm(temporary, { recursive: true, force: true }) }
+})
+
+test('Next release planning and publication resume one draft and skip a published or superseded source', async () => {
+  const publisher = fileURLToPath(new URL('../scripts/next-github-release.ps1', import.meta.url))
+  const mock = `
+$ErrorActionPreference = 'Stop'
+$script:published = $false
+$script:uploaded = $false
+function git {
+  $global:LASTEXITCODE = 0
+  if ($args[0] -ceq 'rev-parse') { $env:TEST_HEAD; return }
+  if ($args[0] -ceq 'ls-remote') {
+    if ($script:published -or $env:TEST_TAG_COMMIT) {
+      $commit = $env:TEST_TAG_COMMIT ?? $env:NEXT_SOURCE_SHA
+      "$commit$([char]9)$($args[2])"
+    }
+    return
+  }
+  throw "Unexpected git call: $args"
+}
+function gh {
+  $global:LASTEXITCODE = 0
+  switch ($args[0]) {
+    'api' {
+      if ($args[1].EndsWith('/git/ref/heads/main')) {
+        if ($script:uploaded -and $env:TEST_NEW_MAIN) { $env:TEST_NEW_MAIN } else { $env:NEXT_SOURCE_SHA }
+      } else {
+        $env:TEST_RELEASES
+      }
+    }
+    'release' {
+      Add-Content -LiteralPath $env:TEST_CALLS -Value (ConvertTo-Json -InputObject $args -Compress)
+      if ($args[1] -ceq 'upload') { $script:uploaded = $true }
+      if ($args[1] -ceq 'edit') { $script:published = $true }
+    }
+    default { throw "Unexpected GH call: $args" }
+  }
+}
+`
+  const temporary = await mkdtemp(join(tmpdir(), 'dsh-next-release-publish-'))
+  try {
+    const output = join(temporary, 'output')
+    const calls = join(temporary, 'calls')
+    const assets = join(temporary, 'apps/desktop/.desktop-build/targets/win-x64/unsigned-artifacts')
+    await mkdir(assets, { recursive: true })
+    const filenames = [`dsh-next-${releaseVersion}-win-x64-unsigned.exe`, 'SHA256SUMS', `${releaseChannel}.yml`, 'latest.yml']
+    await Promise.all(filenames.map(name => writeFile(join(assets, name), 'synthetic asset')))
+    const tag = `v${releaseVersion}`
+    const draft = { tag_name: tag, name: `DSH Next ${releaseVersion}`,
+      draft: true, prerelease: true, target_commitish: sourceSha }
+    async function invoke({ releases, publish = false, tagCommit, newMain, head = sourceSha }) {
+      await Promise.all([writeFile(output, ''), writeFile(calls, '')])
+      const command = mock + (publish ? '& $env:TEST_PUBLISHER -SourceSha $env:NEXT_SOURCE_SHA -Version $env:NEXT_VERSION -Channel $env:NEXT_CHANNEL'
+        : '& $env:TEST_PUBLISHER -SourceSha $env:NEXT_SOURCE_SHA')
+      execFileSync('pwsh', ['-NoProfile', '-NonInteractive', '-Command', command], {
+        cwd: temporary, env: { ...system, GITHUB_REPOSITORY: 'example/fixture', GITHUB_OUTPUT: output,
+          TEST_HEAD: head, TEST_PUBLISHER: publisher, TEST_CALLS: calls, TEST_RELEASES: JSON.stringify([[], releases]),
+          TEST_TAG_COMMIT: tagCommit, TEST_NEW_MAIN: newMain, NEXT_SOURCE_SHA: sourceSha,
+          NEXT_VERSION: releaseVersion, NEXT_CHANNEL: releaseChannel },
+        encoding: 'utf8', stdio: 'pipe', timeout: 10_000, windowsHide: true,
+      })
+      const executed = (await readFile(calls, 'utf8')).trim().split(/\r?\n/u).filter(Boolean).map(line => JSON.parse(line))
+      return { output: (await readFile(output, 'utf8')).trim(), executed }
+    }
+    const initial = await invoke({ releases: [] })
+    assert.equal(initial.output, 'build=true')
+    assert.deepEqual(await invoke({ releases: [{ ...draft, draft: false }], tagCommit: sourceSha }),
+      { output: '', executed: [] })
+    assert.deepEqual((await invoke({ releases: [draft] })).output.split(/\r?\n/u), [`draft_tag=${tag}`, 'build=true'])
+
+    const create = await invoke({ releases: [], publish: true })
+    assert.deepEqual(create.executed.map(command => command[1]), ['create', 'upload', 'edit'])
+    for (const operation of [create.executed[0], create.executed[2]]) {
+      assert.equal(operation[2], tag)
+      assert.equal(operation[operation.indexOf('--target') + 1], sourceSha)
+      assert.match(operation[operation.indexOf('--notes') + 1], new RegExp(sourceSha, 'u'))
+    }
+
+    const resumed = await invoke({ releases: [draft], publish: true })
+    assert.deepEqual(resumed.executed.map(command => command[1]), ['upload', 'edit'])
+    for (const name of filenames) assert.ok(resumed.executed[0].includes(join(assets, name)))
+
+    const other = 'b'.repeat(40)
+    const superseded = await invoke({ releases: [draft], publish: true, newMain: other })
+    assert.deepEqual(superseded.executed.map(command => command[1]), ['upload'])
+    await assert.rejects(invoke({ releases: [{ ...draft, target_commitish: other }], publish: true }), /belongs to a different release/u)
+    await assert.rejects(invoke({ releases: [draft], tagCommit: other }), /conflicts with the Next build/u)
+    await assert.rejects(invoke({ releases: [], head: other }), /Expected checkout/u)
   } finally { await rm(temporary, { recursive: true, force: true }) }
 })

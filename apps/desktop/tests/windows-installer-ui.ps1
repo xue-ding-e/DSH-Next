@@ -16,6 +16,7 @@ public static class InstallerCapture {
     [DllImport("user32.dll")] static extern bool EnumChildWindows(IntPtr parent, WindowCallback callback, IntPtr data);
     [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr window);
     [DllImport("user32.dll")] public static extern bool IsWindow(IntPtr window);
+    [DllImport("user32.dll")] static extern bool IsWindowEnabled(IntPtr window);
     [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern IntPtr GetProp(IntPtr window, string name);
     [DllImport("user32.dll")] static extern uint GetWindowThreadProcessId(IntPtr window, out uint process);
     [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern int GetWindowText(IntPtr window, StringBuilder text, int count);
@@ -169,6 +170,13 @@ public static class InstallerCapture {
 
     public static void Click(IntPtr control) {
         if (!PostMessage(control, 0xF5, IntPtr.Zero, IntPtr.Zero)) throw new InvalidOperationException("Could not click native button");
+    }
+
+    public static void ClickDialogButton(IntPtr dialog, int id) {
+        IntPtr button = GetDlgItem(dialog, id);
+        if (!IsWindowVisible(button) || !IsWindowEnabled(button)) throw new InvalidOperationException("Dialog button is unavailable");
+        // WM_COMMAND carries BN_CLICKED (0) above the control ID. BM_CLICK depends on dialog activation.
+        if (!PostMessage(dialog, 0x111, new IntPtr(id), button)) throw new InvalidOperationException("Could not click dialog button");
     }
 
     public static IntPtr Find(int process) {

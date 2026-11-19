@@ -7,10 +7,11 @@ import { afterAll, beforeAll, describe, expect, it, onTestFailed, vi } from 'vit
 import { OPEN_IN_APP_APPS_PATH, OPEN_IN_APP_OPEN_PATH } from '@deepseek-ai/dsh-host-open-in-app/shared'
 import { createLaunchEnvironmentSnapshot } from '@deepseek-ai/dsh-launch-environment'
 import { createAssistantMessage, createUserMessage } from '@deepseek-ai/dsh-llm'
-import { SESSION_FORMAT_VERSION, Session, SessionId } from '@deepseek-ai/dsh-session'
+import { SESSION_FORMAT_VERSION, Session, type SessionId } from '@deepseek-ai/dsh-session'
 import type {} from '@deepseek-ai/dsh-session-title'
 import { launchWebScaffold, seedSession, watchConsole, type WebScaffold } from './scaffold.ts'
 import { saveFailureShot } from './support.ts'
+import { brandString } from '@deepseek-ai/dsh-brand'
 
 const GIF = Buffer.from('R0lGODdhMAAgAIEAAEtu5gAAAAAAAAAAACwAAAAAMAAgAEAIQQABCBxIsKDBgwgTKlzIsKHDhxAjSpxIsaLFixgzatzIsaPHjyBDihxJsqTJkyhTqlzJsqXLlzBjypxJs6bNmQEBADs=', 'base64')
 async function menuLabels(menu: Locator): Promise<string[]> {
@@ -21,7 +22,7 @@ async function menuLabels(menu: Locator): Promise<string[]> {
   }))
 }
 function fixture(title: string): string {
-  const session = Session.create(SessionId('context-menus-source'))
+  const session = Session.create(brandString<SessionId>('context-menus-source'))
   session.append('turn/start', { turn: 1 })
   const user = session.append('user/message', createUserMessage({ content: [{ type: 'text', text: 'Show the output.' }], source: { kind: 'user' } }), { surfaceOp: 'append' })
   session.append('session/title', { title, messageSeqs: [user.seq], source: { kind: 'fallback' } })
@@ -81,7 +82,9 @@ describe.each(['MacIntel', 'Win32', 'Linux x86_64'])('web context menus on %s', 
     const menu = page.getByRole('menu')
     await menu.getByRole('menuitem', { name: /Copy.*[Ii][Dd]/ }).waitFor()
     const names = await menuLabels(menu)
-    expect(names).toEqual(['Pin session', 'Rename', 'Move to section', 'Fork session', 'Open in', 'Archive session', 'Copy Session ID'])
+    expect(names).toEqual([
+      'Pin session', 'Rename', 'Mark as unread', 'Move to section', 'Fork session', 'Open in', 'Archive session', 'Copy Session ID',
+    ])
     expect(await menu.getByRole('menuitem').evaluateAll(rows => rows.every(row =>
       row.getAttribute('aria-haspopup') === 'menu' || row.querySelector('svg[data-icon]')))).toBe(true)
     expect(await menu.getByRole('separator').count()).toBe(2)
@@ -228,6 +231,8 @@ describe.each(['MacIntel', 'Win32', 'Linux x86_64'])('web context menus on %s', 
     await page.getByRole('menuitem', { name: 'Copy file path', exact: true }).waitFor()
     await page.keyboard.press('End')
     expect(await page.getByRole('menuitem', { name: 'Save as…', exact: true }).count()).toBe(0)
+    expect(await page.getByRole('menuitem', { name: 'Add to chat', exact: true }).evaluate(element => element === document.activeElement)).toBe(true)
+    await page.keyboard.press('ArrowUp')
     expect(await page.getByRole('menuitem', { name: 'Download', exact: true }).evaluate(element => element === document.activeElement)).toBe(true)
     await page.keyboard.press('ArrowUp')
     expect(await page.getByRole('menuitem', { name: 'Copy file path', exact: true }).evaluate(element => element === document.activeElement)).toBe(true)

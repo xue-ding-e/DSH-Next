@@ -4,11 +4,11 @@
  * writable for that reader, while the Workspace around it and the owner's own management stay put.
  */
 
-import { act, cleanup, fireEvent, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createFixtureFaces } from './viewer-fixture.client.ts'
 import type { FixtureWorld } from './viewer-fixture.client.ts'
-import { installViewerInputFixture, promptEcho } from './viewer-input-fixture.client.ts'
+import { expectSessionReferenceDrag, installViewerInputFixture, promptEcho } from './viewer-input-fixture.client.ts'
 import type { ViewerInputFixture } from './viewer-input-fixture.client.ts'
 import { installViewerRelay } from './viewer-relay.client.ts'
 
@@ -131,15 +131,18 @@ describe('Assembled liveshare viewer page on a writable share', () => {
     await workspaceMenu.ready
     expect(workspaceMenu.source.getSnapshot()).toEqual([])
     workspaceMenu.dispose()
-    expect(document.querySelector('[role="treeitem"][draggable="true"]')).toBeNull()
+    expectSessionReferenceDrag('fx-alpha')
     // The Session's own verbs stay the owner's — the one this page may use there is the branch the
     // mode grants — so the row's menu is not a second way into the owner's Session management: it
     // opens on the branch verb and carries neither rename nor archive.
-    const sourceVerbs = screen.getByRole('button', { name: /^会话“/u })
+    const sourceRow = document.querySelector<HTMLElement>('[role="treeitem"][data-row-key="session:fx-alpha"]')
+    if (sourceRow === null) throw new Error('shared Session row is not listed')
+    const sourceVerbs = within(sourceRow).getByRole('button', { name: /^会话“/u })
     await act(async () => { fireEvent.click(sourceVerbs) })
     expect(await screen.findByRole('menuitem', { name: /^分叉会话/u })).toBeDefined()
     expect(screen.queryByRole('menuitem', { name: '重命名' })).toBeNull()
     expect(screen.queryByRole('menuitem', { name: '归档会话' })).toBeNull()
+    expect(screen.queryByRole('menuitem', { name: '移至分区' })).toBeNull()
     await act(async () => { fireEvent.keyDown(document, { key: 'Escape' }) })
     await waitFor(() => { expect(screen.queryByRole('menu')).toBeNull() })
 

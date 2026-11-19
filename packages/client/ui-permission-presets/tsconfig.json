@@ -9,7 +9,7 @@
   ],
   "references": [
     { "path": "../resources" },
-    { "path": "../ui-workspace" },
+    { "path": "../ui-workspace/tsconfig.client.json" },
     { "path": "../../api/workspace-controller/tsconfig.client.json" },
     { "path": "../../sandbox/sandbox-policy" },
     { "path": "../../typert/protocol" },

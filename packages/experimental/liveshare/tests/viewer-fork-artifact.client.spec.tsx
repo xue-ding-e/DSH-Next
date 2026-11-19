@@ -8,7 +8,7 @@ import { act, cleanup, fireEvent, screen, waitFor, within } from '@testing-libra
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createFixtureFaces } from './viewer-fixture.client.ts'
 import type { FixtureWorld } from './viewer-fixture.client.ts'
-import { installViewerInputFixture, promptEcho } from './viewer-input-fixture.client.ts'
+import { expectSessionReferenceDrag, installViewerInputFixture, promptEcho } from './viewer-input-fixture.client.ts'
 import type { ViewerInputFixture } from './viewer-input-fixture.client.ts'
 import { installViewerRelay } from './viewer-relay.client.ts'
 
@@ -101,9 +101,7 @@ describe('Assembled liveshare viewer page branching a share', () => {
     expect(document.body.textContent).toContain('Read only: you can drive this Session, but you read files inside the share’s scope only and modify nothing.')
     // The read-only page offers no way to change the shared Session's own settings.
     expect(screen.queryByRole('button', { name: /^Access mode/u })).toBeNull()
-    // Reordering Sessions and Workspaces is the same Host state rename and delete write, so no row on
-    // this page is a drag handle either.
-    expect(document.querySelector('[role="treeitem"][draggable="true"]')).toBeNull()
+    expectSessionReferenceDrag('fx-alpha')
     // Before any branch exists, no row on this page is marked as one.
     expect(screen.queryByText('Fork')).toBeNull()
     // The branch action follows the access snapshot the owner's Gateway sent this reader, not the

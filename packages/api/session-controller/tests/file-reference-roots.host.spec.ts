@@ -1,4 +1,5 @@
 /** Synthetic folders through real root confirmation, Agent, Gateway and file discovery. */
+import { Peer } from '@deepseek-ai/dsh-client-connection'
 import SandboxedFileSystem from '@deepseek-ai/dsh-fs-sandbox'
 import LocalFileReferences from '@deepseek-ai/dsh-file-reference-local'
 import { setSandboxMode } from '@deepseek-ai/dsh-sandbox-policy'
@@ -33,6 +34,23 @@ it('keeps pending directories hidden and disambiguates confirmed roots with abso
   expect(paths).toContain(join(h.source, 'same.txt').replaceAll('\\', '/'))
   setSandboxMode(h.agent.session, 'read-only')
   expect(await h.list(join(h.reference, 'same.txt'))).toEqual([])
+})
+
+it('limits a granted non-owner listing to the working directory after the owner confirms extra roots', async () => {
+  const h = await fixture()
+  await h.confirm()
+  h.ctx.remoteAccess.registerPolicy('root-test-guest', { bindings: () => [{
+    role: { name: 'root-test-files', resource: 'session', actions: ['fileReferences/list'] },
+    resource: { kind: 'session', id: h.agent.id },
+  }] })
+  const guest = new Peer(h.ctx, { principal: { kind: 'root-test-guest' } })
+  const list = (peer: Peer, query: string) => h.ctx.typertGateway.invoke({
+    peer, namespace: 'fileReferences', method: 'list', args: { agentId: h.agent.id, query },
+  })
+  const path = join(h.reference, 'same.txt').replaceAll('\\', '/')
+  await expect(list(h.peer, path)).resolves.toEqual([{ path, kind: 'file' }])
+  await expect(list(guest, 'same.txt')).resolves.toEqual([{ path: 'same.txt', kind: 'file' }])
+  await expect(list(guest, path)).resolves.toEqual([])
 })
 
 it('resolves a confirmed nested file through the real Gateway without reading its content', async () => {

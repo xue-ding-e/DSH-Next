@@ -21,10 +21,15 @@ describe('ui-conversation host', () => {
     const { fiber } = configuration
     expect(plainConfig(configuration.fiber.effectiveConfig)).toEqual({
       busyEnter: DEFAULT_BUSY_ENTER_BEHAVIOR,
+      maxConcurrentFileUploads: 2,
       sessionReferenceNavigation: DEFAULT_SESSION_REFERENCE_NAVIGATION,
     })
     await configuration.update({ busyEnter: 'steer' })
-    expect(plainConfig(configuration.fiber.effectiveConfig)).toEqual({ busyEnter: 'steer', sessionReferenceNavigation: DEFAULT_SESSION_REFERENCE_NAVIGATION })
+    expect(plainConfig(configuration.fiber.effectiveConfig)).toEqual({
+      busyEnter: 'steer',
+      maxConcurrentFileUploads: 2,
+      sessionReferenceNavigation: DEFAULT_SESSION_REFERENCE_NAVIGATION,
+    })
     await configuration.update({ sessionReferenceNavigation: { gesture: 'custom', control: true, shift: true } })
     expect(plainConfig(configuration.fiber.effectiveConfig)).toMatchObject({
       sessionReferenceNavigation: { ...DEFAULT_SESSION_REFERENCE_NAVIGATION, gesture: 'custom', control: true, shift: true },

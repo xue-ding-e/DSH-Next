@@ -35,6 +35,26 @@ describe('explicit root permission Remote calls', () => {
     await expect(ctx.fs.writeText(target, 'revoked', undefined, undefined, policy())).rejects.toMatchObject({ code: 'FS_SANDBOX_DENIED' })
   })
 
+  it('revokes the preview and grant after moving the workspace root away and back', async () => {
+    const { ctx, agent, call, source, primary } = await fixture()
+    const request = { sessionId: agent.id }
+    const preview = await call('prepareRoots', { request }) as RootApprovalPreview
+    await call('confirmRoots', { request: { ...request, nonce: preview.nonce } })
+    const outstanding = await call('prepareRoots', { request }) as RootApprovalPreview
+    const changed = vi.fn()
+    ctx.on('api-session/directories-changed', changed)
+
+    await ctx.workingDirectory.set(agent, source)
+    expect(ctx.sandboxPolicy.resolve({ session: agent.session }).workspaceRoot).toBe(source)
+    await ctx.workingDirectory.set(agent, primary)
+
+    const state = await call('roots', { request }) as SessionDirectoryState
+    expect(state).toMatchObject({ primaryPath: primary, confirmedRoots: [], activeWritableRoots: [] })
+    expect(changed.mock.calls).toEqual([[agent.id], [agent.id]])
+    await expect(call('confirmRoots', { request: { ...request, nonce: outstanding.nonce } }))
+      .rejects.toMatchObject({ code: 'session/roots-refused' })
+  })
+
   it('rejects non-owner peers even with broad action roles and a forged wire principal', async () => {
     const { ctx, agent, call } = await fixture()
     ctx.remoteAccess.registerPolicy('root-test-guest', { bindings: () => [{

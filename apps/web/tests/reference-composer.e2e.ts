@@ -4,7 +4,7 @@
 import { mkdir, writeFile } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 import { homedir } from 'node:os'
-import { join } from 'node:path'
+import { join, sep } from 'node:path'
 import type { Browser, Locator, Page } from 'playwright'
 import { chromium } from 'playwright'
 import { afterAll, afterEach, beforeAll, describe, expect, it, onTestFailed, onTestFinished } from 'vitest'
@@ -13,7 +13,7 @@ import { abbreviateHomePath } from '@deepseek-ai/dsh-util-workspace-path'
 import {
   SESSION_FORMAT_VERSION,
   Session,
-  SessionId,
+  type SessionId,
   SessionSeq,
 } from '@deepseek-ai/dsh-session'
 import type {} from '@deepseek-ai/dsh-session-reference/types'
@@ -31,6 +31,7 @@ import {
   type WebScaffold,
 } from './scaffold.ts'
 import { connectFreshWorkspace, newEnglishPage, pinBrowserClock, revealNavigationDrawer, saveFailureShot, WEB_FIXTURE_TIME, writeComposerDraft } from './support.ts'
+import { brandString } from '@deepseek-ai/dsh-brand'
 
 const SNAPSHOT_DIR = fileURLToPath(new URL('./expected/reference-composer', import.meta.url))
 const MENU_EXPECTED = join(SNAPSHOT_DIR, 'menu.expected.md')
@@ -67,7 +68,7 @@ async function replaceReferenceQuery(page: Page, input: Locator, text: string): 
 
 /** Build one closed source session with a stable title for reference discovery. */
 function sourceSessionFixture(): string {
-  const session = Session.create(SessionId(SOURCE_SESSION_ID))
+  const session = Session.create(brandString<SessionId>(SOURCE_SESSION_ID))
   session.append('turn/start', {
     turn: 1,
   })
@@ -98,7 +99,7 @@ function sourceSessionFixture(): string {
 
 /** Build one target log with the direct message durably before its recalled context. */
 function targetSessionFixture(): string {
-  const session = Session.create(SessionId(TARGET_SESSION_ID))
+  const session = Session.create(brandString<SessionId>(TARGET_SESSION_ID))
   session.append('turn/start', { turn: 1 })
   const user = session.append('user/message', createUserMessage({
     content: [{ type: 'text', text: '@Research notes what changed?' }],
@@ -172,6 +173,7 @@ describe.skipIf(MODE === 'record')('web e2e: file and session references through
     // stays out of the menu golden.
     await mkdir(join(scaffold.workspaceCwd, 'workspace', 'folderx', 'nested'), { recursive: true })
     await writeFile(join(scaffold.workspaceCwd, 'workspace', 'folderx', 'nested', 'leaf.txt'), 'leaf fixture\n')
+    await writeFile(join(scaffold.workspaceCwd, 'workspace', 'folderx', 'nested', 'space name.txt'), 'space fixture\n')
     await page.goto(scaffold.authenticatedUrl, { waitUntil: 'load' })
     await page.waitForSelector('[class*="frame"]', { timeout: 30_000 })
     await connectFreshWorkspace(page, scaffold.workspaceCwd)
@@ -278,7 +280,7 @@ describe.skipIf(MODE === 'record')('web e2e: file and session references through
     if (await ungrouped.getAttribute('aria-expanded') !== 'true') await ungrouped.click()
     await row.click()
     const input = page.locator('[data-composer-input]').first()
-    const id = SessionId(TARGET_SESSION_ID)
+    const id = brandString<SessionId>(TARGET_SESSION_ID)
     const before = await readPersistedEvents(scaffold, id)
     const messages = before.filter(event => event.type === 'user/message' || event.type === 'turn/start')
     await writeComposerDraft(page, input, 'Keep the file reference draft. ')
@@ -591,7 +593,7 @@ describe.skipIf(MODE === 'record')('web e2e: file and session references through
     await target.click()
     await page.locator('[data-chat-flow-kind="user"]').filter({ hasText: 'Research notes' }).waitFor({ timeout: 15_000 })
     await writeComposerDraft(page, page.locator('[data-composer-input]').first(), '')
-    const events = await readPersistedEvents(scaffold, SessionId(TARGET_SESSION_ID))
+    const events = await readPersistedEvents(scaffold, brandString<SessionId>(TARGET_SESSION_ID))
     const inputs = events.filter(event => event.type === 'user/message')
     expect(inputs.map(event => event.data.source.kind)).toEqual(['user', 'session-reference'])
     expect(inputs[0]?.seq).toBeLessThan(inputs[1]!.seq)
@@ -649,5 +651,110 @@ describe.skipIf(MODE === 'record')('web e2e: file and session references through
     } finally {
       await isolated.context().close()
     }
+  })
+
+  it('adds a sidebar file after retained selection without sending and undoes it as one edit', async () => {
+    onTestFailed(() => saveFailureShot(page, 'web-e2e-reference-add-to-chat'))
+    const group = page.getByRole('treeitem', { name: /Ungrouped/ })
+    await group.waitFor({ timeout: 15_000 })
+    if (await group.getAttribute('aria-expanded') !== 'true') await group.click()
+    await page.locator(`[data-row-key="session:${TARGET_SESSION_ID}"]`).click()
+    await page.locator('[data-chat-flow-kind="user"]').filter({ hasText: 'Research notes' }).waitFor()
+    const input = page.locator('[data-composer-input]').first()
+    const suggestions = page.getByRole('listbox', { name: 'Trigger suggestions' })
+    const directory = join(scaffold.workspaceCwd, 'workspace', 'folderx', 'nested')
+    const file = join(directory, 'space name.txt')
+    const sessionId = brandString<SessionId>(TARGET_SESSION_ID)
+    const beforeEvents = (await readPersistedEvents(scaffold, sessionId))
+      .filter(event => event.type === 'user/message' || event.type.startsWith('turn/'))
+    const beforeMessages = await page.locator('[data-chat-flow-kind="user"]').count()
+
+    // An absolute query compares the same resource spelling as the sidebar.
+    await replaceReferenceQuery(page, input, `@"${directory}/`)
+    const option = suggestions.getByRole('option', { name: /^space name\.txt/ })
+    await option.waitFor({ timeout: 15_000 })
+    await option.click()
+    const chip = input.locator('[data-composer-chip]')
+    await expect.poll(() => chip.textContent()).toBe('space name.txt')
+    const pickerAppearance = await chip.evaluate(node => ({
+      source: node.getAttribute('data-composer-chip'),
+      label: node.textContent,
+      icons: node.querySelectorAll('svg').length,
+    }))
+    await page.keyboard.press('ControlOrMeta+A')
+    // A page-local clipboard avoids interference with parallel browser workers.
+    const pickerClipboard = await input.evaluate((node) => {
+      const clipboardData = new DataTransfer()
+      node.dispatchEvent(new ClipboardEvent('copy', { clipboardData, bubbles: true, cancelable: true }))
+      return clipboardData.getData('text/plain')
+    })
+    expect(pickerClipboard).toBe(`@"${file.split(sep).join('/')}" `)
+    await writeComposerDraft(page, input, '')
+
+    const column = page.locator('[data-rightbar-col]')
+    await page.locator('[data-sidebar-right-expand]').click()
+    await column.locator('[data-sidebar-right-guide-entry="files"]').click()
+    const navigator = column.locator('[data-files-navigator]:visible')
+    await navigator.waitFor()
+    for (const name of ['workspace', 'folderx', 'nested']) {
+      const folder = navigator.getByRole('button', { name, exact: true })
+      await folder.waitFor()
+      if (await folder.getAttribute('aria-expanded') !== 'true') await folder.click()
+    }
+    const row = navigator.getByRole('button', { name: 'space name.txt', exact: true })
+    await row.waitFor()
+    const draft = 'Review selected, then finish.'
+    await writeComposerDraft(page, input, draft)
+    const word = await input.evaluate((node) => {
+      const text = document.createTreeWalker(node, NodeFilter.SHOW_TEXT).nextNode()
+      if (text === null) throw new Error('Composer draft has no text')
+      const range = document.createRange()
+      range.setStart(text, 'Review '.length)
+      range.setEnd(text, 'Review selected'.length)
+      const rect = range.getBoundingClientRect()
+      return { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 }
+    })
+    await page.mouse.dblclick(word.x, word.y)
+    expect(await page.evaluate(() => window.getSelection()?.toString())).toBe('selected')
+    // Copy observes the editor's committed selection, not only the native range.
+    await expect.poll(() => input.evaluate((node) => {
+      const clipboardData = new DataTransfer()
+      node.dispatchEvent(new ClipboardEvent('copy', { clipboardData, bubbles: true, cancelable: true }))
+      return clipboardData.getData('text/plain')
+    })).toBe('selected')
+
+    await row.click({ button: 'right' })
+    const menu = page.getByRole('menu')
+    const action = menu.getByRole('menuitem', { name: 'Add to chat', exact: true })
+    await action.waitFor()
+    expect(await menu.getByRole('menuitem').last().textContent()).toBe('Add to chat')
+    expect(await action.isEnabled()).toBe(true)
+    await action.click()
+    await menu.waitFor({ state: 'hidden' })
+    await expect.poll(() => input.evaluate(node => node === document.activeElement)).toBe(true)
+    await expect.poll(() => input.textContent()).toBe('Review selected space name.txt , then finish.')
+    expect(await chip.evaluate(node => ({
+      source: node.getAttribute('data-composer-chip'),
+      label: node.textContent,
+      icons: node.querySelectorAll('svg').length,
+    }))).toEqual(pickerAppearance)
+    await page.keyboard.press('ControlOrMeta+A')
+    const menuClipboard = await input.evaluate((node) => {
+      const clipboardData = new DataTransfer()
+      node.dispatchEvent(new ClipboardEvent('copy', { clipboardData, bubbles: true, cancelable: true }))
+      return clipboardData.getData('text/plain')
+    })
+    // The file tree keeps the native Workspace prefix. Compare the complete draft using the same absolute filename.
+    expect(menuClipboard.split(sep).join('/')).toBe(`Review selected ${pickerClipboard}, then finish.`)
+
+    await page.keyboard.press('ControlOrMeta+Z')
+    await expect.poll(() => input.textContent()).toBe(draft)
+    expect(await chip.count()).toBe(0)
+    expect(await input.evaluate(node => node === document.activeElement)).toBe(true)
+    expect(await page.locator('[data-chat-flow-kind="user"]').count()).toBe(beforeMessages)
+    expect((await readPersistedEvents(scaffold, sessionId))
+      .filter(event => event.type === 'user/message' || event.type.startsWith('turn/'))).toEqual(beforeEvents)
+    expect(tripwire.pageErrors).toEqual([])
+    expect(tripwire.warnings).toEqual([])
   })
 })

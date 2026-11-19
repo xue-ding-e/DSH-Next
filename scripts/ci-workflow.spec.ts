@@ -16,9 +16,9 @@ const nativeWindowsPnpmDestination = '${{ runner.temp }}/setup-pnpm-js-${{ githu
 
 describe('CI workflow', () => {
   it('keeps at most eleven worker jobs active across PR workflows while Python runtime targets follow the SDK suite', () => {
-    const ci = loadWorkflow('.github/workflows/ci.yml')
-    const ciWindows = loadWorkflow('.github/workflows/ci-windows.yml')
-    const ciPython = loadWorkflow('.github/workflows/ci-python.yml')
+    const ci = loadOfficialWorkflow('ci.yml')
+    const ciWindows = loadOfficialWorkflow('ci-windows.yml')
+    const ciPython = loadOfficialWorkflow('ci-python.yml')
     const compatibility = workflowJob(ci, 'node-compat')
     const runtime = workflowJob(ciPython, 'python-runtime')
     if (!isRecord(ci.jobs)
@@ -41,12 +41,17 @@ describe('CI workflow', () => {
     })
     expect(workflowJob(ci, 'all-checks-passed').needs).toContain('node-compat')
     const ordinaryJobs = Object.entries(ci.jobs)
-      .filter(([name]) => !['node-compat', 'all-checks-passed'].includes(name))
+      .filter(([name]) => !['node-compat', 'all-checks-passed', 'publisher-isolated'].includes(name))
     for (const [name, job] of ordinaryJobs) {
       if (!isRecord(job)) throw new TypeError(`${name} must define a job`)
       expect(job).not.toHaveProperty('strategy')
       expect(job).not.toHaveProperty('uses')
     }
+    // Publisher smoke reuses the compatibility/build concurrency slots before those jobs start.
+    expect(compatibility.needs).toBe('publisher-isolated')
+    expect(workflowJob(ci, 'publisher-isolated').strategy).toMatchObject({ 'max-parallel': 1, matrix: { os: ['linux', 'macos'] } })
+    expect(workflowJob(ciWindows, 'windows-build').needs).toBe('windows-publisher')
+    expect(workflowJob(ciWindows, 'windows-publisher').defaults).toEqual({ run: { shell: 'pwsh' } })
     // Python reports its own required verdict, so neither its jobs nor a
     // reusable workflow caller remain in the Linux or Windows workflow.
     expect(Object.keys(ci.jobs).filter(name => name.startsWith('python'))).toEqual([])
@@ -60,14 +65,14 @@ describe('CI workflow', () => {
     expect(runtime.with).toMatchObject({ targets: 'node24-linux-x64,node24-win-x64' })
     expect(runtime.uses).toBe('./.github/workflows/build-exe-for-python-sdk.yml')
     const windowsJobs = Object.entries(ciWindows.jobs)
-      .filter(([name]) => name !== 'windows-checks-passed')
+      .filter(([name]) => !['windows-checks-passed', 'windows-publisher'].includes(name))
     for (const [name, job] of windowsJobs) {
       if (!isRecord(job)) throw new TypeError(`${name} must define a job`)
       expect(job).not.toHaveProperty('strategy')
       expect(job).not.toHaveProperty('uses')
     }
 
-    const builder = loadWorkflow('.github/workflows/build-exe-for-python-sdk.yml')
+    const builder = loadOfficialWorkflow('build-exe-for-python-sdk.yml')
     if (!isRecord(builder.jobs)) throw new TypeError('Python runtime builder must define jobs')
     expect(Object.keys(builder.jobs).sort()).toEqual(['build', 'plan', 'sdk-wheel'])
     const plan = workflowJob(builder, 'plan')
@@ -95,7 +100,7 @@ describe('CI workflow', () => {
     expect(afterSdk).toBeLessThanOrEqual(11)
   })
 
-  it('keeps the union of required PR verdicts equal to the pre-split blocking set', () => {
+  it('keeps required PR verdicts covering runtime and publisher jobs', () => {
     const verdicts = [
       ['ci.yml', 'all-checks-passed'],
       ['ci-windows.yml', 'windows-checks-passed'],
@@ -103,7 +108,7 @@ describe('CI workflow', () => {
     ] as const
     const blocking: string[] = []
     for (const [file, name] of verdicts) {
-      const workflow = loadWorkflow('.github/workflows/' + file)
+      const workflow = loadOfficialWorkflow(file)
       const verdict = workflowJob(workflow, name)
       if (!isRecord(workflow.jobs) || !Array.isArray(verdict.needs)) {
         throw new TypeError(`${file} must define jobs and the ${name} verdict needs`)
@@ -112,9 +117,7 @@ describe('CI workflow', () => {
       expect(verdict.needs.every(id => typeof id === 'string' && id in jobs)).toBe(true)
       blocking.push(...(verdict.needs as string[]))
     }
-    // Splitting the workflows only moves jobs between verdicts; the blocking
-    // set itself must stay identical, or branch protection would accept a
-    // failure it rejected before the split.
+    // Every blocking lane must contribute to a branch-protection verdict.
     expect(blocking.sort()).toEqual([
       'node-24',
       'node-24-bench',
@@ -122,10 +125,12 @@ describe('CI workflow', () => {
       'node-24-coverage',
       'node-24-lint',
       'node-compat',
+      'publisher-isolated',
       'python-runtime',
       'python-sdk',
       'windows-build',
       'windows-native-tests',
+      'windows-publisher',
     ])
   })
 
@@ -134,14 +139,14 @@ describe('CI workflow', () => {
       ['ci.yml', 'node-24-consumers', 'pnpm run check:ci:consumers'],
       ['ci-windows.yml', 'windows-build', 'pnpm run check:ci:windows-blocking'],
     ] as const) {
-      const job = workflowJob(loadWorkflow('.github/workflows/' + file), name)
+      const job = workflowJob(loadOfficialWorkflow(file), name)
       expect(job.steps).toContainEqual(expect.objectContaining({ run: command }))
     }
     for (const [file, command] of [
       ['release-publish.yml', 'pnpm run build:official --serial'],
       ['release-vendor-publish.yml', 'pnpm run build:lib:host'],
     ] as const) {
-      expect(workflowJob(loadWorkflow('.github/workflows/' + file), 'pack').steps)
+      expect(workflowJob(loadOfficialWorkflow(file), 'pack').steps)
         .toContainEqual(expect.objectContaining({ name: 'Build', run: command }))
     }
     const scripts = JSON.parse(readFileSync(resolve(root, 'package.json'), 'utf8')) as { scripts: Record<string, string> }
@@ -161,7 +166,7 @@ describe('CI workflow', () => {
       ['release-vendor.yml', 'pack', vendor],
       ['e2e.yml', 'e2e', official],
     ] as const) {
-      const job = workflowJob(loadWorkflow('.github/workflows/' + file), jobName)
+      const job = workflowJob(loadOfficialWorkflow(file), jobName)
       if (!Array.isArray(job.steps)) throw new TypeError(`${jobName} must define steps`)
       const step = job.steps.filter(isRecord).find(candidate => typeof candidate.run === 'string'
         && (candidate.run.includes('build:artifacts') || candidate.run.includes('host-libraries')))
@@ -179,7 +184,7 @@ describe('CI workflow', () => {
   })
 
   it('selects PR artifact compilation inside the Python executable builder', () => {
-    const job = workflowJob(loadWorkflow('.github/workflows/build-exe-for-python-sdk.yml'), 'build')
+    const job = workflowJob(loadOfficialWorkflow('build-exe-for-python-sdk.yml'), 'build')
     if (!Array.isArray(job.steps)) throw new TypeError('Python runtime builder must define steps')
     const steps = job.steps.filter(isRecord)
     const execute = steps.find(step => step.name === 'Build single-exe')
@@ -202,7 +207,7 @@ describe('CI workflow', () => {
   })
 
   it('prepares confinement before Node compatibility smokes', () => {
-    const job = workflowJob(loadWorkflow('.github/workflows/ci.yml'), 'node-compat')
+    const job = workflowJob(loadOfficialWorkflow('ci.yml'), 'node-compat')
     if (!Array.isArray(job.steps)) throw new TypeError('Node compatibility job must define steps')
     const steps = job.steps.filter(isRecord)
     const preparation = steps.findIndex(step => step.run === 'bash scripts/prepare-ci-bubblewrap.sh')
@@ -214,7 +219,7 @@ describe('CI workflow', () => {
 
   it.each(['ci.yml', 'ci-master.yml', 'e2e.yml', 'release.yml', 'release-vendor.yml'])(
     '%s cancels superseded validation runs without crossing workflow or ref boundaries', (name) => {
-      const workflow = loadWorkflow('.github/workflows/' + name)
+      const workflow = loadOfficialWorkflow(name)
       expect(workflow.concurrency).toEqual({
         group: '${{ github.workflow }}-${{ github.ref }}',
         'cancel-in-progress': true,
@@ -223,7 +228,7 @@ describe('CI workflow', () => {
   )
 
   it('cancels reusable CI builds without cancelling release-owned builds', () => {
-    const workflow = loadWorkflow('.github/workflows/build-exe-for-python-sdk.yml')
+    const workflow = loadOfficialWorkflow('build-exe-for-python-sdk.yml')
     expect(workflow.concurrency).toEqual({
       group: 'build-single-exe-${{ github.workflow }}-${{ github.ref }}',
       'cancel-in-progress': '${{ !inputs.release }}',
@@ -232,17 +237,17 @@ describe('CI workflow', () => {
 
   it('does not cancel protected publication or deployment transactions', () => {
     for (const name of ['release-publish.yml', 'release-vendor-publish.yml']) {
-      const publish = workflowJob(loadWorkflow('.github/workflows/' + name), 'publish')
+      const publish = workflowJob(loadOfficialWorkflow(name), 'publish')
       expect(publish.concurrency).toMatchObject({ 'cancel-in-progress': false })
     }
     for (const name of ['python-release.yml', 'node-addon-system-release.yml', 'docs-pages.yml']) {
-      expect(loadWorkflow('.github/workflows/' + name).concurrency).toMatchObject({ 'cancel-in-progress': false })
+      expect(loadOfficialWorkflow(name).concurrency).toMatchObject({ 'cancel-in-progress': false })
     }
   })
 
   it('skips coverage-history uploads on cancellation but retains Wine cleanup', () => {
-    const coverage = workflowJob(loadWorkflow('.github/workflows/ci-windows.yml'), 'windows-coverage')
-    const wine = workflowJob(loadWorkflow('.github/workflows/ci-master.yml'), 'windows')
+    const coverage = workflowJob(loadOfficialWorkflow('ci-windows.yml'), 'windows-coverage')
+    const wine = workflowJob(loadOfficialWorkflow('ci-master.yml'), 'windows')
     expect(coverage.steps).toContainEqual(expect.objectContaining({
       name: 'Save coverage duration history', if: '${{ !cancelled() }}',
     }))
@@ -253,7 +258,7 @@ describe('CI workflow', () => {
     ['node-24-coverage', 'ci.yml', 'Linux', 'LINUX', 'pnpm run check:ci:coverage'],
     ['windows-coverage', 'ci-windows.yml', 'Windows', 'WINDOWS', 'pnpm run check:ci:coverage'],
   ])('reuses %s coverage timings only within its platform and runner pool', (jobName, file, platform, variable, command) => {
-    const job = workflowJob(loadWorkflow('.github/workflows/' + file), jobName)
+    const job = workflowJob(loadOfficialWorkflow(file), jobName)
     if (!Array.isArray(job.steps)) throw new TypeError(`${jobName} must define steps`)
     const steps = job.steps.filter(isRecord)
     const checkout = steps.findIndex(step => step.uses === 'actions/checkout@v7.0.1')
@@ -278,10 +283,10 @@ describe('CI workflow', () => {
   })
 
   it('isolates every pnpm action setup destination per runner', () => {
-    const files = ['.github/workflows/ci.yml', '.github/workflows/ci-windows.yml', '.github/workflows/ci-master.yml']
+    const files = ['ci.yml', 'ci-windows.yml', 'ci-master.yml']
     const setups: Array<{ jobName: string; step: unknown }> = []
     for (const file of files) {
-      const workflow: unknown = yaml.load(readFileSync(resolve(root, file), 'utf8'))
+      const workflow = loadOfficialWorkflow(file)
       if (!isRecord(workflow) || !isRecord(workflow.jobs)) throw new TypeError(`${file} must define jobs`)
       for (const [jobName, job] of Object.entries(workflow.jobs)) {
         if (!isRecord(job) || !Array.isArray(job.steps)) continue
@@ -308,7 +313,7 @@ describe('CI workflow', () => {
   it.each(['node-24', 'node-24-coverage', 'node-24-consumers'])(
     '%s keeps tool and fixture temporary files under runner cleanup',
     (jobName) => {
-      const job = workflowJob(loadWorkflow('.github/workflows/ci.yml'), jobName)
+      const job = workflowJob(loadOfficialWorkflow('ci.yml'), jobName)
       if (!Array.isArray(job.steps)) throw new TypeError(`${jobName} must define steps`)
       expect(job.steps[0]).toEqual({
         name: 'Use runner-owned temporary storage',
@@ -345,7 +350,7 @@ describe('CI workflow', () => {
   )
 
   it('isolates the python SDK exe pnpm setup destination per job', () => {
-    const workflow: unknown = yaml.load(readFileSync(resolve(root, '.github/workflows/build-exe-for-python-sdk.yml'), 'utf8'))
+    const workflow = loadOfficialWorkflow('build-exe-for-python-sdk.yml')
     if (!isRecord(workflow) || !isRecord(workflow.jobs)) throw new TypeError('build-exe-for-python-sdk.yml must define jobs')
     const setups: Array<{ step: unknown }> = []
     for (const job of Object.values(workflow.jobs)) {
@@ -364,9 +369,9 @@ describe('CI workflow', () => {
   })
 
   it('keeps split native Windows PR jobs with failover in their own workflow, plus a master-only standby', () => {
-    const workflow = loadWorkflow('.github/workflows/ci.yml')
-    const windowsWorkflow = loadWorkflow('.github/workflows/ci-windows.yml')
-    const masterWorkflow = loadWorkflow('.github/workflows/ci-master.yml')
+    const workflow = loadOfficialWorkflow('ci.yml')
+    const windowsWorkflow = loadOfficialWorkflow('ci-windows.yml')
+    const masterWorkflow = loadOfficialWorkflow('ci-master.yml')
     if (!isRecord(workflow.jobs)
       || !isRecord(windowsWorkflow.jobs)
       || !isRecord(windowsWorkflow.jobs['windows-build'])
@@ -547,7 +552,7 @@ describe('CI workflow', () => {
     expect(aggregate.needs).not.toContain('windows')
     // windows-coverage is temporarily non-blocking while Windows ACP
     // half-close tests are stabilized; observational stays out too.
-    expect(windowsAggregate.needs).toEqual(['windows-build', 'windows-native-tests'])
+    expect(windowsAggregate.needs).toEqual(['windows-publisher', 'windows-build', 'windows-native-tests'])
     expect(windowsAggregate.name).toBe('windows checks passed')
     expect(windowsAggregate['runs-on']).toBe(aggregate['runs-on'])
     expect(windowsAggregate.if).toBe(aggregate.if)
@@ -635,11 +640,11 @@ describe('CI workflow', () => {
   })
 
   it('runs the darwin unit parity inventory at the coverage lanes\' test budget', () => {
-    const coverage = workflowJob(loadWorkflow('.github/workflows/ci.yml'), 'node-24-coverage')
+    const coverage = workflowJob(loadOfficialWorkflow('ci.yml'), 'node-24-coverage')
     if (!isRecord(coverage.env) || typeof coverage.env.DSH_COVERAGE_TEST_TIMEOUT_MS !== 'string') {
       throw new TypeError('node-24-coverage must grant DSH_COVERAGE_TEST_TIMEOUT_MS')
     }
-    const unitDarwin = workflowJob(loadWorkflow('.github/workflows/sandbox.yml'), 'unit-darwin')
+    const unitDarwin = workflowJob(loadOfficialWorkflow('sandbox.yml'), 'unit-darwin')
     if (!Array.isArray(unitDarwin.steps)) throw new TypeError('unit-darwin job must define steps')
     const unit = unitDarwin.steps.filter(isRecord).find(step => step.name === 'Unit tests (darwin parity)')
     // The whole unit inventory on a shared macos-latest runner pays the same
@@ -653,8 +658,8 @@ describe('CI workflow', () => {
   })
 
   it('gates standalone keyless blacksmith jobs and benchmark tiers on the failover variables', () => {
-    const expectedFilenames = workflowJob(loadWorkflow('.github/workflows/expected-filenames.yml'), 'expected-filenames')
-    const sandbox = workflowJob(loadWorkflow('.github/workflows/sandbox.yml'), 'sandbox-e2e')
+    const expectedFilenames = workflowJob(loadOfficialWorkflow('expected-filenames.yml'), 'expected-filenames')
+    const sandbox = workflowJob(loadOfficialWorkflow('sandbox.yml'), 'sandbox-e2e')
     expect(expectedFilenames['runs-on']).toContain('DSH_CI_FAILOVER_LINUX')
     expect(expectedFilenames['runs-on']).toContain("== 'blacksmith'")
     expect(expectedFilenames['runs-on']).toContain('blacksmith-4vcpu-ubuntu-2404')
@@ -663,7 +668,7 @@ describe('CI workflow', () => {
     expect(sandbox['runs-on']).toContain('DSH_CI_FAILOVER_LINUX')
     expect(sandbox['runs-on']).toContain('blacksmith-4vcpu-ubuntu-2404')
     for (const name of ['larger-runner-benchmark', 'consolidated-runner-benchmark'] as const) {
-      const benchmark = workflowJob(loadWorkflow('.github/workflows/ci-master.yml'), name)
+      const benchmark = workflowJob(loadOfficialWorkflow('ci-master.yml'), name)
       if (!isRecord(benchmark.strategy) || !isRecord(benchmark.strategy.matrix) || !Array.isArray(benchmark.strategy.matrix.include)) {
         throw new TypeError(`${name} must define a matrix include list`)
       }
@@ -682,7 +687,7 @@ describe('CI workflow', () => {
   })
 
   it('runs required benchmarks on a four-vCPU Blacksmith runner and falls back to hosted Linux', () => {
-    const workflow = loadWorkflow('.github/workflows/ci.yml')
+    const workflow = loadOfficialWorkflow('ci.yml')
     const benchmark = workflowJob(workflow, 'node-24-bench')
     const aggregate = workflowJob(workflow, 'all-checks-passed')
 
@@ -702,7 +707,7 @@ describe('CI workflow', () => {
   })
 
   it('always restores the hosted benchmark pnpm cache', () => {
-    const benchmark = workflowJob(loadWorkflow('.github/workflows/ci.yml'), 'node-24-bench')
+    const benchmark = workflowJob(loadOfficialWorkflow('ci.yml'), 'node-24-bench')
     if (!Array.isArray(benchmark.steps)) throw new TypeError('benchmark job must define steps')
     const caches = benchmark.steps.filter(step => isRecord(step) && step.uses === 'actions/cache/restore@v6.1.0')
 
@@ -717,7 +722,7 @@ describe('CI workflow', () => {
   })
 
   it('bounds the complete benchmark job to twenty minutes', () => {
-    const benchmark = workflowJob(loadWorkflow('.github/workflows/ci.yml'), 'node-24-bench')
+    const benchmark = workflowJob(loadOfficialWorkflow('ci.yml'), 'node-24-bench')
 
     expect(benchmark['timeout-minutes']).toBe(20)
     expect(benchmark.steps).toContainEqual({
@@ -728,7 +733,7 @@ describe('CI workflow', () => {
   })
 
   it('publishes the scaled benchmark report even when a budget fails', () => {
-    const benchmark = workflowJob(loadWorkflow('.github/workflows/ci.yml'), 'node-24-bench')
+    const benchmark = workflowJob(loadOfficialWorkflow('ci.yml'), 'node-24-bench')
     if (!Array.isArray(benchmark.steps)) throw new TypeError('benchmark job must define steps')
 
     expect(benchmark.steps).toContainEqual({
@@ -772,7 +777,7 @@ describe('CI workflow', () => {
   })
 
   it('runs only Wine for its manual suite and retains master-push scheduling', () => {
-    const master = loadWorkflow('.github/workflows/ci-master.yml')
+    const master = loadOfficialWorkflow('ci-master.yml')
     if (!isRecord(master.on) || !isRecord(master.on.workflow_dispatch)
       || !isRecord(master.on.workflow_dispatch.inputs) || !isRecord(master.on.workflow_dispatch.inputs.suite)
       || !isRecord(master.jobs)) throw new TypeError('CI master must define manual suites and jobs')
@@ -803,8 +808,8 @@ describe('CI workflow', () => {
   })
 
   it('cancels superseded master runs without changing the post-merge job inventory', () => {
-    const workflow = loadWorkflow('.github/workflows/ci-master.yml')
-    const prWorkflow = loadWorkflow('.github/workflows/ci.yml')
+    const workflow = loadOfficialWorkflow('ci-master.yml')
+    const prWorkflow = loadOfficialWorkflow('ci.yml')
     if (!isRecord(workflow.jobs) || !isRecord(workflow.concurrency)) {
       throw new TypeError('ci-master workflow must define jobs and a workflow-level concurrency block')
     }
@@ -827,14 +832,14 @@ describe('CI workflow', () => {
     }
     expect(Object.keys(workflow.on).sort()).toEqual(['push', 'workflow_dispatch'])
     expect(Object.keys(prWorkflow.on)).toEqual(['pull_request'])
-    const windowsWorkflow = loadWorkflow('.github/workflows/ci-windows.yml')
+    const windowsWorkflow = loadOfficialWorkflow('ci-windows.yml')
     if (!isRecord(windowsWorkflow.on)) throw new TypeError('CI Windows workflow must define on')
     expect(Object.keys(windowsWorkflow.on)).toEqual(['pull_request'])
     expect(windowsWorkflow.concurrency).toEqual(workflow.concurrency)
     // Duplicated env must not drift: a Node bump on one lane only would run
     // Linux and Windows against different versions.
     expect(windowsWorkflow.env).toEqual(prWorkflow.env)
-    const pythonWorkflow = loadWorkflow('.github/workflows/ci-python.yml')
+    const pythonWorkflow = loadOfficialWorkflow('ci-python.yml')
     if (!isRecord(pythonWorkflow.on)) throw new TypeError('CI Python workflow must define on')
     expect(Object.keys(pythonWorkflow.on)).toEqual(['pull_request'])
     expect(pythonWorkflow.concurrency).toEqual(workflow.concurrency)
@@ -879,8 +884,8 @@ describe('CI workflow', () => {
   })
 
   it('redirects the Node compile cache to the data-volume runner temp before the first pnpm call', () => {
-    const prWorkflow = loadWorkflow('.github/workflows/ci.yml')
-    const masterWorkflow = loadWorkflow('.github/workflows/ci-master.yml')
+    const prWorkflow = loadOfficialWorkflow('ci.yml')
+    const masterWorkflow = loadOfficialWorkflow('ci-master.yml')
     const redirectLanes = [
       [prWorkflow, 'node-24'],
       [prWorkflow, 'node-24-coverage'],
@@ -917,7 +922,7 @@ describe('CI workflow', () => {
   })
 
   it('requires release-shaped Python runtime validation on Linux and Windows x64 in CI Python', () => {
-    const workflow = loadWorkflow('.github/workflows/ci-python.yml')
+    const workflow = loadOfficialWorkflow('ci-python.yml')
     const pythonRuntime = workflowJob(workflow, 'python-runtime')
     const aggregate = workflowJob(workflow, 'python-checks-passed')
     if (!Array.isArray(aggregate.needs)) {
@@ -935,18 +940,18 @@ describe('CI workflow', () => {
     })
     expect(aggregate.needs).toEqual(['python-sdk', 'python-runtime'])
     for (const file of ['ci.yml', 'ci-windows.yml']) {
-      const other = loadWorkflow('.github/workflows/' + file)
+      const other = loadOfficialWorkflow(file)
       if (!isRecord(other.jobs)) throw new TypeError(`${file} must define jobs`)
       expect(other.jobs).not.toHaveProperty('python-runtime')
     }
   })
 
   it('builds SSH executables only for explicit manual or release requests', () => {
-    const ci = loadWorkflow('.github/workflows/ci.yml')
+    const ci = loadOfficialWorkflow('ci.yml')
     if (!isRecord(ci.jobs)) throw new Error('PR CI must define jobs')
     expect(Object.values(ci.jobs)).not.toContainEqual(expect.objectContaining({ uses: './.github/workflows/build-exe-for-ssh-helper.yml' }))
     expect(workflowJob(ci, 'all-checks-passed').needs).not.toContain('ssh-helper')
-    const master = workflowJob(loadWorkflow('.github/workflows/ci-master.yml'), 'ssh-helper')
+    const master = workflowJob(loadOfficialWorkflow('ci-master.yml'), 'ssh-helper')
     if (typeof master.if !== 'string') throw new Error('SSH manual caller must define its trigger condition')
     for (const [event, suite, expected] of [
       ['push', 'ssh-helper', false], ['pull_request', 'ssh-helper', false],
@@ -955,13 +960,13 @@ describe('CI workflow', () => {
       expect(runInNewContext(master.if, { github: { event_name: event, ref: 'refs/heads/master' }, inputs: { suite } }, { timeout: 1000 })).toBe(expected)
     }
     expect(master.with).toEqual({ targets: 'node24-linux-x64,node24-linux-arm64,node24-macos-arm64,node24-macos-x64' })
-    const workflow = loadWorkflow('.github/workflows/build-exe-for-ssh-helper.yml')
+    const workflow = loadOfficialWorkflow('build-exe-for-ssh-helper.yml')
     if (!isRecord(workflow.on)) throw new Error('SSH builder must define triggers')
     expect(Object.keys(workflow.on).sort()).toEqual(['workflow_call', 'workflow_dispatch'])
   })
 
   it('requires SSH helper acceptance before uploading artifacts or publishing', () => {
-    const workflow = loadWorkflow('.github/workflows/build-exe-for-ssh-helper.yml')
+    const workflow = loadOfficialWorkflow('build-exe-for-ssh-helper.yml')
     const build = workflowJob(workflow, 'build')
     if (!Array.isArray(build.steps)) throw new Error('SSH build must define its verification steps')
     const steps = build.steps.filter(isRecord)
@@ -974,7 +979,7 @@ describe('CI workflow', () => {
     expect(transport).toBeGreaterThan(artifact)
     expect(upload).toBeGreaterThan(transport)
     for (const index of [artifact, transport, landlock, upload]) expect(steps[index]).not.toHaveProperty('continue-on-error', true)
-    const publish = loadWorkflow('.github/workflows/publish-ssh-helper.yml')
+    const publish = loadOfficialWorkflow('publish-ssh-helper.yml')
     expect(publish.permissions).toEqual({ contents: 'read' })
     expect(workflowJob(publish, 'build')).toMatchObject({ needs: 'validate', with: { release: true } })
     const verify = workflowJob(publish, 'verify')
@@ -995,7 +1000,7 @@ describe('CI workflow', () => {
   })
 
   it('validates any ref by default but refuses publication without the matching SSH release tag', () => {
-    const workflow = loadWorkflow('.github/workflows/publish-ssh-helper.yml')
+    const workflow = loadOfficialWorkflow('publish-ssh-helper.yml')
     if (!isRecord(workflow.on)) throw new Error('SSH release must define triggers')
     expect(Object.keys(workflow.on)).toEqual(['workflow_dispatch'])
     expect(workflowEvent(workflow, 'workflow_dispatch').inputs).toMatchObject({ publish: { type: 'boolean', default: false } })
@@ -1022,7 +1027,7 @@ describe('CI workflow', () => {
   })
 
   it('validates the SSH native matrix before allocating runners', () => {
-    const plan = workflowJob(loadWorkflow('.github/workflows/build-exe-for-ssh-helper.yml'), 'plan')
+    const plan = workflowJob(loadOfficialWorkflow('build-exe-for-ssh-helper.yml'), 'plan')
     const source = nodeStepSource(plan, 'targets')
     const evaluate = (requested: string): unknown => {
       let output = ''
@@ -1059,7 +1064,7 @@ describe('CI workflow', () => {
 
 describe('Runtime and LLM e2e Blacksmith routing', () => {
   it('routes DeepSeek e2e only through the Linux Blacksmith switch', () => {
-    const job = workflowJob(loadWorkflow('.github/workflows/e2e.yml'), 'e2e')
+    const job = workflowJob(loadOfficialWorkflow('e2e.yml'), 'e2e')
     for (const mode of ['', 'selfhosted', 'unexpected', 'blacksmith']) {
       expect(evaluateRunsOn(job['runs-on'], { vars: { DSH_CI_FAILOVER_LINUX: mode, DSH_CI_FAILOVER_WINDOWS: 'blacksmith' } }))
         .toBe(mode === 'blacksmith' ? 'blacksmith-4vcpu-ubuntu-2404' : 'ubuntu-latest')
@@ -1067,7 +1072,7 @@ describe('Runtime and LLM e2e Blacksmith routing', () => {
   })
 
   it('keeps native release and dispatch builders hosted while routing x64 CI by platform', () => {
-    const workflow = loadWorkflow('.github/workflows/build-exe-for-python-sdk.yml')
+    const workflow = loadOfficialWorkflow('build-exe-for-python-sdk.yml')
     const build = workflowJob(workflow, 'build')
     for (const [target, runner, variable, blacksmith, releaseRunner] of [
       ['node24-linux-x64', 'ubuntu-latest', 'DSH_CI_FAILOVER_LINUX', 'blacksmith-2vcpu-ubuntu-2404', 'ubuntu-latest'],
@@ -1089,7 +1094,7 @@ describe('Runtime and LLM e2e Blacksmith routing', () => {
   })
 
   it.each(['plan', 'sdk-wheel'])('routes runtime %s only for non-release CI', (name) => {
-    const job = workflowJob(loadWorkflow('.github/workflows/build-exe-for-python-sdk.yml'), name)
+    const job = workflowJob(loadOfficialWorkflow('build-exe-for-python-sdk.yml'), name)
     for (const ci of [false, true]) {
       for (const release of [false, true]) {
         for (const mode of ['', 'selfhosted', 'unexpected', 'blacksmith']) {
@@ -1144,7 +1149,7 @@ describe('bubblewrap preparation script', () => {
         path: '~/.cache/dsh-ci/bubblewrap',
         key: "bubblewrap-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/prepare-ci-bubblewrap.sh') }}",
       }
-      const workflow = loadWorkflow('.github/workflows/' + name)
+      const workflow = loadOfficialWorkflow(name)
       if (!isRecord(workflow.jobs)) throw new TypeError(`${name} must define jobs`)
 
       let preparations = 0
@@ -1186,7 +1191,7 @@ describe('bubblewrap preparation script', () => {
 
 describe('DeepSeek e2e workflow', () => {
   it('prepares bubblewrap from the pinned payload without a package transaction', () => {
-    const workflow = loadWorkflow('.github/workflows/e2e.yml')
+    const workflow = loadOfficialWorkflow('e2e.yml')
     const e2e = workflowJob(workflow, 'e2e')
     if (!Array.isArray(e2e.steps)) throw new TypeError('DeepSeek e2e workflow must define steps')
 
@@ -1198,7 +1203,7 @@ describe('DeepSeek e2e workflow', () => {
   })
 
   it('bounds profile subprocess fan-out to the tested e2e default', () => {
-    const workflow = loadWorkflow('.github/workflows/e2e.yml')
+    const workflow = loadOfficialWorkflow('e2e.yml')
     const e2e = workflowJob(workflow, 'e2e')
     if (!Array.isArray(e2e.steps)) throw new TypeError('DeepSeek e2e workflow must define steps')
 
@@ -1209,7 +1214,7 @@ describe('DeepSeek e2e workflow', () => {
 
 describe('Python release workflows', () => {
   it('keeps complete wheel validation separate from protected public publication', () => {
-    const workflow = loadWorkflow('.github/workflows/python-release.yml')
+    const workflow = loadOfficialWorkflow('python-release.yml')
     const dispatch = workflowEvent(workflow, 'workflow_dispatch')
     const build = workflowJob(workflow, 'build')
     const pythonCompat = workflowJob(workflow, 'python-compat')
@@ -1289,7 +1294,7 @@ describe('Python release workflows', () => {
   })
 
   it('exposes the native wheel builder to the release caller with normalized versions', () => {
-    const workflow = loadWorkflow('.github/workflows/build-exe-for-python-sdk.yml')
+    const workflow = loadOfficialWorkflow('build-exe-for-python-sdk.yml')
     expect(Object.keys(workflow.on as Record<string, unknown>).sort()).toEqual(['workflow_call', 'workflow_dispatch'])
     const call = workflowEvent(workflow, 'workflow_call')
     const plan = workflowJob(workflow, 'plan')
@@ -1393,7 +1398,7 @@ describe('Python release workflows', () => {
     ['POSIX', 'posix', "runner.os != 'Windows'"],
     ['Windows', 'windows', "runner.os == 'Windows'"],
   ])('runs native command regressions through the installed %s wheels', (platform, suffix, condition) => {
-    const build = workflowJob(loadWorkflow('.github/workflows/build-exe-for-python-sdk.yml'), 'build')
+    const build = workflowJob(loadOfficialWorkflow('build-exe-for-python-sdk.yml'), 'build')
     if (!Array.isArray(build.steps)) throw new TypeError('Python wheel builder must define steps')
     const steps = build.steps.filter(isRecord)
     const installIndex = steps.findIndex(step => step.id === `smoke-venv-${suffix}`)
@@ -1467,8 +1472,8 @@ describe('Python release workflows', () => {
 
 describe('Weighted approval workflow', () => {
   it('publishes from the trusted default branch after pull request and review updates', () => {
-    const publisher = loadWorkflow('.github/workflows/weighted-approval.yml')
-    const reviewEvent = loadWorkflow('.github/workflows/weighted-approval-review-event.yml')
+    const publisher = loadOfficialWorkflow('weighted-approval.yml')
+    const reviewEvent = loadOfficialWorkflow('weighted-approval-review-event.yml')
     const pullRequest = workflowEvent(publisher, 'pull_request_target')
     const workflowRun = workflowEvent(publisher, 'workflow_run')
     const review = workflowEvent(reviewEvent, 'pull_request_review')
@@ -1552,7 +1557,7 @@ describe('Weighted approval workflow', () => {
       if: "failure() && steps.revoke.outputs.active == 'true'",
       run: 'node .github/review-ownership/check-approval.mjs error',
     })
-    const pythonJob = workflowJob(loadWorkflow('.github/workflows/ci-python.yml'), 'python-sdk')
+    const pythonJob = workflowJob(loadOfficialWorkflow('ci-python.yml'), 'python-sdk')
     expect(pythonJob.steps).toContainEqual({
       name: 'Test production blame scoring',
       run: "uv run --python 3.10 --with-requirements .github/review-ownership/requirements.txt python -m unittest discover -s .github/review-ownership -p 'test_*.py'",
@@ -1587,8 +1592,8 @@ describe('Weighted approval workflow', () => {
 
 describe('Issue lifecycle workflow', () => {
   it('allocates lifecycle runners only for events that can change the board', () => {
-    const lifecycle = loadWorkflow('.github/workflows/issue-lifecycle.yml')
-    const policy = loadWorkflow('.github/workflows/issue-policy.yml')
+    const lifecycle = loadOfficialWorkflow('issue-lifecycle.yml')
+    const policy = loadOfficialWorkflow('issue-policy.yml')
     const lifecycleJob = workflowJob(lifecycle, 'lifecycle')
     if (!Array.isArray(lifecycleJob.steps)) throw new TypeError('Issue lifecycle job must define steps')
 
@@ -1625,7 +1630,7 @@ describe('Issue lifecycle workflow', () => {
   })
 
   it('mints Project credentials only after preflight and always revalidates current metadata', () => {
-    const policy = loadWorkflow('.github/workflows/issue-policy.yml')
+    const policy = loadOfficialWorkflow('issue-policy.yml')
     const policyJob = workflowJob(policy, 'policy')
     if (!Array.isArray(policyJob.steps)) throw new TypeError('Issue policy job must define steps')
     const steps = policyJob.steps.filter(isRecord)
@@ -1663,7 +1668,7 @@ describe('Issue lifecycle workflow', () => {
 
 describe('npm release workflows', () => {
   it('passes the optional vendor channel as a quoted argument while preserving default publication', () => {
-    const workflow = loadWorkflow('.github/workflows/release-vendor-publish.yml')
+    const workflow = loadOfficialWorkflow('release-vendor-publish.yml')
     expect(workflow.on).toMatchObject({
       workflow_dispatch: {
         inputs: {
@@ -1696,7 +1701,7 @@ describe('npm release workflows', () => {
   it('keeps publication dispatch-only and pack in the PR workflow', () => {
     // pack stays in the PR/master release workflows so a PR proves the set packs.
     for (const file of ['release.yml', 'release-vendor.yml']) {
-      const workflow = loadWorkflow(`.github/workflows/${file}`)
+      const workflow = loadOfficialWorkflow(file)
       if (!isRecord(workflow.jobs)) throw new TypeError(`${file} must define jobs`)
       expect(Object.keys(workflow.jobs).sort()).toEqual(file === 'release.yml' ? ['dependencies', 'pack'] : ['pack'])
     }
@@ -1704,7 +1709,7 @@ describe('npm release workflows', () => {
     // publication is workflow_dispatch-only (never a PR check) and keeps the
     // npm-publish environment plus the shared dist-tag group.
     for (const file of ['release-publish.yml', 'release-vendor-publish.yml']) {
-      const workflow = loadWorkflow(`.github/workflows/${file}`)
+      const workflow = loadOfficialWorkflow(file)
       if (!isRecord(workflow.on) || !isRecord(workflow.jobs)) throw new TypeError(`${file} must define on and jobs`)
       expect(Object.keys(workflow.on)).toEqual(['workflow_dispatch'])
       const publish = workflow.jobs.publish
@@ -1715,7 +1720,7 @@ describe('npm release workflows', () => {
   })
 
   it('runs dependency policy and npm layout checks in the DSH release workflow', () => {
-    const workflow = loadWorkflow('.github/workflows/release.yml')
+    const workflow = loadOfficialWorkflow('release.yml')
     const dependencies = workflowJob(workflow, 'dependencies')
     if (!isRecord(workflow.on) || !Array.isArray(dependencies.steps)) {
       throw new TypeError('DSH release workflow must define triggers and dependency steps')
@@ -1736,7 +1741,7 @@ describe('npm release workflows', () => {
 
 describe('Documentation site publication', () => {
   it('keeps Pages deployment dispatch-only from a dsh-v* tag', () => {
-    const workflow = loadWorkflow('.github/workflows/docs-pages.yml')
+    const workflow = loadOfficialWorkflow('docs-pages.yml')
     const build = workflowJob(workflow, 'build')
     const deploy = workflowJob(workflow, 'deploy')
     if (!isRecord(workflow.on) || !isRecord(workflow.env) || !Array.isArray(build.steps)) {
@@ -1792,6 +1797,10 @@ describe('Git hooks', () => {
   })
 })
 
+function loadOfficialWorkflow(name: string): Record<string, unknown> {
+  return loadWorkflow(`.github/upstream-workflows/${name}.disabled`)
+}
+
 function loadWorkflow(path: string): Record<string, unknown> {
   const workflow: unknown = yaml.load(readFileSync(resolve(root, path), 'utf8'))
   if (!isRecord(workflow)) throw new TypeError(`${path} must define a workflow`)
@@ -1830,7 +1839,7 @@ describe('Policy workflow shells', () => {
     '%s runs shell blocks that parse',
     (file) => {
       if (process.platform === 'win32') return
-      const workflow = loadWorkflow('.github/workflows/' + file)
+      const workflow = loadOfficialWorkflow(file)
       if (!isRecord(workflow.jobs)) throw new TypeError(`${file} must define jobs`)
       for (const job of Object.values(workflow.jobs)) {
         if (!isRecord(job) || !Array.isArray(job.steps)) continue
@@ -1857,7 +1866,7 @@ describe('Policy workflows', () => {
   }
 
   it.each(workflows)('%s runs each check from master and reads its mode from a repository variable', (file, jobs) => {
-    const workflow = loadWorkflow('.github/workflows/' + file)
+    const workflow = loadOfficialWorkflow(file)
     expect(Object.keys(workflow).filter(key => key !== 'name')).toEqual(['on', 'permissions', 'concurrency', 'jobs'])
     const events = workflow.on
     if (!isRecord(events)) throw new TypeError(`${file} must declare events`)
@@ -1873,19 +1882,19 @@ describe('Policy workflows', () => {
   it('runs on the release branches as well as master, on both pull requests and base-branch pushes', () => {
     const branches = ['master', 'release/dsh-[0-9]+.[0-9]+.[0-9]+']
     for (const file of ['pr-check-on-head-branch.yml', 'pr-check-after-approve.yml']) {
-      const workflow = loadWorkflow('.github/workflows/' + file)
+      const workflow = loadOfficialWorkflow(file)
       const events = workflow.on
       if (!isRecord(events) || !isRecord(events.pull_request_target)) throw new TypeError(`${file} must trigger on pull_request_target`)
       expect(events.pull_request_target.branches).toEqual(branches)
     }
-    const workflow = loadWorkflow('.github/workflows/pr-check-on-base-branch.yml')
+    const workflow = loadOfficialWorkflow('pr-check-on-base-branch.yml')
     const events = workflow.on
     if (!isRecord(events) || !isRecord(events.push)) throw new TypeError('the base-branch workflow must trigger on push')
     expect(events.push.branches).toEqual(branches)
   })
 
   it('decides the review verdict in one Approve Check job that can publish the check run', () => {
-    const workflow = loadWorkflow('.github/workflows/pr-check-after-approve.yml')
+    const workflow = loadOfficialWorkflow('pr-check-after-approve.yml')
     if (!isRecord(workflow.jobs)) throw new TypeError('the workflow must define jobs')
     expect(Object.keys(workflow.jobs)).toEqual(['approve'])
     const job = workflow.jobs.approve
@@ -1899,7 +1908,7 @@ describe('Policy workflows', () => {
   })
 
   it('keeps the pre-merge build behind the merge step, which honours the mode on its failures', () => {
-    const steps = stepsOf(workflowJob(loadWorkflow('.github/workflows/pr-check-on-head-branch.yml'), 'pre-merge'))
+    const steps = stepsOf(workflowJob(loadOfficialWorkflow('pr-check-on-head-branch.yml'), 'pre-merge'))
     const merge = steps.findIndex(step => step.id === 'merge')
     const build = steps.findIndex(step => step.name === "Run the tree's pre-merge check")
     expect(merge).toBeGreaterThanOrEqual(0)

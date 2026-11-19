@@ -73,6 +73,15 @@ describe('unique object-name prefix search', () => {
 })
 
 describe('maintained repository reference policy', () => {
+  it('admits the full upstream cursor and reports other commit references', () => {
+    const sha = 'abcdef01'.repeat(5)
+    const commits = new Set([sha])
+    const cursor = '.github/next-upstream-base'
+    expect(findRepositoryReferences(cursor, `${sha}\n`, commits)).toEqual([])
+    expect(findRepositoryReferences(cursor, `source ${sha}\n`, commits)).toHaveLength(1)
+    expect(findRepositoryReferences('README.md', `${sha}\n`, commits)).toHaveLength(1)
+  })
+
   const numericCommit = String(6_344_383)
 
   it.each([

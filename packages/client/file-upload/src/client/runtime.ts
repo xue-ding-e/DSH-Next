@@ -6,7 +6,7 @@ import { bytesToBase64 } from '@deepseek-ai/dsh-util-crypto'
 import { RemoteError } from '@deepseek-ai/dsh-typert-protocol'
 import type { RemoteResult } from '@deepseek-ai/dsh-typert-protocol'
 import type { Branded } from '@deepseek-ai/dsh-brand'
-import type { MessageId } from '@deepseek-ai/dsh-llm/brand'
+import type { MessageId } from '@deepseek-ai/dsh-llm/types'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import { FILE_UPLOAD_ROUTE, QUEUED_FILE_ROUTE } from '../protocol.ts'
 import type {

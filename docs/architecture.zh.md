@@ -2,17 +2,17 @@
 
 [English](architecture.md) | 中文
 
-改动 `packages/` 下的任何内容之前，请先阅读本文。本文假定你已了解 Cordis；如果尚未了解，请先阅读[入门](cordis-primer.zh.md)或[教程](cordis-tutorial/index.zh.md)。
+改动 `packages/` 前先读本文。若尚未了解 Cordis，请先读[入门](cordis-primer.zh.md)或[教程](cordis-tutorial/index.zh.md)。
 
 ## Cordis
 
-[Cordis](cordis-primer.zh.md) 是 dsh 底层的框架：插件向共享上下文贡献服务、类型化事件和可逆的副作用。产品的每一部分都是插件，包括模型适配器、工具注册表、会话日志，以及 agent loop（智能体循环）本身，因此每个都可以从配置替换。
+dsh 使用 [Cordis](cordis-primer.zh.md) 插件向共享上下文贡献服务、类型化事件和可逆的副作用。模型适配器、工具注册表、会话日志和 agent loop（智能体循环）等所有组件都是插件，均可通过配置替换。
 
-不存在需要打补丁的特权内核：扩展 dsh 的方式是把插件挂载到其他插件旁边，而各项注册都是副作用，会在其插件卸载时撤销。
+扩展 dsh 时，将插件与其他插件一同挂载。各项注册都是副作用，会在所属插件卸载时撤销。
 
 ## Profile 与组合包
 
-运行中的 `dsh` 是一棵插件树，由启动时按序叠加的各层组合而成。
+启动时，各层按序组成 `dsh` 的插件树。
 
 **profile** 是存放在 Harness home 中的具名组装。它列出自己叠放的组合包，存放自己安装的树外插件，并保存用户自己的 `cordis.patch.yml`。`web`、`headless`、`sdk`、`sdk-minimal` 和 `acp` 作为模板随发行版交付。
 
@@ -111,7 +111,7 @@ turn/end
 
 `turn/*`、`step/*`、`system/message`、`user/message`、`assistant/message`、`assistant/attempt` 和 `tool/*` 是持久会话事件；其余是分属三个事件域的实时扩展点。`agent/assistant-stream` 发布进程本地 start、瞬态 chunk 与 end frame。loop 会在 committed end frame 前把完整紧凑 stream 提交为一个 message 或仅日志 attempt；Web Session-follow adapter 是该 live event 唯一的远程消费方。`agent/pre-step`、`agent/request`、`llm/stream` 和三个 `tools/*` 事件是 waterfall（瀑布式事件），其监听器必须调用 `next()` 才能委托下去；`agent/turn-stopping` 是 serial 事件，没有 `next()`。
 
-工厂 setup 在 Session 进入 SessionStore 并完成 `session/created` 之后、`agent/created` 之前运行；收尾事件在移除之前提交。
+fork 创建存储调用方提供的历史；共享前缀的后端先持久化父前缀（[生命周期](../packages/core/agent-loop/README.zh.md#understand-the-implementation)）。工厂 setup 在 Session 进入 SessionStore 并完成 `session/created` 之后、`agent/created` 之前运行；收尾事件在移除之前提交。
 
 输入通过同一个 inbox 到达驱动器；注入的上下文等待一条唤醒消息。AgentLoop 的持久 `inbox` 投影使待处理输入在没有活跃 Agent 时仍可读取。 [撤回](../packages/api/session-controller/README.zh.md#use-this-package)。
 
@@ -168,7 +168,7 @@ seam 使替换一个提供方即可改变整个产品。文件系统与进程提
 | 添加持久会话状态 | 扩展 `SessionEventMap`；从日志渲染和回放 |
 | 生成会话标题 | 注册唯一的 `ctx.sessionTitle` 提供方 |
 | 管理同会话目标 | 使用 `ctx.goals`；通过 `agent/*` 续跑 |
-| 在轮次边界 fork 会话 | `ctx.agents.create({ sessionId, seed, inheritedEventCount, meta: { isSeeded: true } })`——只有经 agent-loop 发布的会话才会持久化 |
+| 在轮次边界 fork 会话 | `ctx.agents.create({ sessionId, source, inheritedEventCount, meta: { isSeeded: true } })` 在发布之前存储提供的父前缀与子会话事件 |
 | 在新后端存储会话 | 基于共享的句柄脚手架实现 `SessionPersistence`（`create`/`open`/`stat`/`list`/`export`） |
 | 将注册项限定到单个 agent | 使用该 agent 的 `agent.ctx` |
 

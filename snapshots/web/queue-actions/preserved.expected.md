@@ -1,6 +1,9 @@
 - banner:
   - navigation "Session hierarchy": Reply with a one-sentence description
+  - button "Session mailbox"
   - text: Standard mode
+  - button "Session panel"
+  - button "Manage directories"
   - button "More actions"
   - button "Open right sidebar"
   - tablist:
@@ -9,6 +12,7 @@
   - button "More conversation views"
 - text: Reply with a one-sentence description of event sourcing, then stop. {{clock}}
 - button "Copy"
+- button "Edit and resend"
 - status: Stopped
 - button "Stopped" [disabled] [expanded]
 - button "Injected context"

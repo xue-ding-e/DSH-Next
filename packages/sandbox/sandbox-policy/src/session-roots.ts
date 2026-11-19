@@ -24,6 +24,7 @@ export const requestedRootsStateSchema = z.object({
   started: z.boolean(),
   rootsRevision: z.number().int().nonnegative(),
   modeRevision: z.number().int().nonnegative(),
+  workspaceRootRevision: z.number().int().nonnegative(),
 })
 
 /** Projected Session facts. Grants have their own process-local owner. */
@@ -38,6 +39,7 @@ export type RequestedRootsState = z.infer<typeof requestedRootsStateSchema>
 export function foldRequestedRoots(state: RequestedRootsState, event: SessionEvent): RequestedRootsState {
   if (event.type === 'turn/start') return state.started ? state : { ...state, started: true }
   if (event.type === 'sandbox/mode') return { ...state, modeRevision: event.seq }
+  if (event.type === 'workspace-root/change') return { ...state, workspaceRootRevision: event.seq }
   if (event.type !== 'sandbox/roots-requested') return state
   return { ...state, roots: requestedRootsSchema.parse(event.data.roots), rootsRevision: event.seq }
 }

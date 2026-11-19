@@ -11,7 +11,7 @@ import type { Session, SessionEvent, SessionId, UserMessage } from '@deepseek-ai
 import type {} from '@deepseek-ai/dsh-session-query'
 import { Remote, RemoteError, remoteErrorOf, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
 import { handleQueuedFileHttp } from './queued-file-route.ts'
-import type { MessageId } from '@deepseek-ai/dsh-llm/brand'
+import type { MessageId } from '@deepseek-ai/dsh-llm/types'
 import { handleFileUploadHttp } from './http-route.ts'
 import { FILE_UPLOAD_PATH, QUEUED_FILE_PATH } from './protocol.ts'
 import type {

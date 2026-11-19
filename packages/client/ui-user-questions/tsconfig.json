@@ -57,7 +57,7 @@
       "path": "../ui-settings/tsconfig.client.json"
     },
     {
-      "path": "../ui-workspace"
+      "path": "../ui-workspace/tsconfig.client.json"
     },
     {
       "path": "../ui-tool"

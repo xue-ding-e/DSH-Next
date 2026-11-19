@@ -10,8 +10,7 @@ import type { Agent } from '@deepseek-ai/dsh-agent'
 import type { FileReferenceCandidate } from './types.ts'
 
 export { activeAtToken, formatFileMention } from './grammar.ts'
-export type { ActiveAtToken } from './grammar.ts'
-export type { FileReferenceCandidate } from './types.ts'
+export type { ActiveAtToken, FileReferenceCandidate } from './types.ts'
 
 /** Model guidance for path-only references selected by a user interface. */
 export const FILE_REFERENCE_PROMPT = 'Tokens prefixed with @ are paths the user explicitly referenced. Relative paths resolve from the workspace root; absolute paths identify files or directories on the host. A trailing slash marks a directory: list it when its contents matter. Anything else is a file: use the read tool when its contents are needed, and do not claim to have inspected it before reading. @"..." quotes a path containing spaces.'
@@ -48,8 +47,20 @@ export abstract class FileReferenceService extends Service {
   }
 
   /**
-   * List file and directory candidates for one agent's working directory.
-   * @param agent - target agent whose session cwd bounds discovery.
+   * List candidates confined to the Session's current working directory.
+   * Providers that cannot enforce this scope return no candidates.
+   * @param _agent - target Agent.
+   * @param _query - path text following `@` or `@"`.
+   * @param _signal - caller cancellation.
+   * @returns path-only candidates in the current directory.
+   */
+  listWorkingDirectory(_agent: Agent, _query: string, _signal: AbortSignal): Promise<FileReferenceCandidate[]> {
+    return Promise.resolve([])
+  }
+
+  /**
+   * List candidates from the working directory and confirmed Session roots.
+   * @param agent - target Agent whose Session supplies the discovery scope.
    * @param query - path text following `@` or `@"`.
    * @param signal - caller cancellation.
    * @returns deterministic path-only candidates.

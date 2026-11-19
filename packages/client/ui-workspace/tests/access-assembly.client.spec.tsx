@@ -7,11 +7,12 @@
  * remote-access snapshot owner itself and renders the real slot tree, so the Workspace access Hooks
  * are the renderer's bindings over one non-owner snapshot.
  */
+import { syncedConfig } from '@deepseek-ai/dsh-client-test-runtime'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, screen, waitFor } from '@testing-library/react'
-import type { RemoteEndpoint, TypertResourceKind } from '@deepseek-ai/dsh-api-remote-access/client'
+import type { AccessEffect, RemoteEndpoint, TypertResourceKind } from '@deepseek-ai/dsh-api-remote-access/client'
 import { ClientAccessState } from '@deepseek-ai/dsh-api-remote-access/src/client/state.ts'
-import { whenAllowed, type AccessEffect } from '@deepseek-ai/dsh-api-remote-access/src/client/when-allowed.ts'
+import { whenAllowed } from '@deepseek-ai/dsh-api-remote-access/src/client/when-allowed.ts'
 import type { WorkspaceId } from '@deepseek-ai/dsh-api-workspace-controller/client'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
@@ -51,7 +52,7 @@ async function bench(access: ClientAccessState, options: { ungroupedSession?: Se
       ctx.provide('remoteAccess', {
         source: (kind: TypertResourceKind, id: string, action: string) => access.resource(kind, id, action),
         whenAccess: (action: RemoteEndpoint, callback: () => AccessEffect) =>
-          whenAllowed(ctx, access.global(action), callback, 'workspace access fixture'),
+          whenAllowed(ctx, access.global(action), callback, `access-assembly: ${action}`),
       })
       ctx.slots.provideRoot({ keyedHooks: { remoteAccess: action => access.global(action) } })
     },
@@ -95,8 +96,8 @@ async function bench(access: ClientAccessState, options: { ungroupedSession?: Se
     { 'sidebar.workspaces': { kind: 'single', scope: 'root', inject: SECTION_INJECT } } as never,
     SidebarFrame as never,
   )
-  await runtime.mount({ inject: [...injectMenus], apply: applyMenus })
-  await runtime.mount({ inject: [...inject], apply })
+  await runtime.mount({ inject: [...injectMenus], apply: applyMenus }, syncedConfig({ resolutionTimeoutMs: 1000 }))
+  await runtime.mount({ inject: [...inject], apply }, syncedConfig({ recentViewLimit: 10 }))
   await waitFor(() => {
     expect(create).toHaveBeenCalledExactlyOnceWith({ workspaceId: WORKSPACE, sessionId: BLANK_SESSION })
     expect(runtime.sessions.retainInfo(BLANK_SESSION).getSnapshot().retainedBy.mainView).toBe(1)
@@ -150,6 +151,31 @@ describe('Workspace header actions under the page access snapshot', () => {
       act(() => { access.replace({ type: 'baseline', owner: true }) })
       expect(screen.getByRole('button', { name: '在“Project”中新建会话' })).toBeTruthy()
     } finally {
+      await runtime.dispose()
+    }
+  })
+
+  it('updates the open Move to section menu when the target Session grant changes', async () => {
+    const access = new ClientAccessState({ type: 'baseline', owner: false, grants: [] })
+    const sessionId = 'loose' as SessionId
+    const resource = { kind: 'session', id: sessionId } as const
+    const runtime = await bench(access, { ungroupedSession: sessionId })
+    const menu = runtime.ctx.contextMenus.resolve({ kind: 'session', value: { sessionId, displayTitle: 'Loose' } })
+    try {
+      await menu.ready
+      const move = () => menu.source.getSnapshot().find(item => item.label === '移至分区')
+      expect(move()).toBeUndefined()
+
+      access.update({ type: 'upsert', grant: { resource, actions: ['workspace/insertSessionBefore'] } })
+      expect(move()?.children?.map(item => item.label)).toEqual(['最近', '新建分区'])
+
+      access.update({ type: 'remove', resource })
+      expect(move()).toBeUndefined()
+
+      access.replace({ type: 'baseline', owner: true })
+      expect(move()?.children?.map(item => item.label)).toEqual(['最近', '新建分区'])
+    } finally {
+      menu.dispose()
       await runtime.dispose()
     }
   })

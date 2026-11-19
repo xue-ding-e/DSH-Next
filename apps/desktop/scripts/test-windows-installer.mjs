@@ -29,6 +29,8 @@ const outputRoot = join(appRoot, '.desktop-build', 'installer-tests')
 await mkdir(outputRoot, { recursive: true })
 const output = await mkdtemp(join(outputRoot, 'run-'))
 const payload = join(output, 'payload')
+const installerUI = join(output, 'ui')
+const sidebar = join(installerUI, 'uninstaller-sidebar.bmp')
 await mkdir(join(payload, 'resources'), { recursive: true })
 const previousEnvironment = { ...process.env }
 const signingEnvironment = process.argv.includes('--signed') ? loadDesktopPackageEnvironment('win32') : {}
@@ -56,17 +58,17 @@ try {
   const { createElectronBuilderConfig } = await import('../electron-builder.config.mjs')
   const childOptions = { env: scrubWindowsSigningEnvironment(process.env), windowsHide: true, maxBuffer: 8 * 1024 * 1024 }
   await execute('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File',
-    join(appRoot, 'scripts', 'prepare-windows-installer.ps1'), '-OutputDirectory', join(output, 'ui'), '-CompileProgressOnly'], childOptions)
-  const progressTest = join(output, 'ui', 'progress-test.exe')
-  const presentationTest = join(output, 'ui', 'presentation-test.exe')
-  const renderTest = join(output, 'ui', 'render-test.exe')
-  const cleanupTest = join(output, 'ui', 'data-cleanup-test.exe')
+    join(appRoot, 'scripts', 'prepare-windows-installer.ps1'), '-OutputDirectory', installerUI, '-CompileProgressOnly'], childOptions)
+  const progressTest = join(installerUI, 'progress-test.exe')
+  const presentationTest = join(installerUI, 'presentation-test.exe')
+  const renderTest = join(installerUI, 'render-test.exe')
+  const cleanupTest = join(installerUI, 'data-cleanup-test.exe')
   if (sign) {
     await sign({ path: progressTest, hash: 'sha256', isNest: false })
     await sign({ path: presentationTest, hash: 'sha256', isNest: false })
     await sign({ path: renderTest, hash: 'sha256', isNest: false })
     await sign({ path: cleanupTest, hash: 'sha256', isNest: false })
-    await sign({ path: join(output, 'ui', 'window-frame.dll'), hash: 'sha256', isNest: false })
+    await sign({ path: join(installerUI, 'window-frame.dll'), hash: 'sha256', isNest: false })
     installWindowsNsisBootstrapSigner({ sign })
   }
   if (!uninstallOnly) {
@@ -83,14 +85,14 @@ try {
       for (const theme of ['light', 'dark']) {
         const brand = theme === 'dark' ? 'brand-dark-2x.bmp' : 'brand-2x.bmp'
         const prefix = theme === 'dark' ? 'INSTALLER_DARK_CONTROL' : 'INSTALLER_CONTROL'
-        const result = await execute(renderTest, [join(output, 'ui', brand), String(dpi), theme,
+        const result = await execute(renderTest, [join(installerUI, brand), String(dpi), theme,
           captionColor(`${prefix}_HOVER`), captionColor(`${prefix}_PRESSED`)], childOptions)
         renderResults.push(result.stdout)
       }
     }
     await writeFile(join(output, 'render-results.log'), renderResults.join(''))
   }
-  await execute(cleanupTest, [join(output, 'ui', `cleanup-${id}`)], childOptions)
+  await execute(cleanupTest, [join(installerUI, `cleanup-${id}`)], childOptions)
   const payloadSource = join(output, 'payload.nsi')
   await writeFile(payloadSource, `Unicode true
 RequestExecutionLevel user
@@ -112,7 +114,7 @@ SectionEnd
     const owner = join(output, 'restart-status-owner.exe')
     await execute(compiler.path, ['/V2', `/DOWNER_EXE=${owner}`,
       `/DBANNER_INCLUDE=${join(appRoot, 'scripts', 'restart-banner.nsh')}`,
-      `/DSTATUS_DLL=${join(output, 'ui', 'window-frame.dll')}`,
+      `/DSTATUS_DLL=${join(installerUI, 'window-frame.dll')}`,
       join(appRoot, 'tests', 'fixtures', 'restart-status-owner.nsi')],
     { ...childOptions, env: { ...childOptions.env, ...compiler.env } })
     if (sign) await sign({ path: owner, hash: 'sha256', isNest: false })
@@ -131,11 +133,12 @@ SectionEnd
     const strings = join(languageOutput, 'strings.nsh')
     await writeFile(strings, renderInstallerStrings([locale]), 'utf8')
     const include = join(languageOutput, 'include.nsh')
-    await writeFile(include, `!define INSTALLER_BUILD_DIR "${join(output, 'ui')}"\n!define INSTALLER_STRINGS_FILE "${strings}"\n!include "${join(appRoot, 'scripts', 'installer.nsh')}"\n`)
+    await writeFile(include, `!define INSTALLER_BUILD_DIR "${installerUI}"\n!define INSTALLER_STRINGS_FILE "${strings}"\n!include "${join(appRoot, 'scripts', 'installer.nsh')}"\n`)
     await build({ projectDir: appRoot, prepackaged: payload, targets: Platform.WINDOWS.createTarget(['nsis'], Arch.x64), publish: 'never',
       config: { ...config, productName, extraMetadata: { ...config.extraMetadata, name: packageName },
         artifactName: 'installer-test.exe', directories: { output: languageOutput },
-        nsis: { ...config.nsis, guid, include, installerLanguages: [language] }, beforeBuild: undefined, afterPack: undefined, afterSign: undefined, artifactBuildCompleted: undefined },
+        nsis: { ...config.nsis, guid, include, installerSidebar: sidebar, uninstallerSidebar: sidebar, installerLanguages: [language] },
+        beforeBuild: undefined, afterPack: undefined, afterSign: undefined, artifactBuildCompleted: undefined },
     })
     if (process.argv.includes('--compile-only')) continue
     const result = await execute('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File',

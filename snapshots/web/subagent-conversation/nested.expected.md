@@ -5,6 +5,9 @@
     - 'button "Switch subagent: event-sourcing researcher"': event-sourcing researcher
     - text: /
     - 'button "Switch subagent: example editor"': example editor
+  - button "Session mailbox"
+  - button "Session panel"
+  - button "Manage directories"
   - button "More actions"
   - button "Open right sidebar"
   - tablist:

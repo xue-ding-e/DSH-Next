@@ -61,6 +61,8 @@ export function createUserTextFixture(actions: UserTextFixtureActions = {}): (in
   const sessionT = makeTranslate(conversationZh, commonZh)
   const useReferenceNavigation = bindSnapshotSelector(createSnapshotStore(DEFAULT_SESSION_REFERENCE_NAVIGATION))
   const openSessionReference = actions.openSessionReference ?? (() => { throw new Error('This fixture has no Session navigation action') })
+  // Composition units treat every path mention as Host-confirmed; ui-reference owns presence coverage.
+  const usePathPresence = () => 'present' as const
   const renderSlot: UserTextProps['renderSlot'] = (name: string, input: object, options?: { fallback?: ReactNode }) => {
     if (name !== 'conversation.user.text.node') throw new Error(`Unexpected UserText Slot: ${name}`)
     const owner = input as UserTextNodeOwnerProps & { node: UserTextNode }
@@ -70,8 +72,8 @@ export function createUserTextFixture(actions: UserTextFixtureActions = {}): (in
       case 'secret': return createElement(SecretText, { ...owner, t } as ComponentProps<typeof SecretText>)
       case 'text': return createElement(PlainUserText, owner as ComponentProps<typeof PlainUserText>)
       case 'session': return createElement(SessionReference, { ...owner, useReferenceNavigation, openSessionReference, t: sessionT } as ComponentProps<typeof SessionReference>)
-      case 'file': return createElement(FileReference, { ...owner, openFile, t, useContextMenu: contextMenuHook(), resolveFilePath: (path: string) => path } as ComponentProps<typeof FileReference>)
-      case 'folder': return createElement(FolderReference, owner as ComponentProps<typeof FolderReference>)
+      case 'file': return createElement(FileReference, { ...owner, openFile, usePathPresence, t, useContextMenu: contextMenuHook(), resolveFilePath: (path: string) => path } as ComponentProps<typeof FileReference>)
+      case 'folder': return createElement(FolderReference, { ...owner, usePathPresence } as ComponentProps<typeof FolderReference>)
       case 'skill': return createElement(SkillReference, { ...owner, openSkill } as ComponentProps<typeof SkillReference>)
       case 'command': return createElement(GoalCommandReference, owner as ComponentProps<typeof GoalCommandReference>)
       default: return options?.fallback ?? null

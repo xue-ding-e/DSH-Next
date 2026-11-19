@@ -4,7 +4,7 @@ import { NEXT_DESKTOP_IDENTITY } from '../src/next-distribution.ts'
 /**
  * Select an unsigned Next package without inheriting upstream release services or signing credentials.
  * @param {NodeJS.ProcessEnv} environment Build-tool environment, never changed in place.
- * @returns {NodeJS.ProcessEnv} Isolated manual-update distribution settings.
+ * @returns {NodeJS.ProcessEnv} Isolated settings for the unsigned Next package.
  */
 export function nextDesktopPackageEnvironment(environment = process.env) {
   return {
@@ -18,7 +18,7 @@ export function nextDesktopPackageEnvironment(environment = process.env) {
 }
 
 /**
- * Reject accidental use of the Next manual mode as a signed or official distribution.
+ * Reject accidental use of the Next package as a signed or official distribution.
  * @param {NodeJS.ProcessEnv} environment Packaging settings.
  * @returns {boolean} Whether the explicitly selected and validated distribution is Next.
  */
@@ -27,7 +27,7 @@ export function isNextDesktopPackage(environment) {
   if (environment.DSH_DESKTOP_DISTRIBUTION !== 'next'
     || environment.DSH_DESKTOP_APP_ID !== NEXT_DESKTOP_IDENTITY.appId
     || environment.DSH_DESKTOP_UNSIGNED !== '1') {
-    throw new Error('Next desktop package: only the explicit unsigned manual-update distribution is configured')
+    throw new Error('Next desktop package: the Next distribution requires the unsigned Next application identity')
   }
   return true
 }

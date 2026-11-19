@@ -44,7 +44,7 @@ For a remote caller, the Host checks the destination’s prompt grant and each s
 
 ### Finding sessions to reference
 
-`listCandidates(agent, query?, limit?)` lists sessions other than the agent's own, filters case-insensitively by id, working directory, projected title, or display title, and ranks same-directory sessions first. Each candidate carries its latest title as `label`, falling back to the session id when the title is absent or unreadable. Its display title prefers a subagent's durable creation label over that title. The candidate also reports whether its working directory is the requesting agent's so a host can surface a location only when it distinguishes the row. Browser consumers call the same discovery as `ctx.remote.sessionReferenceResolver.candidates`, which labels the canonical mention with `displayTitle` when present.
+`listCandidates(agent, query?, limit?)` lists sessions other than the agent's own, filters through the shared [text search](../../util/text-search/README.md) (projected title and display title fuzzily; session id and working directory as substrings, including an id that stands in for a missing title), and ranks same-directory sessions first, then by match. Each candidate carries its latest title as `label`, falling back to the session id when the title is absent or unreadable. Its display title prefers a subagent's durable creation label over that title. The candidate also reports whether its working directory is the requesting agent's so a host can surface a location only when it distinguishes the row. Browser consumers call the same discovery as `ctx.remote.sessionReferenceResolver.candidates`, which labels the canonical mention with `displayTitle` when present.
 
 ### Configuration
 

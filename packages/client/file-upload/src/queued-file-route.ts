@@ -1,7 +1,7 @@
 /** Authenticated byte stream restricted to one pending user message's file. */
 import { brandString, type Branded } from '@deepseek-ai/dsh-brand'
 import type { AttachmentId } from '@deepseek-ai/dsh-attachment'
-import type { MessageId } from '@deepseek-ai/dsh-llm/brand'
+import type { MessageId } from '@deepseek-ai/dsh-llm/types'
 import type { SessionId } from '@deepseek-ai/dsh-session'
 import type { FileUploads } from './index.ts'
 

@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { syncedConfig } from '@deepseek-ai/dsh-client-test-runtime'
 import { apply as applyMenus, inject as injectMenus } from '@deepseek-ai/dsh-client-ui-context-menu/client'
 import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
 /**
@@ -49,7 +50,7 @@ async function bench() {
     id: 'home-blank', summary: { blank: true, cwd: '/home/u/Documents/project' },
   })
   runtime.sessions.stubCreate(async () => blank)
-  await runtime.mount({ inject: [...injectMenus], apply: applyMenus })
+  await runtime.mount({ inject: [...injectMenus], apply: applyMenus }, syncedConfig({ resolutionTimeoutMs: 1000 }))
   await runtime.workspaces.update((draft) => {
     draft.items = [{
       workspaceId: 'w1' as WorkspaceId, title: 'Project', path: '/home/u/Documents/project',
@@ -60,7 +61,7 @@ async function bench() {
     { 'sidebar.workspaces': { kind: 'single', scope: 'root', inject: SECTION_INJECT } } as never,
     SidebarFrame as never,
   )
-  await runtime.mount({ inject: [...inject], apply })
+  await runtime.mount({ inject: [...inject], apply }, syncedConfig({ recentViewLimit: 10 }))
   return { runtime, remote }
 }
 

@@ -8,6 +8,7 @@
   "files": [
     "src/reference-navigation-settings.ts",
     "src/submission-settings.ts",
+    "src/types.ts",
     "src/index.ts"
   ],
   "references": [

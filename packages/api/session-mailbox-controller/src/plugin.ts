@@ -14,7 +14,7 @@ export const Config: z<HostMailboxConfig> = z.object({
 })
 
 /** Host-provided authority and read-only Session lifecycle services. */
-export const inject = ['connection', 'sessions', 'sessionPersistence', 'workspaceRegistry', 'remoteAccess']
+export const inject = ['connection.authentication', 'sessions', 'sessionPersistence', 'workspaceRegistry', 'remoteAccess']
 
 /** Publish the Remote service only after obtaining private storage ownership. */
 export async function apply(ctx: Context, config: HostMailboxConfig): Promise<void> {

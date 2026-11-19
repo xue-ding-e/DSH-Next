@@ -1,6 +1,9 @@
 - banner:
   - navigation "Session hierarchy": workspace
+  - button "Session mailbox"
   - text: Standard mode
+  - button "Session panel"
+  - button "Manage directories"
   - button "More actions"
   - button "Open right sidebar"
   - tablist:

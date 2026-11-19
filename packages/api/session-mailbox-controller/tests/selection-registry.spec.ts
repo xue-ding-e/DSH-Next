@@ -1,7 +1,6 @@
 import { apply as applyConnection, inject as connectionInject } from '@deepseek-ai/dsh-client-connection'
 import Gateway from '@deepseek-ai/dsh-api-gateway'
 import { validateTypertManifest } from '@deepseek-ai/dsh-typert-loader'
-import { provideBrowserCredentials } from '../../../client/connection/tests/browser-credentials.ts'
 import { existsSync } from 'node:fs'
 import { pathToFileURL, fileURLToPath } from 'node:url'
 import * as mailboxPlugin from '../src/index.ts'
@@ -73,6 +72,24 @@ function scoped(ctx: Context, principal: Principal = { kind: 'owner' }, priorPee
   }
   return { ctx: ctx.extend({ invocation }), peer, signal }
 }
+function authenticatedPeer(
+  ctx: Context,
+  cookie: string,
+  options: { readonly principal?: Principal; readonly browser?: boolean } = {},
+): PeerScope {
+  const peer = ctx.connection.createPeer({ principal: options.principal ?? { kind: 'owner' } })
+  ctx.connection.authentication.register({
+    ...options.browser === false ? {} : { browserPeer: peer },
+    authenticate(request) {
+      const header = request.headers instanceof Headers ? request.headers.get('cookie') : request.headers.cookie
+      return header === cookie ? peer : undefined
+    },
+  })
+  const admission = ctx.connection.admit({ headers: { host: '127.0.0.1', cookie } })
+  if ('rejection' in admission) throw new Error('Fixture credentials were rejected')
+  return admission.peer
+}
+
 async function harness() {
   // Synthetic fixture only: no default profile, user Session, or credential directory.
   const root = await mkdtemp(join(tmpdir(), 'mailbox-product-fixture-'))
@@ -87,6 +104,7 @@ async function harness() {
   const facility = new DomainFacility(ctx, { backend: 'json' })
   cleanups.push(() => facility.closeAll())
   ctx.provide('storageDomain', facility)
+  await ctx.plugin({ inject: [...connectionInject], apply: applyConnection })
   await ctx.plugin(TypertRegistry)
   await ctx.plugin(RemoteAccessService)
   await ctx.plugin(SessionStore)
@@ -97,7 +115,7 @@ async function harness() {
   const persistence = ctx.sessionPersistence as HeaderPersistence
   persistence.records.set(C, { id: C, version: SESSION_FORMAT_VERSION, createdAt: 0, isSeeded: false })
   const config: HostMailboxConfig = { privateRoot: join(root, 'mailbox'), lockWaitMs: 0, maxRecords: 10, maxRecordBytes: 4096, selectionTtlMs: 1000 }
-  const owner = scoped(ctx)
+  const owner = scoped(ctx, undefined, authenticatedPeer(ctx, 'mailbox-fixture=owner'))
   return { ctx, config, owner, persistence, selection: new AbortController() }
 }
 function receipt(value: MailboxRecord | readonly MailboxRecord[]): MailboxRecord {
@@ -109,15 +127,25 @@ describe('browser route grants', () => {
   it('binds routes to the exact browser Peer and consumes operations only once', async () => {
     const h = await harness()
     await withHostMailbox(h.ctx, h.config, async (adapter) => {
-      const registry = new MailboxSelectionRegistry(h.owner.peer, adapter)
+      const registry = new MailboxSelectionRegistry(h.ctx.connection.authentication, adapter)
       try {
-        const other = scoped(h.ctx)
-        expect(() => registry.grant(other.ctx, { action: 'send', source: A, target: B })).toThrow()
-        expect(() => registry.grant(h.ctx, { action: 'inbox', target: B })).toThrow()
+        const other = scoped(h.ctx, undefined, authenticatedPeer(h.ctx, 'mailbox-fixture=other-browser'))
+        const viewer = scoped(h.ctx, undefined, authenticatedPeer(h.ctx, 'mailbox-fixture=viewer', {
+          principal: { kind: 'mailbox-test-guest' },
+        }))
+        const unverified = scoped(h.ctx)
+        const route = { action: 'inbox', target: B } as const
+        expect(() => registry.grant(viewer.ctx, route)).toThrow('denied')
+        expect(() => registry.grant(unverified.ctx, route)).toThrow('denied')
+        expect(() => registry.grant(h.ctx, route)).toThrow('denied')
+        const otherGrant = registry.grant(other.ctx, route)
+        registry.revoke(other.ctx, otherGrant)
         const grant = registry.grant(h.owner.ctx, { action: 'send', source: A, target: B })
         expect(() => registry.prepare(other.ctx, grant, { action: 'send', requestId: '1', text: 'x' })).toThrow()
         expect(() => registry.prepare(h.owner.ctx, grant, { action: 'inbox' })).toThrow()
         const selection = registry.prepare(h.owner.ctx, grant, { action: 'send', requestId: '1', text: '<script>untrusted</script>' })
+        registry.revoke(other.ctx, grant)
+        await expect(registry.execute(other.ctx, selection)).rejects.toThrow('denied')
         const first = registry.execute(h.owner.ctx, selection)
         await expect(registry.execute(h.owner.ctx, selection)).rejects.toThrow()
         const sent = receipt(await first)
@@ -138,7 +166,7 @@ describe('browser route grants', () => {
     await withHostMailbox(h.ctx, h.config, async (adapter) => {
       let now = 0
       vi.spyOn(performance, 'now').mockImplementation(() => now)
-      const registry = new MailboxSelectionRegistry(h.owner.peer, adapter)
+      const registry = new MailboxSelectionRegistry(h.ctx.connection.authentication, adapter)
       try {
         const route = { action: 'send' as const, source: A, target: B }
         const grant = registry.grant(h.owner.ctx, route)
@@ -160,28 +188,33 @@ describe('browser route grants', () => {
 
 it.skipIf(!existsSync(artifact))('dispatches the generated Remote contract through real Gateway and Connection Peer identity', async () => {
   const h = await harness()
-  provideBrowserCredentials(h.ctx)
-  await h.ctx.plugin({ inject: [...connectionInject], apply: applyConnection })
   await h.ctx.plugin(Gateway)
   h.ctx.typert.register(await generatedContract())
   await withHostMailbox(h.ctx, h.config, async (adapter) => {
     const controller = h.ctx.plugin(SessionMailboxController, adapter)
     await controller.await()
     try {
-      const browser = h.ctx.connection.browserPeer
+      const browser = h.owner.peer
+      const apiOperator = authenticatedPeer(h.ctx, 'mailbox-fixture=api', { browser: false })
       const call = (peer: PeerScope, method: string, args: Record<string, unknown>) =>
         h.ctx.typertGateway.invoke({ peer, namespace: 'sessionMailbox', method, args })
-      await expect(call(h.owner.peer, 'identity', {})).rejects.toThrow()
+      expect(h.ctx.connection.admit({
+        headers: { host: '127.0.0.1', cookie: 'mailbox-fixture=forged', 'x-principal-kind': 'owner' },
+      })).toEqual({ rejection: 401 })
+      await expect(call(h.ctx.connection.browserPeer, 'identity', {})).rejects.toThrow('denied')
+      await expect(call(apiOperator, 'identity', {})).rejects.toThrow('denied')
       const identity = await call(browser, 'identity', {})
       const route = { action: 'send', source: A, target: B }
-      await expect(call(h.owner.peer, 'grant', { route, identity })).rejects.toThrow()
-      const guest = scoped(h.ctx, { kind: 'mailbox-test-guest' }).peer
+      await expect(call(apiOperator, 'grant', { route, identity })).rejects.toThrow('denied')
+      const guest = authenticatedPeer(h.ctx, 'mailbox-fixture=gateway-viewer', {
+        principal: { kind: 'mailbox-test-guest' },
+      })
       await expect(call(guest, 'grant', { route, identity })).rejects.toThrow()
       await expect(call(browser, 'grant', { route, identity, principal: { kind: 'owner' } })).rejects.toThrow()
       await expect(call(browser, 'grant', { route, identity: { realm: 'other-host', owner: 'single-owner' } })).rejects.toThrow()
       const grant = await call(browser, 'grant', { route, identity }) as { handle: string }
       const prepare = { grant: grant.handle, operation: { action: 'send', requestId: 'gateway-1', text: 'no Agent execution' } }
-      await expect(call(h.owner.peer, 'prepare', prepare)).rejects.toThrow()
+      await expect(call(apiOperator, 'prepare', prepare)).rejects.toThrow('denied')
       const selected = await call(browser, 'prepare', prepare) as { handle: string }
       const sent = await call(browser, 'execute', { selection: selected.handle })
       expect(sent).toMatchObject({ source: A, target: B, mode: 'queue-only', text: 'no Agent execution' })
@@ -203,14 +236,11 @@ it.skipIf(!existsSync(artifact))('dispatches the generated Remote contract throu
 
 it.skipIf(!existsSync(artifact))('mounts the profile plugin with a private fixture root and releases grants and storage ownership on unload', async () => {
   const h = await harness()
-  provideBrowserCredentials(h.ctx)
-  await h.ctx.plugin({ inject: [...connectionInject], apply: applyConnection })
   await h.ctx.plugin(Gateway)
   h.ctx.typert.register(await generatedContract())
   const plugin = h.ctx.plugin(mailboxPlugin, h.config)
   await plugin.await()
-  const browser = h.ctx.connection.browserPeer
-  const invoke = (method: string, args: Record<string, unknown>) => h.ctx.typertGateway.invoke({ peer: browser, namespace: 'sessionMailbox', method, args })
+  const invoke = (method: string, args: Record<string, unknown>) => h.ctx.typertGateway.invoke({ peer: h.owner.peer, namespace: 'sessionMailbox', method, args })
   const identity = await invoke('identity', {})
   const grant = await invoke('grant', { identity, route: { action: 'inbox', target: B } }) as { handle: string }
   const selection = await invoke('prepare', { grant: grant.handle, operation: { action: 'inbox' } }) as { handle: string }

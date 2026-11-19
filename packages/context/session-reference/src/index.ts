@@ -10,6 +10,7 @@ import z from '@deepseek-ai/schemastery'
 import type { Agent, PreStepDecision } from '@deepseek-ai/dsh-agent'
 import { Remote, TypertRemoteService, principalOf, type Principal } from '@deepseek-ai/dsh-typert-protocol'
 import type {} from '@deepseek-ai/dsh-api-remote-access'
+import { TextSearchIndex, type SearchKeys } from '@deepseek-ai/dsh-util-text-search'
 import { createUserMessage, freezeMessage, LlmError } from '@deepseek-ai/dsh-llm'
 import type { ContentBlock, LlmCallConfig, LlmResolvedModelInfo, UserMessage } from '@deepseek-ai/dsh-llm'
 import type { SessionId } from '@deepseek-ai/dsh-session'
@@ -86,9 +87,27 @@ interface RenderedSource {
   capturedFormatVersion: number
 }
 
+/** A Session record with the labels candidate discovery shows and matches. */
+interface LabelledCandidate {
+  readonly record: SessionRecord
+  readonly label: string
+  readonly displayTitle: string
+}
+
+/**
+ * Candidate search text. A Session without a title is labelled by its id,
+ * which matches only as a substring.
+ */
+function candidateKeys({ record, label, displayTitle }: LabelledCandidate): SearchKeys {
+  return {
+    fuzzy: [label, displayTitle].filter(name => name !== record.header.id),
+    substring: [record.header.id, record.header.cwd],
+  }
+}
+
 /** Exact-read consumer that prepares immutable cross-session message context. */
 export class SessionReferenceResolver extends TypertRemoteService {
-  static inject = ['sessionQuery']
+  static inject = ['sessionQuery', 'sessions', 'sessionProjections']
   static Config: z<Config> = z.object({
     maxReferences: z.number().step(1).min(1).max(MAX_REFERENCES).default(MAX_REFERENCES),
     candidateLimit: z.number().step(1).min(1).default(DEFAULT_CANDIDATE_LIMIT),
@@ -97,6 +116,8 @@ export class SessionReferenceResolver extends TypertRemoteService {
   })
 
   private readonly config: Required<Omit<Config, 'maxReferenceBytes'>> & { maxReferenceBytes: number | undefined }
+  /** The latest candidate search index; each discovery call updates it with the complete current list. */
+  private candidateIndex: TextSearchIndex<LabelledCandidate> | undefined
 
   constructor(ctx: Context, config: Config = {}) {
     super(ctx, 'sessionReferenceResolver')
@@ -192,8 +213,13 @@ export class SessionReferenceResolver extends TypertRemoteService {
    *
    * Discovery runs at keystroke rate, so titles and subagent labels only ever
    * come from projection reads; sessions without either fall back to their id.
+   *
+   * A remote caller needs prompt access to the target. Only readable sources
+   * supply candidate ids, paths, and labels to that caller.
    * @param agent - target agent; self is excluded and its cwd drives ranking.
-   * @param query - optional case-insensitive session-id/cwd/title/display-title substring.
+   * @param query - optional search text: label and display title match
+   * fuzzily, session id and working directory as substrings. Matches keep the
+   * working-directory affinity order; relevance breaks ties within it.
    * @param limit - optional positive result cap.
    * @param signal - optional cancellation boundary for host autocomplete teardown.
    * @returns candidates with canonical mention labels and presentation titles.
@@ -207,7 +233,6 @@ export class SessionReferenceResolver extends TypertRemoteService {
     if (!Number.isSafeInteger(limit) || limit <= 0) {
       throw new SessionReferenceError('candidate limit must be a positive safe integer', 'SESSION_REFERENCE_INVALID_REFERENCE')
     }
-    const needle = query.toLocaleLowerCase()
     const targetCwd = agent.session.header.cwd
     const principal = principalOf(this.ctx.invocation)
     const canRead = (id: SessionId): boolean => mayReferenceSession(this.ctx.get('remoteAccess'), principal, id, 'session/page')
@@ -216,17 +241,16 @@ export class SessionReferenceResolver extends TypertRemoteService {
     assertNotCancelled(signal)
     const records = (await settleWithCancellation(this.ctx.sessionQuery.listSessions(signal), signal))
       .filter(record => record.header.id !== agent.id && canRead(record.header.id))
-      .map((record, index) => ({ record, index }))
+      .map(record => ({ record }))
     checkTarget()
     const labelled = this.projectedLabels(records)
-    return labelled.filter(({ record, label, displayTitle }) => {
-      if (needle === '') return true
-      return record.header.id.toLocaleLowerCase().includes(needle)
-        || record.header.cwd?.toLocaleLowerCase().includes(needle) === true
-        || label.toLocaleLowerCase().includes(needle)
-        || displayTitle.toLocaleLowerCase().includes(needle)
-    }).sort((a, b) => candidateRank(a.record.header.cwd, targetCwd) - candidateRank(b.record.header.cwd, targetCwd)
-      || a.index - b.index)
+    // Discovery runs at keystroke rate: each call updates the previous call's
+    // index so unchanged titles, ids, and paths keep their preparation.
+    const index = this.candidateIndex?.update(labelled, candidateKeys) ?? new TextSearchIndex(labelled, candidateKeys)
+    this.candidateIndex = index
+    return index.search(query).map((match, rank) => ({ ...match, rank }))
+      .sort((a, b) => candidateRank(a.record.header.cwd, targetCwd) - candidateRank(b.record.header.cwd, targetCwd)
+        || a.rank - b.rank)
       .slice(0, limit)
       .map(({ record, label, displayTitle }) => ({
         sessionId: record.header.id,
@@ -265,17 +289,13 @@ export class SessionReferenceResolver extends TypertRemoteService {
   private projectedLabels<T extends { readonly record: SessionRecord }>(
     items: readonly T[],
   ): Array<T & { label: string; displayTitle: string }> {
-    const projections = this.ctx.get('sessionProjections')
-    const sessions = this.ctx.get('sessions')
-    // An attached session answers from its live cut only while the registry is mounted.
-    const attached = new Map(sessions === undefined || projections === undefined
-      ? undefined
-      : sessions.list().map(session => [session.id, session]))
+    const projections = this.ctx.sessionProjections
+    const attached = new Map(this.ctx.sessions.list().map(session => [session.id, session]))
     const cache = this.ctx.get('sessionProjectionCache')
     const cachedSnapshot = cache?.cachedSnapshot.bind(cache)
     return items.map((item) => {
       const session = attached.get(item.record.header.id)
-      const snapshot = session !== undefined && projections !== undefined
+      const snapshot = session !== undefined
         ? projections.snapshot(session, LABEL_KEYS)
         : cachedSnapshot?.(item.record.header, LABEL_KEYS)
       const label = titleOf(snapshot) ?? item.record.header.id
@@ -295,7 +315,7 @@ export class SessionReferenceResolver extends TypertRemoteService {
    * applies, and every candidate carries the canonical mention a host inserts
    * into the prompt draft.
    * @param agent - target agent; self is excluded and its cwd drives ranking.
-   * @param query - optional case-insensitive session-id/cwd/title substring.
+   * @param query - optional search text, matched as {@link listCandidates} matches it.
    * @param signal - caller cancellation.
    * @returns mention-carrying candidates in rank order.
    */

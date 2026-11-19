@@ -25,7 +25,7 @@ kind: "package-reference"
 <a id="use-this-package"></a>
 ## 使用本包
 
-每次启动可传入可选的 `cwd`；相对路径以父级当前工作目录解析，省略时捕获该当前目录。子级保留父级的起始目录元数据与权限根目录。子级自己的目录值位于继承历史之后，在继续与重启后保留，并独立于父级之后的目录变化。
+每次启动可传入由 Host 选定的可选 `cwd`；相对路径以父级的当前目录解析，省略时子级从该目录启动。子级保留父级的起始目录元数据，并通过 `ctx.workingDirectory.set` 进入它的起始目录。子级自己的目录值位于继承历史之后，在继续与重启后保留，并独立于父级之后的目录变化。
 
 本包是每个委派组合都共享的约定。你通过把服务与一个或多个提供方后端以及面向模型的委派工具一起挂载来启用它；此后 agent 即可委派工作，服务会把每个请求路由到具名提供方。
 
@@ -81,7 +81,11 @@ kind: "package-reference"
 
 `hasOwnerActivity(owner)` 覆盖排队投递、冷恢复，以及驻留或正在关闭的子级。宿主投递尚在解析所属根时也计为活动，直到确定归属。
 
-缺少 `agents` 服务时，启动请求以 `CONTINUATION_UNAVAILABLE` 拒绝；运行时可用但父级缺失或被替换时，以 `UNAUTHORIZED` 拒绝。未实现任何执行方法的提供方会在注册时以 `UNSUPPORTED_CAPABILITY` 被拒绝；请求不受支持的能力会以同一码使创建失败。如果等待目录解析期间提供方被移除或替换，创建会在调用任何一方之前以 `PROVIDER_CHANGED` 拒绝；调用方可根据当前注册重试委派。调用方信号仅取消尚未发布的工作；发布后通过 `dispose()` 取消该次 activation，并等待其资源清理完成。创建后代独立继续运行；宿主必须在释放根句柄前等待 `drainDescendants([root])`，以停止所有成员并等待正在启动的工作。`result` 在清理与通知结束后完成，携带输出、可选结构化数据与停止原因；结果捕获故障在清理后使其拒绝。清理失败使 `dispose()` 拒绝，并将生命周期结束事件标记为失败；结果 promise 与父级通知保留已捕获的执行结果。
+每个 `SubagentError` 都携带 `SubagentErrorCode` 中的一个错误码。各错误的触发条件见 [`src/error.ts`](src/error.ts)。缺少 `agents` 服务时，启动以 `CONTINUATION_UNAVAILABLE` 失败。父级缺失或被替换时，以 `UNAUTHORIZED` 失败。未实现任何执行方法的提供方注册时以 `UNSUPPORTED_CAPABILITY` 失败。创建时请求不受支持的能力也会返回此错误码。在解析目录期间移除或替换提供方，创建会在分派前以 `PROVIDER_CHANGED` 失败。调用方可使用当前注册的提供方重试。
+
+创建超出请求深度的子级会抛出 `SubagentDepthError`，错误码为 `DEPTH_EXCEEDED`。无效的运行时 `subagentDepth` 会导致 `INVALID_DEPTH`。选择 preset 需要 preset 服务（`PRESET_UNAVAILABLE`），未知或无法加载的 preset 会保留注册表的 `RemoteError` 错误码。本地子级需要工作目录服务（`WORKING_DIRECTORY_UNAVAILABLE`）。进程外子级需要可进入的绝对 cwd（`INVALID_CWD`）。持久化描述符损坏会阻止冷恢复（`NOT_RESUMABLE`）。有待处理输入时调用 `structured_output` 会导致 `STRUCTURED_OUTPUT_PENDING_INPUT`。
+
+调用方信号会取消尚未发布的工作。发布后，`dispose()` 取消对应的 activation 并等待资源清理完成。后代会继续独立运行。宿主必须在释放根句柄前等待 `drainDescendants([root])`，以停止所有成员并等待仍在启动的工作。`result` 在清理与通知结束后完成，携带输出、可选结构化数据与停止原因。结果捕获失败时，`result` 在清理后被拒绝。清理失败会使 `dispose()` 被拒绝，并将生命周期结束事件标记为失败。结果 promise 与父级通知仍携带已捕获的执行结果。
 
 -----
 
@@ -120,7 +124,7 @@ kind: "package-reference"
 
 ### 提供方准备与结构化输出
 
-服务在创建前校验请求能力，并把执行绑定到该确切提供方实例。管理器接收绑定后的操作，而不再按名称查找提供方。本地提供方只提供 `prepareContinuable()`：spawn 返回全新状态，fork 返回已完成轮次的初始内容。管理器在创建子级前捕获父级模型设置、委派权限和组合。外部提供方保留 `start()` 作为传输适配器，并保留各自的权限系统；统一管理器拥有已发布的执行。结构化工具、指令、校验与终止保护仅属于一次本地 activation，不作为恢复配置持久化。子代理消费已接受的输入后即可提交结构化结果。依赖后代结果的工作必须显式等待。结果暂存后，在工具结果策略及外层 PTC 执行完成前拒绝继续输入；结果被拒绝后重新开放输入，提交成功后则保持关闭。后续冷恢复不带结构化 schema。
+服务在创建前校验请求能力，并把执行绑定到该确切提供方实例。管理器接收绑定后的操作，而不再按名称查找提供方。本地提供方只提供 `prepareContinuable()`：spawn 返回全新状态，fork 返回未经变换的已完成轮次前缀。管理器将该前缀作为 seed、其长度作为 fork 截点传递。管理器在创建子级前捕获父级模型设置、委派权限和组合。外部提供方保留 `start()` 作为传输适配器，并保留各自的权限系统；统一管理器拥有已发布的执行。结构化工具、指令、校验与终止保护仅属于一次本地 activation，不作为恢复配置持久化。子代理消费已接受的输入后即可提交结构化结果。依赖后代结果的工作必须显式等待。结果暂存后，在工具结果策略及外层 PTC 执行完成前拒绝继续输入；结果被拒绝后重新开放输入，提交成功后则保持关闭。后续冷恢复不带结构化 schema。
 
 外部提供方为每次执行生成新的 `SubagentRun.id`，在运行时共享的 Session id 命名空间中跨所有父级和提供方保持唯一。与驻留 Agent、Session 或 activation 冲突时，启动以 `DUPLICATE_CHILD` 拒绝，并释放新的外部句柄，不替换已有执行。
 
@@ -172,6 +176,20 @@ kind: "package-reference"
 <a id="model-experience"></a>
 ## 模型体验
 
+### 消息作者
+
+#### 模型看到什么
+
+本地可续聊 agent 收到的初始委派任务与后续 agent 间消息都使用 `agent-message` source，并记录实际发送方的 Session ID。两者均以 `Agent <sender name> sent a message: ` 开头，后接原始内容块。真人直接发给子会话的消息保留原始内容和 `user` source。下方的子级委派范围声明告诉子 agent：不带 agent 前缀的 user 消息来自真人用户，并应在回复中直接回答。主 agent 的输入与已有历史不变。
+
+#### Token 影响
+
+每条初始委派任务或 agent 间消息增加一个简短作者前缀。真人输入不增加来源 token；作者规则属于子 agent 固定的委派声明。
+
+#### KV Cache 影响
+
+初始任务位于继承历史之后；后续消息只追加，不改写已有历史。
+
 ### 结算通知
 
 #### 模型看到什么
@@ -215,7 +233,7 @@ Your final answer is delivered automatically if your parent is still online. Inc
 ##### 委派范围声明
 
 ```markdown
-You are a delegated subagent: your permission scope was fixed when you were started and cannot be widened from inside this session — operations that require approval are rejected automatically. When the job needs access beyond that scope, do not retry the denied operation; state the limitation in your reply so the delegating agent can handle it.
+You are a delegated subagent: your permission scope was fixed when you were started and cannot be widened from inside this session — operations that require approval are rejected automatically. When the task needs access beyond that scope, do not retry the denied operation; state the limitation in your reply so the delegating agent can handle it. Messages from other agents begin with "Agent <name> sent a message:". Other user messages come from the human user, who reads this conversation directly. You can still message other agents to coordinate, but answer the human user in your reply.
 ```
 
 #### Token 影响

@@ -1,6 +1,6 @@
 /** Browser-local identity of an unfinished recall; message text and attachment bytes stay with their owners. */
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
-import type { MessageId } from '@deepseek-ai/dsh-llm/brand'
+import type { MessageId } from '@deepseek-ai/dsh-llm/types'
 import type { SessionRequestId } from '@deepseek-ai/dsh-api-session-controller/types'
 
 /** Session-local occurrence and request identifiers; excludes message text and attachment bytes. */

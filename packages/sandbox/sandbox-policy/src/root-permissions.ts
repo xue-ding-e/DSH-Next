@@ -99,11 +99,11 @@ export class RootApprovalOwner {
       const normalized = await this.normalize({ ...initial, state: { ...initial.state, roots: detached } }, providers, signal, false)
       signal.throwIfAborted()
       this.assertLive(ctx, agent, invocation)
-      this.assertSelection(agent, initial.state, keyOf(initial.policy), providers, priorGrant, false)
+      this.assertSelection(agent, initial.state, keyOf(initial), providers, priorGrant, false)
       assertQuiescent()
       signal.throwIfAborted()
       this.assertLive(ctx, agent, invocation)
-      this.assertSelection(agent, initial.state, keyOf(initial.policy), providers, priorGrant, false)
+      this.assertSelection(agent, initial.state, keyOf(initial), providers, priorGrant, false)
       agent.session.append('sandbox/roots-requested', { roots: normalized })
       this.grants.delete(agent.session)
       return this.state(ctx, agent)
@@ -126,7 +126,7 @@ export class RootApprovalOwner {
     const signal = AbortSignal.any([invocation.signal, invocation.peer.signal])
     const roots = await this.normalize(selection, providers, signal)
     this.assertLive(ctx, agent, invocation)
-    this.assertSelection(agent, selection.state, keyOf(selection.policy), providers, priorGrant)
+    this.assertSelection(agent, selection.state, keyOf(selection), providers, priorGrant)
     const preview: RootApprovalPreview = Object.freeze({
       sessionId: agent.id,
       nonce: randomUUID(),
@@ -140,7 +140,7 @@ export class RootApprovalOwner {
       lifetime: 'live-agent',
     })
     this.tickets.set(invocation.peer, { ...providers, agent, session: agent.session, preview,
-      policyKey: keyOf(selection.policy), priorGrant, assertQuiescent })
+      policyKey: keyOf(selection), priorGrant, assertQuiescent })
     return preview
   }
 
@@ -213,7 +213,7 @@ export class RootApprovalOwner {
       || identity(grant.agent.ctx.get('sandboxPolicy')) !== identity(this.policyOwner)) return []
     const current = this.selection(session)
     if (current.state.rootsRevision !== grant.rootsRevision
-      || current.state.modeRevision !== grant.modeRevision || keyOf(current.policy) !== grant.policyKey
+      || current.state.modeRevision !== grant.modeRevision || keyOf(current) !== grant.policyKey
       || identity(grant.agent.ctx.get('fs')) !== identity(grant.fs) || identity(grant.agent.ctx.get('sandbox')) !== identity(grant.sandbox)) return []
     if (grant.roots.length > 0 && !grant.sandbox.supportsAdditionalWritableRoots(current.policy.mode)) return []
     return grant.selection
@@ -252,7 +252,7 @@ export class RootApprovalOwner {
     const current = this.selection(agent.session)
     if (requireSupport) this.assertSupported(current, providers)
     if (current.state.rootsRevision !== state.rootsRevision || current.state.modeRevision !== state.modeRevision
-      || keyOf(current.policy) !== policyKey || identity(agent.ctx.get('fs')) !== identity(providers.fs)
+      || keyOf(current) !== policyKey || identity(agent.ctx.get('fs')) !== identity(providers.fs)
       || identity(agent.ctx.get('sandbox')) !== identity(providers.sandbox) || this.grants.get(agent.session) !== priorGrant) {
       throw new RootApprovalError('The directory selection or execution policy changed; preview again')
     }
@@ -312,8 +312,8 @@ export class RootApprovalOwner {
   }
 }
 
-function keyOf(policy: SandboxExecutionPolicy): string {
-  return JSON.stringify([policy.mode, policy.workspaceRoot, policy.additionalWritableRoots ?? []])
+function keyOf({ policy, state }: Selection): string {
+  return JSON.stringify([policy.mode, policy.workspaceRoot, policy.additionalWritableRoots ?? [], state.workspaceRootRevision])
 }
 
 /** Cordis creates fresh contextual views; compare the underlying provider generation. */

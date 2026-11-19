@@ -1,7 +1,7 @@
 {
   "name": "@deepseek-ai/dsh-api-session-mailbox-controller",
   "description": "Browser-authorized queue-only session mailbox routes",
-  "version": "0.2.2-rc.4",
+  "version": "0.2.2-rc.5",
   "publishConfig": {
     "access": "public"
   },

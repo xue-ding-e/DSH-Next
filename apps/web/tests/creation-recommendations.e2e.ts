@@ -1,17 +1,56 @@
-/** The completed answer offers creation through a propose_action card; choosing a location does not start it. */
-import { readFile } from 'node:fs/promises'
+/** The completed answer offers creation through an action-card block shown as a card; choosing a location does not start it. */
+import { mkdtemp, readFile, rm, rmdir, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { stringifyEntryYaml } from '@deepseek-ai/cordis-plugin-include'
+import type { PresetDefinition } from '@deepseek-ai/dsh-agent-preset-registry'
 import { chromium, type Browser, type Page } from 'playwright'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import {
   acknowledgeReloadConnectionLoss, assertFixtureInventory, captureStableAria, compareOrRefreshGolden,
-  fixtureUserPrompts, launchWebScaffold, watchConsole, type WebScaffold,
+  fixtureUserPrompts, launchWebScaffold, watchConsole, type LaunchOptions, type WebScaffold,
 } from './scaffold.ts'
-import { connectFreshWorkspace, newEnglishPage } from './support.ts'
+import { connectFreshWorkspace, newEnglishPage, requireBuilt } from './support.ts'
 
 const directory = fileURLToPath(new URL('../../../snapshots/web/creation-recommendations', import.meta.url))
 const fixture = join(directory, 'session.v4.jsonl')
+
+async function launchCreationReplay(): Promise<WebScaffold> {
+  const options: LaunchOptions = {
+    replayFixture: fixture,
+    compareReplaySession: true,
+    profile: { packages: [{ dir: fileURLToPath(new URL('../../../packages/experimental/personalized-recommendations', import.meta.url)), enabled: true }] },
+  }
+  if (process.platform !== 'win32') return launchWebScaffold(options)
+
+  // The recording pins Bash's prompt and schema and only calls the skill tool.
+  const { composeEntries, loadOverlayPatches } = requireBuilt('@deepseek-ai/dsh-app-boot') as typeof import('@deepseek-ai/dsh-app-boot')
+  const standard = fileURLToPath(new URL('../../../packages/bundle/web-app/presets/standard.patch.yml', import.meta.url))
+  const preset = composeEntries([loadOverlayPatches('creation recommendations', standard)])
+    .find(row => row.id === 'preset-standard')?.config as PresetDefinition | undefined
+  if (preset === undefined) throw new Error('creation recommendations requires the standard preset')
+  const plugins = preset.plugins.map((plugin) => {
+    if (plugin.id === 'tool-bash') return { ...plugin, disabled: false }
+    if (plugin.id === 'tool-pwsh') return { ...plugin, disabled: true }
+    return plugin
+  })
+
+  const skillOverlay = fileURLToPath(new URL('./creation-recommendations.overlay.yml', import.meta.url))
+  const root = await mkdtemp(join(tmpdir(), 'dsh-creation-recommendations-'))
+  const shellOverlay = join(root, 'shell.overlay.yml')
+  try {
+    await writeFile(shellOverlay, stringifyEntryYaml([
+      { id: 'bash-sandbox', disabled: false },
+      { id: 'pwsh-sandbox', disabled: true },
+      { id: 'preset-standard', config: { ...preset, plugins } },
+    ]))
+    return await launchWebScaffold({ ...options, extraOverlayPath: [skillOverlay, shellOverlay] })
+  } finally {
+    await rm(shellOverlay, { force: true })
+    await rmdir(root)
+  }
+}
 
 describe('creation recommendation after an explicit wish', () => {
   let scaffold: WebScaffold
@@ -19,9 +58,7 @@ describe('creation recommendation after an explicit wish', () => {
   let page: Page
 
   beforeAll(async () => {
-    scaffold = await launchWebScaffold({ replayFixture: fixture, compareReplaySession: true,
-      profile: { packages: [{ dir: fileURLToPath(new URL('../../../packages/experimental/personalized-recommendations', import.meta.url)), enabled: true }] },
-    })
+    scaffold = await launchCreationReplay()
     browser = await chromium.launch()
     page = await newEnglishPage(browser)
   })
@@ -46,6 +83,9 @@ describe('creation recommendation after an explicit wish', () => {
     const cardBox = await card.boundingBox()
     expect(answerBox).not.toBeNull()
     expect(cardBox!.y).toBeGreaterThanOrEqual(answerBox!.y + answerBox!.height)
+    // The answer's action-card block stays hidden; only the card below shows its proposal.
+    expect(await page.getByText('create_personalized_page').count()).toBe(0)
+    expect(await page.locator('.md-code-block').count()).toBe(0)
     expect(await card.getByRole('button', { name: 'Create', exact: true }).isEnabled()).toBe(true)
     await compareOrRefreshGolden(join(directory, 'offered.expected.md'), await captureStableAria(page, '[data-action-card]', scaffold.workspaceCwd), scaffold.mode)
     const info = card.getByRole('button', { name: 'How creation works and token usage', exact: true })

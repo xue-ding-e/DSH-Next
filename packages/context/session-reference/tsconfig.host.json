@@ -9,6 +9,7 @@
     "src"
   ],
   "references": [
+    { "path": "../../util/text-search" },
     { "path": "./tsconfig.client.json" },
     { "path": "../../api/remote-access/tsconfig.host.json" },
     {

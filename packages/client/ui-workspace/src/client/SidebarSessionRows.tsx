@@ -6,6 +6,7 @@ import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type { SessionListState } from '@deepseek-ai/dsh-api-session-controller/client'
 import type { WorkspaceBrowserProps } from './contract/slots.ts'
 import { deriveFlat, type ArchivedFilter, type SessionNode } from './tree.ts'
+import { sessionStatuses } from './rows/Rows.tsx'
 import { SESSION_REFERENCE_DRAG_TYPE, writeSessionReference } from './session-drag.ts'
 import css from './SidebarSections.module.css'
 
@@ -94,8 +95,8 @@ function SidebarSessionRow({ row, current, source, onMove, afterId, ...props }: 
   const preview = useRowDragPreview(css.dragPreview ?? '', PREVIEW_PROPERTIES)
   const title = row.title || props.t('session.untitled')
   const target = { kind: 'session', value: { sessionId: row.id, displayTitle: row.title } } as const
-  const pending = row.pendingInteraction !== undefined
-  const running = row.running || row.runningSubagentCount > 0
+  const [status] = sessionStatuses(row, props.t)
+  const showStatus = !row.archived && status.state !== 'idle'
   return <div ref={rowRef} role="listitem" data-row-key={`${source}-session:${row.id}`}
     className={clsx(css.sessionRow, row.id === current && css.selected, menuOpen && css.menuOpen,
       marker === 'before' && css.dropBefore, marker === 'after' && css.dropAfter)}
@@ -132,11 +133,10 @@ function SidebarSessionRow({ row, current, source, onMove, afterId, ...props }: 
       setMarker(null)
     }}>
     <button type="button" className={css.openSession} aria-current={row.id === current ? 'page' : undefined}
+      aria-description={showStatus ? status.label : undefined}
       onClick={() => { props.open(row.id) }}>
       <span className={css.sessionTitle}>{title}</span>
-      {(pending || running || row.completed) && <span aria-label={props.t(
-        pending ? 'status.waitingAnswer' : running ? 'status.running' : 'status.completed',
-      )}><StateDot state={pending ? 'warning' : running ? 'ongoing' : 'done'} /></span>}
+      {showStatus && <StateDot state={status.state} />}
     </button>
     <span className={css.sessionActions}>
       {props.renderFactorySlot('contextMenu.button', {

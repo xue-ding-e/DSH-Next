@@ -2,7 +2,7 @@
 /** DOM → generated Gateway codecs → exact Agent policy → real scratch file sandbox. */
 import { useMemo } from 'react'
 import { Context } from '@deepseek-ai/cordis'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeAll, describe, expect, it } from 'vitest'
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { bindSnapshotSelector, makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
 import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
@@ -20,12 +20,18 @@ import { directoriesZh } from '../src/client/directories-locales.ts'
 const cleanups: Array<() => Promise<void> | void> = []
 afterEach(async () => { cleanup(); for (const dispose of cleanups.splice(0).reverse()) await dispose() })
 
-async function setup(withWorkspace = false) {
+let createDirectoryHost: DirectoryHostFactory
+
+beforeAll(async () => {
   // Keep Host and Client ambient Cordis declarations in their own compiler faces.
-  // The Host module is checked by its Host tests; this boundary carries only wire data and owned fixture probes.
+  // Load the Host graph once during setup. Each case owns its Host instance.
   const hostModule = '../../../api/session-controller/tests/root-permissions-ui-bridge.ts'
   const hostExports = await import(hostModule) as { createDirectoryHost: DirectoryHostFactory }
-  const host: DirectoryHostBridge = await hostExports.createDirectoryHost()
+  createDirectoryHost = hostExports.createDirectoryHost
+})
+
+async function setup(withWorkspace = false) {
+  const host: DirectoryHostBridge = await createDirectoryHost()
   cleanups.push(() => host.dispose())
   let pickedDirectory = host.reference
   let pickerOwner: DirectoryFlowOwnerProps | undefined

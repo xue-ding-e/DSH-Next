@@ -46,6 +46,8 @@ export function findRepositoryReferences(
   commits: ReadonlySet<string>,
 ): RepositoryReference[] {
   if (!isMaintained(file)) return []
+  // The synchronization cursor names the official tree used for the next three-way merge.
+  if (file === '.github/next-upstream-base' && /^[a-f0-9]{40}\r?\n$/u.test(source)) return []
   const references: RepositoryReference[] = []
   for (const [index, line] of source.split('\n').entries()) {
     if (organizationUrl.test(canonicalReferenceText(line).replace(kitRepositoryUrl, ''))) {

@@ -107,18 +107,18 @@ async function mockPlatform() {
   await new Promise<void>((resolve) => { server.listen(0, '127.0.0.1', resolve) })
   const address = server.address()
   if (address === null || typeof address === 'string') throw new Error('account login: missing mock listener')
-  const origin = `http://127.0.0.1:${String(address.port)}`
+  const origin = `http://localhost:${String(address.port)}`
   return {
     origin, inits, pages, avatarRequests: () => avatarRequests,
     notificationLists: () => notificationLists,
     balanceRequests: () => balanceRequests,
     holdNextBalance: (balance: string, failed = false) => {
       if (nextBalance !== undefined) throw new Error('account login: unconsumed balance response')
-      const received = Promise.withResolvers<void>()
-      const released = Promise.withResolvers<void>()
-      const release = (): void => { released.resolve(); heldBalances.delete(release) }
+      const received = Promise.withResolvers<undefined>()
+      const released = Promise.withResolvers<undefined>()
+      const release = (): void => { released.resolve(undefined); heldBalances.delete(release) }
       heldBalances.add(release)
-      nextBalance = { balance, failed, received: () => received.resolve(), released: released.promise }
+      nextBalance = { balance, failed, received: () => received.resolve(undefined), released: released.promise }
       return { received: received.promise, release }
     },
     close: () => {
@@ -160,8 +160,10 @@ describe.skipIf(MODE === 'record')('web e2e: DeepSeek account sign-in in a plain
     const menu = page.getByRole('button', { name: 'Account menu', exact: true })
     await menu.click()
     const tab = context.waitForEvent('page')
+    const callback = context.waitForEvent('request', request => new URL(request.url()).pathname === '/oauth/callback')
     await page.getByRole('menuitem', { name: 'Sign in', exact: true }).click()
     const authorization = await tab
+    expect((await (await callback).allHeaders())['sec-fetch-site']).toBe('cross-site')
     await authorization.waitForURL(url => url.pathname === '/dsh/authorized', { timeout: 30_000 })
     expect(await authorization.evaluate(() => window.opener === null)).toBe(true)
     await expect.poll(() => menu.textContent(), { timeout: 30_000 }).toBe('Web User')
@@ -253,7 +255,7 @@ describe.skipIf(MODE === 'record')('web e2e: DeepSeek account sign-in in a plain
         expect(await loading.getAttribute('aria-busy')).toBe('true')
         // Native click() respects the disabled control without Playwright waiting
         // for it to become enabled and unintentionally issuing another refresh.
-        await loading.evaluate(element => {
+        await loading.evaluate((element) => {
           if (!(element instanceof HTMLButtonElement)) throw new Error('Refresh control is not a button')
           element.click()
           element.click()

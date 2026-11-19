@@ -2,17 +2,17 @@
 
 English | [中文](architecture.zh.md)
 
-Read this before changing anything under `packages/`. It assumes you know Cordis; if you do not, start with the [primer](cordis-primer.md) or the [tutorial](cordis-tutorial/index.md).
+Read this before editing `packages/`. Learn Cordis from the [primer](cordis-primer.md) or [tutorial](cordis-tutorial/index.md) first if needed.
 
 ## Cordis
 
-[Cordis](cordis-primer.md) is the framework under dsh: plugins contribute services, typed events, and reversible effects to a shared context. Every part of the product is a plugin, including the model adapter, the tool registry, the session log, and the agent loop itself, so each is replaceable from configuration.
+dsh uses [Cordis](cordis-primer.md) plugins to contribute services, typed events, and reversible effects to a shared context. Every product component is a plugin, including the model adapter, tool registry, session log, and agent loop. Configuration can replace each one.
 
-There is no privileged core to patch: you extend dsh by mounting a plugin beside the others, and registrations are effects that unwind when their plugin unloads.
+Extend dsh by mounting a plugin alongside the others. Its registrations are effects that unwind on unload.
 
 ## Profiles and bundles
 
-A running `dsh` is a plugin tree composed at boot from ordered layers.
+At boot, ordered layers compose the `dsh` plugin tree.
 
 A **profile** is a named composition stored in the Harness home. It lists the bundles it stacks, holds any out-of-tree plugins it installs, and keeps the user's own `cordis.patch.yml`. `web`, `headless`, `sdk`, `sdk-minimal`, and `acp` ship as templates.
 
@@ -107,7 +107,7 @@ turn/end
 
 `turn/*`, `step/*`, `system/message`, `user/message`, `assistant/message`, `assistant/attempt`, and `tool/*` are durable session events; the rest are live extension points across three domains. `agent/assistant-stream` publishes process-local start, transient chunk, and end frames. The loop commits the complete compact stream as one message or log-only attempt before a committed end frame, and the Web Session-follow adapter is the live event's only remote consumer. `agent/pre-step`, `agent/request`, `llm/stream`, and the three `tools/*` events are waterfalls, whose listeners must call `next()` to delegate; `agent/turn-stopping` is serial and has no `next()`.
 
-Factory setup follows SessionStore entry and `session/created`, preceding `agent/created`; closing events commit before removal.
+Fork creation stores the caller-supplied history; a sharing backend persists the parent prefix first ([lifecycle](../packages/core/agent-loop/README.md#understand-the-implementation)). Factory setup follows SessionStore entry and `session/created`, preceding `agent/created`; closing events commit before removal.
 
 One inbox feeds the driver; injected context waits for a waking message. AgentLoop’s durable `inbox` projection exposes pending input without live Agents. [Recall](../packages/api/session-controller/README.md#use-this-package).
 
@@ -164,7 +164,7 @@ Plugin-first: move a complete feature to an external plugin only when its low-le
 | Add durable session state | extend `SessionEventMap`; render and replay from the log |
 | Generate session titles | register the sole `ctx.sessionTitle` provider |
 | Manage a same-session objective | use `ctx.goals`; continue through `agent/*` |
-| Fork at a turn boundary | `ctx.agents.create({ sessionId, seed, inheritedEventCount, meta: { isSeeded: true } })` — only agent-loop-published sessions persist |
+| Fork at a turn boundary | `ctx.agents.create({ sessionId, source, inheritedEventCount, meta: { isSeeded: true } })` stores the supplied parent prefix and child events before publication |
 | Store sessions in a new backend | implement `SessionPersistence` (`create`/`open`/`stat`/`list`/`export`) over the shared handle scaffolding |
 | Scope a registration to one agent | use that agent's `agent.ctx` |
 

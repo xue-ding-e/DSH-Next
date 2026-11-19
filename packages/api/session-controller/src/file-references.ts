@@ -115,7 +115,8 @@ export class SessionFileReferences extends TypertRemoteService {
   }
 
   /**
-   * List file and directory candidates for one Agent's working directory.
+   * List file and directory candidates for the Agent's working directory.
+   * Authenticated owners may also discover confirmed directories.
    * @param agent - target Agent resolved from the Session identity on the wire.
    * @param query - path text following `@` or `@"`.
    * @param signal - caller cancellation.
@@ -127,7 +128,10 @@ export class SessionFileReferences extends TypertRemoteService {
     query: string,
     signal: AbortSignal,
   ): Promise<FileReferenceCandidate[]> {
-    return this.ctx.fileReferences.list(agent, query, signal)
+    const principal = principalOf(this.ctx.invocation)
+    return principal === undefined || principal.kind === 'owner'
+      ? this.ctx.fileReferences.list(agent, query, signal)
+      : this.ctx.fileReferences.listWorkingDirectory(agent, query, signal)
   }
 }
 

@@ -1,5 +1,6 @@
 Pin session
 Rename
+Mark as unread
 Move to section
 Fork session
 Open in

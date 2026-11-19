@@ -4,7 +4,8 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-libra
 import { createElement } from 'react'
 import { makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
 import { en as commonEn } from '@deepseek-ai/dsh-client-locale/src/locales/en.ts'
-import { MessageId } from '@deepseek-ai/dsh-llm/brand'
+import { brandString } from '@deepseek-ai/dsh-brand'
+import type { MessageId } from '@deepseek-ai/dsh-llm/types'
 import type { ImageAttachmentRef } from '@deepseek-ai/dsh-attachment'
 import type { ChatNodeViewProps, UserContentInput, UserMessageEdit } from '../src/client/contract/slots.ts'
 import type { UserMessageNode } from '../src/client/contract/snapshot.ts'
@@ -20,7 +21,7 @@ const IMAGE: ImageAttachmentRef = {
   width: 1, height: 1, bytes: 4, name: 'diagram.png',
 }
 const MESSAGE: UserMessageNode = {
-  kind: 'user', seq: 7, time: 1000, messageId: MessageId('edited-user'), source: { kind: 'user' },
+  kind: 'user', seq: 7, time: 1000, messageId: brandString<MessageId>('edited-user'), source: { kind: 'user' },
   content: [{ type: 'text', text: 'Original message' }],
 }
 const { messageId: _messageId, ...SYNTHETIC_MESSAGE } = MESSAGE

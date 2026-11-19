@@ -3,7 +3,27 @@ import type { Context } from '@deepseek-ai/cordis'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
 import { act, fireEvent, screen, waitFor } from '@testing-library/react'
+import { expect } from 'vitest'
 import { mountViewerPage, type AssembledViewerPage, type ViewerPageTarget } from './viewer-page.client.ts'
+
+/**
+ * Check that a shared Session row exports a reference without advertising a move.
+ * @param sessionId - shared Session shown in the Workspace tree.
+ */
+export function expectSessionReferenceDrag(sessionId: string): void {
+  const row = document.querySelector(`[role="treeitem"][data-row-key="session:${sessionId}"]`)
+  if (row === null) throw new Error('shared Session row is missing')
+  const payload = new Map<string, string>()
+  const dataTransfer = {
+    effectAllowed: 'uninitialized',
+    setData(type: string, value: string) { payload.set(type, value) },
+  }
+  fireEvent.dragStart(row, { dataTransfer })
+  expect(dataTransfer.effectAllowed).toBe('copy')
+  const format = 'application/x-dsh-session-reference'
+  expect([...payload.keys()]).toEqual([format])
+  expect(JSON.parse(payload.get(format) ?? 'null')).toMatchObject({ sessionId })
+}
 
 /** Owned browser state for one assembled viewer test. */
 export interface ViewerInputFixture {

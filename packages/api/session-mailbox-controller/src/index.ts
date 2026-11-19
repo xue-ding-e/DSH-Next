@@ -9,7 +9,7 @@ import { MailboxSelectionRegistry } from './selection-registry.ts'
 
 /** Explicit browser authorization is checked in every method, including for owner Peers. */
 export class SessionMailboxController extends TypertRemoteService {
-  static inject = ['connection']
+  static inject = ['connection.authentication']
   private readonly realm: string
   private readonly selections: MailboxSelectionRegistry
 
@@ -17,7 +17,7 @@ export class SessionMailboxController extends TypertRemoteService {
   constructor(ctx: Context, adapter: HostMailboxAdapter) {
     super(ctx, 'sessionMailboxController', { namespace: 'sessionMailbox' })
     this.realm = adapter.realm
-    this.selections = new MailboxSelectionRegistry(ctx.connection.browserPeer, adapter)
+    this.selections = new MailboxSelectionRegistry(ctx['connection.authentication'], adapter)
     ctx.effect(() => () => { this.selections.close() }, 'session-mailbox-controller: grants')
   }
 
