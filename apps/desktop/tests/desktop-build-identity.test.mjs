@@ -1,7 +1,7 @@
 /** Native config loading must preserve the installer's version through the shell and Web build inputs. */
 import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
-import { mkdtemp, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises'
+import { mkdtemp, mkdir, readFile, readdir, realpath, rm, writeFile } from 'node:fs/promises'
 import { EOL, tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
@@ -322,7 +322,11 @@ function gh {
 
     const resumed = await invoke({ releases: [draft], publish: true })
     assert.deepEqual(resumed.executed.map(command => command[1]), ['upload', 'edit'])
-    for (const name of filenames) assert.ok(resumed.executed[0].includes(join(assets, name)))
+    const [upload] = resumed.executed
+    assert.deepEqual(upload.slice(0, 6), ['release', 'upload', tag, '--repo', 'example/fixture', '--clobber'])
+    // PowerShell expands Windows short paths when it collects the release files with Get-Item.
+    assert.deepEqual(await Promise.all(upload.slice(6).map(path => realpath(path))),
+      await Promise.all(filenames.map(name => realpath(join(assets, name)))))
 
     const other = 'b'.repeat(40)
     const superseded = await invoke({ releases: [draft], publish: true, newMain: other })
