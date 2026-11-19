@@ -85,14 +85,18 @@ export function installWindowsDirectoryInstaller() {
 }
 
 /**
- * Keep user-data removal in the native helper, which refuses unsafe roots and never follows links.
+ * Run data and registration cleanup after application removal confirms the directory is gone.
  * @param {string} source - Pinned upstream uninstaller source.
- * @returns {string} Uninstaller with long-path application removal and no upstream RMDir data removal.
+ * @returns {string} Uninstaller that checks application removal and delegates data cleanup to the Desktop include.
  */
 export function directoryUninstaller(source) {
   const normalized = source.replaceAll('\r\n', '\n')
   const start = normalized.indexOf('  Var /GLOBAL isDeleteAppData\n')
   const end = normalized.indexOf('  DeleteRegKey SHELL_CONTEXT "${UNINSTALL_REGISTRY_KEY}"', start)
   if (start < 0 || end < 0) throw new Error('NSIS uninstaller data removal template changed')
-  return replaceOnce(normalized.slice(0, start) + normalized.slice(end), 'RMDir /r $INSTDIR', 'RMDir /r "\\\\?\\$INSTDIR"')
+  const withoutDataRemoval = normalized.slice(0, start) + normalized.slice(end)
+  const dataCleanup = '  !ifmacrodef customUnInstall\n    !insertmacro customUnInstall\n  !endif'
+  const withoutEarlyCleanup = replaceOnce(withoutDataRemoval, dataCleanup + '\n\n', '')
+  return replaceOnce(withoutEarlyCleanup, '    RMDir /r $INSTDIR\n  !endif',
+    '    Call un.RemoveApplication\n  !endif\n\n' + dataCleanup)
 }

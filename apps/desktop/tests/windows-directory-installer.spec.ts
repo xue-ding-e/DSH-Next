@@ -9,7 +9,7 @@ const require = createRequire(import.meta.url)
 const section = readFileSync(join(dirname(require.resolve('app-builder-lib/package.json')),
   'templates/nsis/installSection.nsh'), 'utf8')
 
-it('keeps data cleanup out of the upstream template while retaining application removal and registration cleanup', () => {
+it('confirms application removal before data and registration cleanup', () => {
   const source = readFileSync(join(dirname(require.resolve('app-builder-lib/package.json')), 'templates/nsis/uninstaller.nsh'), 'utf8')
   const adapted = directoryUninstaller(source)
   expect(adapted).not.toContain('--delete-app-data')
@@ -18,7 +18,12 @@ it('keeps data cleanup out of the upstream template while retaining application 
   expect(adapted).toContain('DeleteRegKey SHELL_CONTEXT "${UNINSTALL_REGISTRY_KEY}"')
   expect(adapted).toContain('DeleteRegKey SHELL_CONTEXT "${UNINSTALL_REGISTRY_KEY_2}"')
   expect(directoryUninstaller(source.replaceAll('\n', '\r\n'))).toBe(adapted)
-  expect(adapted).toContain('RMDir /r "\\\\?\\$INSTDIR"')
+  const remove = adapted.indexOf('Call un.RemoveApplication')
+  expect(remove).toBeGreaterThan(adapted.indexOf('Call un.atomicRMDir'))
+  expect(remove).toBeLessThan(adapted.indexOf('!insertmacro customUnInstall'))
+  expect(remove).toBeLessThan(adapted.indexOf('DeleteRegKey SHELL_CONTEXT "${UNINSTALL_REGISTRY_KEY}"'))
+  expect(adapted).not.toContain('RMDir /r $INSTDIR')
+  expect(() => directoryUninstaller(source.replace('    RMDir /r $INSTDIR', ''))).toThrow('template changed')
   expect(() => directoryUninstaller(source.replace('  Var /GLOBAL isDeleteAppData\n', ''))).toThrow('template changed')
   expect(() => directoryUninstaller(source.replace('  DeleteRegKey SHELL_CONTEXT "${UNINSTALL_REGISTRY_KEY}"', ''))).toThrow('template changed')
 })

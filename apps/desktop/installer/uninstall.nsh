@@ -45,6 +45,43 @@ FunctionEnd
 !endif
 !endif
 
+Function un.RemoveApplication
+  StrCpy $0 0
+  ${Do}
+    RMDir /r "\\?\$INSTDIR"
+    System::Call 'kernel32::GetFileAttributesW(w "\\?\$INSTDIR") i.r1 ?e'
+    Pop $2
+    ${If} $1 == -1
+      ${If} $2 == 2
+      ${OrIf} $2 == 3
+        ClearErrors
+        Return
+      ${EndIf}
+      ${ExitDo}
+    ${EndIf}
+    IntOp $0 $0 + 1
+    ${If} $0 >= 10
+      ${ExitDo}
+    ${EndIf}
+    Sleep 250
+  ${Loop}
+
+  ; A partial deletion can remove the registered uninstaller before another file. Restore its copy without overwriting.
+  ReadRegStr $0 SHELL_CONTEXT "${INSTALL_REGISTRY_KEY}" InstallLocation
+  ${If} $0 == $INSTDIR
+  ${AndIfNot} ${FileExists} "\\?\$INSTDIR\${UNINSTALL_FILENAME}"
+    System::Call 'kernel32::CopyFileW(w "$EXEPATH", w "\\?\$INSTDIR\${UNINSTALL_FILENAME}", i 1) i.r0 ?e'
+    Pop $3
+    ${If} $0 == 0
+      DetailPrint "Could not restore the uninstaller ($3): $INSTDIR"
+    ${EndIf}
+  ${EndIf}
+  DetailPrint "Application directory could not be removed: $INSTDIR"
+  MessageBox MB_OK|MB_ICONEXCLAMATION "$(uninstallFailed)$\r$\n$\r$\n$INSTDIR" /SD IDOK
+  SetErrorLevel 2
+  Quit
+FunctionEnd
+
 Function un.CleanData
   !ifdef APP_PACKAGE_NAME
     !if "${APP_PACKAGE_NAME}" == "dsh-next-desktop"

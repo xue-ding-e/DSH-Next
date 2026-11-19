@@ -20,7 +20,13 @@ $scopePath = Join-Path $roaming $PackageName.Split('/')[0]
 $userDataPath = Join-Path $roaming ($PackageName -replace '/', '\')
 $cachePath = Join-Path $local (($PackageName -replace '[/\\?<>:*|"]', '').ToLowerInvariant() + '-updater')
 $uninstaller = Join-Path $OutputDirectory 'uninstall-copy.exe'
+$registrationPath = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\' + $RegistryKey
 $process = $null
+function File-Hash([string]$Path) {
+    $sha256 = [Security.Cryptography.SHA256]::Create()
+    try { return [Convert]::ToBase64String($sha256.ComputeHash([IO.File]::ReadAllBytes($Path))) }
+    finally { $sha256.Dispose() }
+}
 function Wait-Text([string]$Text) {
     $timer = [Diagnostics.Stopwatch]::StartNew()
     do {
@@ -31,29 +37,27 @@ function Wait-Text([string]$Text) {
     } while ($timer.Elapsed.TotalSeconds -lt 20)
     throw "Missing '$Text': $([InstallerCapture]::VisibleText($process.Id))"
 }
-function Wait-Exit([string]$Mode) {
-    if (-not $process.WaitForExit(30000)) { $process.Kill(); $process.WaitForExit(); throw 'Uninstaller timed out' }
-    if ($process.ExitCode -ne 0) { throw "Uninstall failed: $($process.ExitCode)" }
+function Wait-Uninstaller([string]$Mode, [int]$ExpectedExit) {
+    $workerId = $process.Id
+    if (-not $process.WaitForExit(30000)) { $process.Kill(); $process.WaitForExit(); throw "Uninstaller PID $workerId timed out in $Mode." }
+    $exitCode = $process.ExitCode
     $process.Dispose()
     $script:process = $null
-    # The NSIS uninstaller hands its section to a temporary copy; the launched process exits before removal completes.
-    $timer = [Diagnostics.Stopwatch]::StartNew()
-    while (Test-Path -LiteralPath $installPath) {
-        if ($timer.Elapsed.TotalSeconds -gt 20) {
-            $remaining = (Get-ChildItem -LiteralPath $installPath -Force -Name) -join ', '
-            throw "Application directory remained after $Mode uninstall. Entries: $remaining"
-        }
-        Start-Sleep -Milliseconds 100
+    if ($exitCode -ne $ExpectedExit -or ($exitCode -eq 0 -and (Test-Path -LiteralPath $installPath))) {
+        $remaining = if (Test-Path -LiteralPath $installPath) { (Get-ChildItem -LiteralPath $installPath -Force -Name) -join ', ' }
+        throw "Uninstaller PID $workerId exited with $exitCode in $Mode (expected $ExpectedExit). Remaining entries [$remaining]."
     }
 }
+$cases = @($expected.cases)
+if ($Language -ceq 'en_US') { $cases += 'locked' }
 try {
-    foreach ($mode in $expected.cases) {
+    foreach ($mode in $cases) {
         $setup = Start-Process -FilePath $Installer -ArgumentList ('/S /D=' + $installPath) -PassThru -WindowStyle Hidden
         try {
             if (-not $setup.WaitForExit(30000)) { $setup.Kill(); $setup.WaitForExit(); throw 'Setup timed out' }
             if ($setup.ExitCode -ne 0) { throw "Setup failed: $($setup.ExitCode)" }
         } finally { $setup.Dispose() }
-        $entry = Get-ItemProperty ('HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\' + $RegistryKey)
+        $entry = Get-ItemProperty -LiteralPath $registrationPath
         if ($entry.InstallLocation.TrimEnd('\') -ne $installPath) { throw 'Uninstall entry lacks InstallLocation' }
         foreach ($path in @($homePath, $productDataPath, $userDataPath, $cachePath, $externalPath)) { New-Item -ItemType Directory -Force -Path $path | Out-Null }
         [IO.File]::WriteAllText((Join-Path $externalPath 'keep.txt'), 'outside data root')
@@ -64,13 +68,37 @@ try {
         [IO.File]::WriteAllText((Join-Path $productDataPath 'state.txt'), 'product data')
         [IO.File]::WriteAllText((Join-Path $userDataPath 'Local State'), 'chromium profile')
         [IO.File]::WriteAllText((Join-Path $cachePath 'download.txt'), 'update')
-        Copy-Item -LiteralPath (Join-Path $installPath ('Uninstall ' + $ProductName + '.exe')) -Destination $uninstaller -Force
+        $registeredUninstaller = Join-Path $installPath ('Uninstall ' + $ProductName + '.exe')
+        Copy-Item -LiteralPath $registeredUninstaller -Destination $uninstaller -Force
+        # The external copy with _?= performs the uninstall in the launched PID.
         $arguments = '_?=' + $installPath
-        if ($mode -in @('silent', 'home-inside')) { $arguments = '/S ' + $arguments }
+        if ($mode -in @('silent', 'home-inside', 'locked')) { $arguments = '/S ' + $arguments }
         # electron-builder's installUtil.nsh runs an older uninstaller with exactly these flags when replacing it.
         if ($mode -eq 'upgrade') { $arguments = '/S /KEEP_APP_DATA --updated /currentuser ' + $arguments }
         if ($mode -eq 'replaced') { $arguments = '/S /KEEP_APP_DATA /currentuser ' + $arguments }
         if ($mode -eq 'home-inside') { $env:DSH_HOME = Join-Path $userDataPath 'home' } else { Remove-Item Env:DSH_HOME -ErrorAction SilentlyContinue }
+        if ($mode -eq 'locked') {
+            $application = Join-Path $installPath ($ProductName + '.exe')
+            $applicationHash = (File-Hash $application)
+            $uninstallerHash = (File-Hash $uninstaller)
+            $lock = [IO.File]::Open($application, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::ReadWrite)
+            try {
+                $process = Start-Process -FilePath $uninstaller -ArgumentList $arguments -PassThru -WindowStyle Hidden
+                Wait-Uninstaller $mode 2
+                if ((Get-ItemProperty -LiteralPath $registrationPath).InstallLocation.TrimEnd('\') -ne $installPath) {
+                    throw 'A blocked uninstall lost its installation registration.'
+                }
+                if ((File-Hash $registeredUninstaller) -cne $uninstallerHash -or
+                    (File-Hash $application) -cne $applicationHash) {
+                    throw 'A blocked uninstall changed the remaining application or its registered uninstaller.'
+                }
+                foreach ($path in @((Join-Path $userDataPath 'Local State'), (Join-Path $productDataPath 'state.txt'), (Join-Path $cachePath 'download.txt'))) {
+                    if (-not (Test-Path -LiteralPath $path)) { throw "A blocked uninstall removed $path." }
+                }
+            } finally { $lock.Dispose() }
+            # Launch the retained registration's binary on a retry, using the same external-copy convention.
+            Copy-Item -LiteralPath $registeredUninstaller -Destination $uninstaller -Force
+        }
         $process = Start-Process -FilePath $uninstaller -ArgumentList $arguments -PassThru -WindowStyle ($(if ($mode -eq 'interactive') { 'Normal' } else { 'Hidden' }))
         if ($mode -eq 'interactive') {
             $welcomeText = $copy.welcome
@@ -82,7 +110,10 @@ try {
             [void](Wait-Text $finishedText)
             [InstallerCapture]::ClickDialogButton($window, 1)
         }
-        Wait-Exit $mode
+        Wait-Uninstaller $mode 0
+        if (Test-Path -LiteralPath $registrationPath) {
+            throw "The uninstall registration survived $mode."
+        }
         $retained = $mode -in @('upgrade', 'replaced')
         # A DSH_HOME inside the Electron directory protects that directory (and its scope) but not the other roots.
         $userDataRetained = $retained -or $mode -eq 'home-inside'
