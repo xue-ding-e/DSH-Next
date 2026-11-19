@@ -21,7 +21,7 @@ kind: "package-reference"
 <a id="mailbox-usage"></a>
 ## 权限与操作
 
-每个方法都要求存在 invocation，且其 Peer 必须是 Host 构造时捕获的同一 `connection.browserPeer` 对象。owner principal、`interactions: answer`、自报身份或 API operator 都不够。浏览器认证不证明发生了真人点击：已认证的浏览器标签页共享同一 Peer，并非独立安全主体。UI 将授权行为显式呈现；拥有该浏览器权限的调用者仍代表账户所有者。
+每个方法都会检查当前 Host 认证提供方是否已将调用方的 Peer 验证为所有者浏览器。每项授权都绑定到签发它的 Peer。使用同一个认证 Peer 的浏览器标签页共享此权限。界面向账户所有者显示每项授权。
 
 `identity` 返回非秘密的逻辑信箱 realm 和当前支持的 `single-owner` 域。它不是认证凭据，也不是硬件 Host 身份。`grant` 要求预期身份仍匹配，并为选定 source/target 的发送路由，或指定 target 的收件/确认路由授权，最长 30 秒。`prepare` 在该路由上冻结一次操作并返回随机不透明句柄。`execute` 在等待前消费句柄，再通过内部适配器执行操作。`revoke` 取消该路由的全部选取，包括正在执行的 lease。所有操作均不会调用 Agent、注入 prompt，或将普通引用变成指令。
 

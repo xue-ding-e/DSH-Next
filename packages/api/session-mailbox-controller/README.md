@@ -21,7 +21,7 @@ This reference covers the browser-authorized, queue-only Remote controller mount
 <a id="mailbox-usage"></a>
 ## Authority and operations
 
-Every method requires an invocation whose Peer is the exact `connection.browserPeer` captured during Host construction. An owner principal, `interactions: answer`, a claimed identity, or an API operator is insufficient. Browser authentication does not prove a physical click: authenticated browser tabs share one Peer and are not separate security principals. The UI makes the authorization explicit; callers with that browser authority remain the account owner.
+Every method checks that the active Host authentication provider has verified the invoking Peer as an owner browser. Each grant belongs to the exact Peer that issued it. Authenticated tabs using the same provider Peer share that authority. The UI presents each authorization to the account owner.
 
 `identity` returns a non-secret logical mailbox realm and the supported `single-owner` domain. It is not an authentication credential or a hardware Host identity. `grant` requires that expected identity still match and authorizes one selected source/target send route, or one target inbox/ack route, for at most 30 seconds. `prepare` freezes one operation on that route and returns a random opaque handle. `execute` consumes the handle before awaiting and performs the operation through the internal adapter. `revoke` cancels all selections on a route, including active leases. Nothing invokes an Agent, injects a prompt, or turns a reference into an instruction.
 
