@@ -5,12 +5,26 @@ on:
   pull_request:
     branches: [main]
   workflow_dispatch:
+  workflow_call:
+    inputs:
+      artifact:
+        required: true
+        type: string
+      parent_sha:
+        required: true
+        type: string
+      target_sha:
+        required: true
+        type: string
+      candidate_sha:
+        required: true
+        type: string
 
 permissions:
   contents: read
 
 concurrency:
-  group: next-sync-validation-${{ github.event.pull_request.number || github.ref }}
+  group: next-sync-validation-${{ inputs.candidate_sha || github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -26,15 +40,35 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
+          ref: ${{ inputs.parent_sha || github.sha }}
           fetch-depth: 0
           persist-credentials: false
-      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320
-        with:
-          version: 11.28.5
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
         with:
           node-version: 24.22.1
-          cache: pnpm
+          package-manager-cache: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        if: inputs.artifact != ''
+        with:
+          artifact-ids: ${{ inputs.artifact }}
+          path: ${{ runner.temp }}/next-sync
+      - name: Check out the prepared candidate
+        if: inputs.artifact != ''
+        env:
+          PARENT_SHA: ${{ inputs.parent_sha }}
+          TARGET_SHA: ${{ inputs.target_sha }}
+          CANDIDATE_SHA: ${{ inputs.candidate_sha }}
+        run: >-
+          node scripts/next-upstream-sync.mjs checkout
+          --head "$PARENT_SHA" --target "$TARGET_SHA" --candidate "$CANDIDATE_SHA"
+          --bundle "$RUNNER_TEMP/next-sync/candidate.bundle"
+      - name: Verify manifest versions and synchronization
+        run: |
+          node scripts/verify-version-sync.ts
+          node --test scripts/next-upstream-sync.test.mjs
+      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320
+        with:
+          version: 11.28.5
       - run: pnpm install --frozen-lockfile
       - name: Build artifacts and verify aggregate types serially
         run: |
@@ -108,16 +142,37 @@ jobs:
     if: github.repository == 'xue-ding-e/DSH-Next'
     runs-on: windows-latest
     timeout-minutes: 35
+    defaults:
+      run:
+        shell: pwsh
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
+          ref: ${{ inputs.parent_sha || github.sha }}
+          fetch-depth: 0
           persist-credentials: false
-      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320
-        with:
-          version: 11.28.5
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
         with:
           node-version: 24.22.1
+          package-manager-cache: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        if: inputs.artifact != ''
+        with:
+          artifact-ids: ${{ inputs.artifact }}
+          path: ${{ runner.temp }}/next-sync
+      - name: Check out the prepared candidate
+        if: inputs.artifact != ''
+        env:
+          PARENT_SHA: ${{ inputs.parent_sha }}
+          TARGET_SHA: ${{ inputs.target_sha }}
+          CANDIDATE_SHA: ${{ inputs.candidate_sha }}
+        run: >-
+          node scripts/next-upstream-sync.mjs checkout
+          --head "$env:PARENT_SHA" --target "$env:TARGET_SHA" --candidate "$env:CANDIDATE_SHA"
+          --bundle "$env:RUNNER_TEMP/next-sync/candidate.bundle"
+      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320
+        with:
+          version: 11.28.5
       - run: pnpm install --frozen-lockfile
       - name: Verify native installer and uninstaller behavior
         run: pnpm --dir apps/desktop run test:installer --uninstall-only

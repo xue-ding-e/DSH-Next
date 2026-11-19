@@ -1,0 +1,303 @@
+name: Next upstream sync
+
+on:
+  schedule:
+    - cron: '17 */6 * * *'
+    - cron: '37 2 * * *'
+    - cron: '47 3 * * 1'
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: Sync operation
+        type: choice
+        options: [preview, apply, mirror]
+        default: preview
+      target_sha:
+        description: Full official SHA (required for manual apply)
+        type: string
+      verify_mirror_key:
+        description: Verify the mirror deploy key with an SSH dry-run (mirror mode)
+        type: boolean
+        default: false
+
+permissions: {}
+
+concurrency:
+  group: next-upstream-sync-main
+  queue: max
+  cancel-in-progress: false
+
+env:
+  NEXT_SYNC_ORIGIN: ${{ github.server_url }}/${{ github.repository }}.git
+
+jobs:
+  mirror:
+    if: >-
+      github.repository == 'xue-ding-e/DSH-Next' && github.ref == 'refs/heads/main' &&
+      (inputs.mode == 'mirror' || github.event.schedule == '17 */6 * * *')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    outputs:
+      status: ${{ steps.mirror.outputs.status }}
+      previous: ${{ steps.mirror.outputs.previous }}
+      target: ${{ steps.mirror.outputs.target }}
+      artifact: ${{ steps.upload.outputs.artifact-id }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: 24.22.1
+          package-manager-cache: false
+      - name: Pin the mirror target and try the built-in token
+        id: mirror
+        env:
+          NEXT_SYNC_TOKEN: ${{ github.token }}
+          TARGET_SHA: ${{ inputs.target_sha }}
+          VERIFY_KEY: ${{ inputs.verify_mirror_key && 'true' || 'false' }}
+        run: |
+          args=(--target "$TARGET_SHA" --out "$RUNNER_TEMP/next-sync-mirror")
+          if [[ "$VERIFY_KEY" == true ]]; then args+=(--verify-key); fi
+          node scripts/next-upstream-sync.mjs mirror "${args[@]}"
+      - name: Retain the mirror report
+        id: upload
+        if: steps.mirror.outputs.status != 'pushed' && steps.mirror.outputs.status != 'already'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: next-mirror-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/next-sync-mirror/result.json
+          if-no-files-found: error
+          retention-days: 30
+
+  mirror-ssh:
+    if: needs.mirror.outputs.status == 'needs-ssh'
+    needs: mirror
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    environment:
+      name: next-upstream-mirror
+      deployment: false
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      status: ${{ steps.ssh.outputs.status || steps.preflight.outputs.status }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: 24.22.1
+          package-manager-cache: false
+      - name: Audit the pinned raw workflows and mirror ref
+        id: preflight
+        env:
+          NEXT_SYNC_TOKEN: ${{ github.token }}
+          PREVIOUS_SHA: ${{ needs.mirror.outputs.previous }}
+          TARGET_SHA: ${{ needs.mirror.outputs.target }}
+          VERIFY_KEY: ${{ inputs.verify_mirror_key && 'true' || 'false' }}
+        run: |
+          args=(--head "$PREVIOUS_SHA" --target "$TARGET_SHA" --out "$RUNNER_TEMP/next-sync-mirror-preflight")
+          if [[ "$VERIFY_KEY" == true ]]; then args+=(--verify-key); fi
+          node scripts/next-upstream-sync.mjs mirror-preflight "${args[@]}"
+      - name: Authenticate over SSH and check or fast-forward upstream-main
+        if: steps.preflight.outputs.status == 'ready'
+        id: ssh
+        env:
+          NEXT_MIRROR_DEPLOY_KEY: ${{ secrets.NEXT_MIRROR_DEPLOY_KEY }}
+          PREVIOUS_SHA: ${{ needs.mirror.outputs.previous }}
+          TARGET_SHA: ${{ needs.mirror.outputs.target }}
+          VERIFY_KEY: ${{ inputs.verify_mirror_key && 'true' || 'false' }}
+        run: |
+          args=(--head "$PREVIOUS_SHA" --target "$TARGET_SHA" --out "$RUNNER_TEMP/next-sync-mirror-ssh")
+          if [[ "$VERIFY_KEY" == true ]]; then args+=(--verify-key); fi
+          node scripts/next-upstream-sync.mjs mirror-ssh "${args[@]}"
+      - name: Retain the SSH mirror result
+        if: >-
+          !cancelled() && steps.preflight.outputs.target != '' &&
+          (steps.ssh.outputs.status || steps.preflight.outputs.status) != 'pushed' &&
+          (steps.ssh.outputs.status || steps.preflight.outputs.status) != 'already' &&
+          (steps.ssh.outputs.status || steps.preflight.outputs.status) != 'verified'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: next-mirror-ssh-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/next-sync-mirror-preflight/result.json
+            ${{ runner.temp }}/next-sync-mirror-ssh/result.json
+          if-no-files-found: error
+          retention-days: 30
+
+  mirror-blocked:
+    if: >-
+      !cancelled() && needs.mirror.outputs.artifact != '' &&
+      needs['mirror-ssh'].outputs.status != 'pushed' &&
+      needs['mirror-ssh'].outputs.status != 'already' &&
+      needs['mirror-ssh'].outputs.status != 'verified'
+    needs: [mirror, mirror-ssh]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: 24.22.1
+          package-manager-cache: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        with:
+          artifact-ids: ${{ needs.mirror.outputs.artifact }}
+          path: ${{ runner.temp }}/next-sync-mirror
+      - name: Record the blocked mirror target
+        env:
+          NEXT_SYNC_TOKEN: ${{ github.token }}
+        run: |
+          node scripts/next-upstream-sync.mjs record --report "$RUNNER_TEMP/next-sync-mirror/result.json" --reason 'Mirror needs review. See the mirror and SSH job logs.'
+          exit 1
+
+  prepare:
+    if: >-
+      github.repository == 'xue-ding-e/DSH-Next' && github.ref == 'refs/heads/main' &&
+      inputs.mode != 'mirror' && github.event.schedule != '17 */6 * * *'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    outputs:
+      mode: ${{ steps.prepare.outputs.mode }}
+      status: ${{ steps.prepare.outputs.status }}
+      head: ${{ steps.prepare.outputs.head }}
+      target: ${{ steps.prepare.outputs.target }}
+      candidate: ${{ steps.prepare.outputs.candidate }}
+      artifact: ${{ steps.upload.outputs.artifact-id }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: 24.22.1
+          package-manager-cache: false
+      - name: Pin and merge the official target
+        id: prepare
+        env:
+          NEXT_SYNC_TOKEN: ${{ github.token }}
+          MODE: ${{ inputs.mode || (github.event.schedule == '47 3 * * 1' && 'apply' || 'preview') }}
+          TARGET_SHA: ${{ inputs.target_sha }}
+        run: |
+          if [[ "$GITHUB_EVENT_NAME" == workflow_dispatch && "$MODE" == apply && -z "$TARGET_SHA" ]]; then
+            echo 'Manual apply requires target_sha.'
+            exit 1
+          fi
+          echo "mode=$MODE" >> "$GITHUB_OUTPUT"
+          node scripts/next-upstream-sync.mjs prepare --target "$TARGET_SHA" --out "$RUNNER_TEMP/next-sync"
+      - name: Retain the proposed tree and recovery report
+        id: upload
+        if: steps.prepare.outputs.status == 'ready' || steps.prepare.outputs.status == 'blocked'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: next-sync-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/next-sync
+          if-no-files-found: error
+          retention-days: 30
+
+  validate:
+    if: needs.prepare.outputs.status == 'ready'
+    needs: prepare
+    permissions:
+      contents: read
+    uses: ./.github/workflows/next-sync-validation.yml
+    with:
+      artifact: ${{ needs.prepare.outputs.artifact }}
+      parent_sha: ${{ needs.prepare.outputs.head }}
+      target_sha: ${{ needs.prepare.outputs.target }}
+      candidate_sha: ${{ needs.prepare.outputs.candidate }}
+
+  publish:
+    if: needs.prepare.outputs.mode == 'apply' && needs.validate.result == 'success'
+    needs: [prepare, validate]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write
+      actions: write
+      statuses: write
+    outputs:
+      status: ${{ steps.publish.outputs.status }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: 24.22.1
+          package-manager-cache: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        with:
+          artifact-ids: ${{ needs.prepare.outputs.artifact }}
+          path: ${{ runner.temp }}/next-sync
+      - name: Recompute and fast-forward the exact validated commit
+        id: publish
+        env:
+          NEXT_SYNC_TOKEN: ${{ github.token }}
+          PARENT_SHA: ${{ needs.prepare.outputs.head }}
+          TARGET_SHA: ${{ needs.prepare.outputs.target }}
+          CANDIDATE_SHA: ${{ needs.prepare.outputs.candidate }}
+        run: >-
+          node scripts/next-upstream-sync.mjs publish
+          --head "$PARENT_SHA" --target "$TARGET_SHA" --candidate "$CANDIDATE_SHA"
+          --bundle "$RUNNER_TEMP/next-sync/candidate.bundle"
+      - name: Dispatch the Next release at the verified commit
+        if: steps.publish.outputs.status == 'pushed' || steps.publish.outputs.status == 'already'
+        env:
+          NEXT_SYNC_TOKEN: ${{ github.token }}
+          CANDIDATE_SHA: ${{ needs.prepare.outputs.candidate }}
+        run: node scripts/next-upstream-sync.mjs dispatch --candidate "$CANDIDATE_SHA"
+
+  blocked:
+    if: >-
+      !cancelled() && needs.prepare.outputs.artifact != '' &&
+      (needs.prepare.outputs.status == 'blocked' || needs.validate.result == 'failure' ||
+       needs.publish.outputs.status == 'raced' || needs.publish.result == 'failure')
+    needs: [prepare, validate, publish]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: 24.22.1
+          package-manager-cache: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        with:
+          artifact-ids: ${{ needs.prepare.outputs.artifact }}
+          path: ${{ runner.temp }}/next-sync
+      - name: Record the blocked official range
+        env:
+          NEXT_SYNC_TOKEN: ${{ github.token }}
+          REASON: >-
+            ${{ needs.prepare.outputs.status == 'blocked' && 'Integration needs review. See result.json.' ||
+              needs.validate.result == 'failure' && 'Candidate validation failed.' ||
+              needs.publish.outputs.status == 'raced' && 'Main advanced before publication.' ||
+              'Publication or release dispatch failed. Check the publish job and current main before recovery.' }}
+        run: |
+          node scripts/next-upstream-sync.mjs record --report "$RUNNER_TEMP/next-sync/result.json" --reason "$REASON"
+          exit 1

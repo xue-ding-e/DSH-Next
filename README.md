@@ -4,9 +4,15 @@ English | [中文](README.zh.md)
 
 DSH-Next is an independent community-maintained source repository based on [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness). It is not an official DeepSeek release and is not affiliated with or endorsed by DeepSeek.
 
-`main` has independent linear history; `upstream-main` preserves the complete official `master` history without changes. The [source-import tag](https://github.com/xue-ding-e/DSH-Next/tree/source-import) preserves the initial source snapshot and its upstream attribution. The original [MIT license](LICENSE), [third-party notices](THIRD_PARTY_NOTICES.md), and author attribution are preserved.
+`main` integrates the official DeepSeek Harness `master` each week. The workflow uses the upstream SHA in `.github/next-upstream-base` as the base for a three-way integration of the current community `main` and a pinned official target. After validation, it advances `main` with a single-parent commit that records the new upstream SHA and dispatches the Windows release for that commit. [Weekly sync workflow](.github/workflows/next-upstream-sync.yml)
 
-[Download DSH Next for Windows x64](https://github.com/xue-ding-e/DSH-Next/releases). Choose the newest Next release and its `win-x64-unsigned.exe` installer. Pushes to `main` trigger the Windows release workflow, which publishes the installer, checksums and update feeds.
+For SSH pushes to the upstream mirror `upstream-main`, use a deploy key dedicated to the DSH-Next repository. Store its private key as the `NEXT_MIRROR_DEPLOY_KEY` secret in the `next-upstream-mirror` GitHub Actions environment. Restrict that environment to the `main` branch.
+
+A blocked sync with a recovery artifact opens or reuses a GitHub issue for the upstream range. The issue gives the commit SHAs, the failure, and the workflow run that holds the artifact. A maintainer takes over from the issue. In a complete clone, `node scripts/next-upstream-sync.mjs --help` lists the recovery commands. For failures after dispatch, the maintainer uses the Windows release run.
+
+The [source-import tag](https://github.com/xue-ding-e/DSH-Next/tree/source-import) records the initial source import. DSH-Next preserves the original [MIT license](LICENSE), [third-party notices](THIRD_PARTY_NOTICES.md), and author attribution.
+
+The Windows release workflow runs on pushes to `main` and also accepts dispatch for the validated sync commit. It publishes the installer, checksums, and update feeds in public GitHub Releases. Choose `win-x64-unsigned.exe` from the latest Next release. [Download DSH Next for Windows x64](https://github.com/xue-ding-e/DSH-Next/releases)
 
 The Next desktop app includes a Session mailbox, conversation and file-tree drag references, and per-Session directory selections. Open **Manage directories** in a Session header to edit its selection or save defaults for new Sessions in the Workspace. The Windows ACL backend accepts confirmed reference folders and refuses extra write requests from this dialog. The [optional personal extension installer](#personal-extensions) adds separately maintained plugins.
 

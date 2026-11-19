@@ -1,9 +1,15 @@
 name: DSH Next · Build and release
+run-name: DSH Next Windows · ${{ inputs.source_sha || github.sha }}
 
 on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      source_sha:
+        description: Full commit SHA on main. Blank uses the event commit.
+        type: string
+        required: false
 
 permissions:
   contents: write
@@ -11,6 +17,7 @@ permissions:
 concurrency:
   group: dsh-next-release
   cancel-in-progress: false
+  queue: max
 
 jobs:
   windows:
@@ -23,36 +30,81 @@ jobs:
     env:
       DSH_TELEMETRY_DISABLED: '1'
     steps:
-      - name: Checkout
+      - name: Select source on main
+        id: source
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REQUESTED_SOURCE_SHA: ${{ inputs.source_sha }}
+        run: |
+          $sha = $env:REQUESTED_SOURCE_SHA
+          if (!$sha) { $sha = $env:GITHUB_SHA }
+          if ($sha -cnotmatch '^[0-9a-fA-F]{40}\z') { throw 'source_sha must be a full 40-character Git commit SHA.' }
+          $sha = $sha.ToLowerInvariant()
+          $main = gh api "repos/$env:GITHUB_REPOSITORY/git/ref/heads/main" --jq '.object.sha'
+          if ($LASTEXITCODE -ne 0 -or $main -cnotmatch '^[0-9a-f]{40}\z') { throw 'Could not verify the main branch commit.' }
+          if ($sha -cne $main) {
+            $relation = gh api "repos/$env:GITHUB_REPOSITORY/compare/$sha...$main" --jq '.status'
+            if ($LASTEXITCODE -ne 0 -or $relation -cne 'ahead') { throw "Source $sha is outside the history of main at $main." }
+            Write-Host "Next release skipped for $sha because main is now at $main."
+            return
+          }
+          "sha=$sha" >> $env:GITHUB_OUTPUT
+
+      - name: Checkout release source
+        if: steps.source.outputs.sha != ''
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
+          ref: ${{ steps.source.outputs.sha }}
           fetch-depth: 0
+          persist-credentials: false
+
+      - name: Check for an existing Next release
+        if: steps.source.outputs.sha != ''
+        id: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NEXT_SOURCE_SHA: ${{ steps.source.outputs.sha }}
+        run: ./apps/desktop/scripts/next-github-release.ps1 -SourceSha $env:NEXT_SOURCE_SHA
 
       - name: Set up pnpm
+        if: steps.release.outputs.build == 'true'
         uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320
         with:
           version: 11.28.5
 
       - name: Set up Node.js
+        if: steps.release.outputs.build == 'true'
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
         with:
-          node-version: 24.9.0
+          node-version: 24.22.1
           cache: pnpm
 
       - name: Install dependencies
+        if: steps.release.outputs.build == 'true'
         run: pnpm install --frozen-lockfile
 
       - name: Resolve release version
+        if: steps.release.outputs.build == 'true'
         id: version
+        env:
+          NEXT_DRAFT_TAG: ${{ steps.release.outputs.draft_tag }}
         run: |
           $base = node -p "JSON.parse(require('fs').readFileSync('package.json', 'utf8')).version"
           $date = [DateTime]::UtcNow.ToString('yyyyMMdd')
           $prefix = node -e "import('./apps/desktop/scripts/desktop-build-version.mjs').then(m => process.stdout.write(m.desktopBuildVersionPrefix(process.argv[1])))" $base
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           $version = "$prefix$date.$env:GITHUB_RUN_NUMBER"
+          if ($env:NEXT_DRAFT_TAG) {
+            $version = $env:NEXT_DRAFT_TAG.Substring(1)
+            if (!$version.StartsWith($prefix, [StringComparison]::Ordinal)) {
+              throw "Release draft $env:NEXT_DRAFT_TAG does not match product $base."
+            }
+          }
           # electron-updater reads the release tag with /\/tag\/(v?[^/]+)$/ and requires semver.valid,
           # so only a plain "v<version>" tag reaches its version comparison. The channel is the
           # version's own prerelease field, which is the name electron-updater matches by equality.
           $channel = node -e "import('./apps/desktop/scripts/desktop-build-version.mjs').then(m => process.stdout.write(m.desktopBuildVersionChannel(process.argv[1])))" $version
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           "version=$version" >> $env:GITHUB_OUTPUT
           "tag=v$version" >> $env:GITHUB_OUTPUT
           "channel=$channel" >> $env:GITHUB_OUTPUT
@@ -61,18 +113,23 @@ jobs:
           "NEXT_CHANNEL=$channel" >> $env:GITHUB_ENV
 
       - name: Validate release build identity
+        if: steps.release.outputs.build == 'true'
         run: node --test apps/desktop/tests/desktop-build-identity.test.mjs
 
       - name: Build unsigned DSH Next installer
-        run: pnpm run package:desktop:win:x64 -- --next --unsigned --build-version $env:NEXT_VERSION
+        if: steps.release.outputs.build == 'true'
+        run: pnpm --dir apps/desktop run package:next:win:x64 --build-version $env:NEXT_VERSION
 
       - name: Verify session log encoding
+        if: steps.release.outputs.build == 'true'
         run: pnpm exec vitest run packages/session/session-persistence-jsonl/tests/zstd.spec.ts
 
       - name: Verify session storage and workspace startup
+        if: steps.release.outputs.build == 'true'
         run: pnpm run test:expected apps/cli/tests/profiles/web/tests/session-artifact-startup.expected.e2e.ts
 
       - name: Verify bundled plugin installation and resolution
+        if: steps.release.outputs.build == 'true'
         run: >-
           pnpm exec vitest run
           packages/boot/app-boot/tests/profile-resolution.spec.ts
@@ -81,17 +138,21 @@ jobs:
           -t 'profile Loader|bundled Computer Use|bundled dependency'
 
       - name: Verify release asset
+        if: steps.release.outputs.build == 'true'
+        env:
+          NEXT_SOURCE_SHA: ${{ steps.source.outputs.sha }}
         run: |
           $dir = 'apps/desktop/.desktop-build/targets/win-x64/unsigned-artifacts'
           $installer = Join-Path $dir "dsh-next-$env:NEXT_VERSION-win-x64-unsigned.exe"
           if (!(Test-Path -LiteralPath $installer)) { throw "Missing $installer" }
           $client = (Get-Content -LiteralPath '.dsh-build/client-build-environment.json' -Raw | ConvertFrom-Json).environment
-          if ($client.DSH_CLIENT_VERSION -ne $env:NEXT_VERSION -or $client.DSH_CLIENT_BUILD_VERSION -ne $env:NEXT_VERSION) {
+          if ($client.DSH_CLIENT_VERSION -cne $env:NEXT_VERSION -or $client.DSH_CLIENT_BUILD_VERSION -cne $env:NEXT_VERSION -or
+              $client.DSH_CLIENT_COMMIT_HASH -cne $env:NEXT_SOURCE_SHA.Substring(0, 7)) {
             throw "Client build identity does not match release $env:NEXT_VERSION"
           }
           $hash = (Get-FileHash -LiteralPath $installer -Algorithm SHA256).Hash.ToLowerInvariant()
           "$hash *$(Split-Path -Leaf $installer)" | Set-Content -LiteralPath (Join-Path $dir 'SHA256SUMS') -Encoding utf8NoBOM
-          $sha512 = [Convert]::ToBase64String([Security.Cryptography.SHA512]::Create().ComputeHash([IO.File]::ReadAllBytes($installer)))
+          $sha512 = [Convert]::ToBase64String([Convert]::FromHexString((Get-FileHash -LiteralPath $installer -Algorithm SHA512).Hash))
           $size = (Get-Item -LiteralPath $installer).Length
           $name = Split-Path -Leaf $installer
           $manifest = @"
@@ -110,27 +171,23 @@ jobs:
           $manifest | Set-Content -LiteralPath (Join-Path $dir 'latest.yml') -Encoding utf8NoBOM
 
       - name: Verify installed Next lifecycle
+        if: steps.release.outputs.build == 'true'
         run: |
           $dir = 'apps/desktop/.desktop-build/targets/win-x64/unsigned-artifacts'
           $installer = (Resolve-Path -LiteralPath (Join-Path $dir "dsh-next-$env:NEXT_VERSION-win-x64-unsigned.exe")).ProviderPath
           & './apps/desktop/tests/next-installed-lifecycle.ps1' -Installer $installer -Version $env:NEXT_VERSION -OutputDirectory (Join-Path $env:RUNNER_TEMP 'next-installed-lifecycle')
 
       - name: Retain installed startup journals
-        if: always()
+        if: always() && steps.release.outputs.build == 'true'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: next-installed-startup
           path: ${{ runner.temp }}/next-installed-lifecycle/journal-*/*.jsonl
           if-no-files-found: ignore
 
-      - name: Create GitHub Release
+      - name: Publish GitHub Release
+        if: steps.release.outputs.build == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
-        run: |
-          $dir = 'apps/desktop/.desktop-build/targets/win-x64/unsigned-artifacts'
-          $installer = Join-Path $dir "dsh-next-$env:NEXT_VERSION-win-x64-unsigned.exe"
-          gh release create $env:NEXT_TAG --repo $env:GITHUB_REPOSITORY --target $env:GITHUB_SHA --title "DSH Next $env:NEXT_VERSION" --draft --prerelease --notes "Automated DSH Next Windows x64 build from $env:GITHUB_SHA. The installer is unsigned; verify SHA256SUMS before installation."
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          gh release upload $env:NEXT_TAG $installer (Join-Path $dir 'SHA256SUMS') (Join-Path $dir "$env:NEXT_CHANNEL.yml") (Join-Path $dir 'latest.yml') --repo $env:GITHUB_REPOSITORY
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          gh release edit $env:NEXT_TAG --repo $env:GITHUB_REPOSITORY --draft=false
+          NEXT_SOURCE_SHA: ${{ steps.source.outputs.sha }}
+        run: ./apps/desktop/scripts/next-github-release.ps1 -SourceSha $env:NEXT_SOURCE_SHA -Version $env:NEXT_VERSION -Channel $env:NEXT_CHANNEL

@@ -4,9 +4,15 @@
 
 DSH-Next 是基于 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 独立维护的社区源码仓库，并非 DeepSeek 官方发行版，与 DeepSeek 无隶属关系，也未获得其背书。
 
-`main` 保持独立线性历史；`upstream-main` 原样保留官方 `master` 的完整历史。初始源码快照为 [source-import](https://github.com/xue-ding-e/DSH-Next/tree/source-import)，原始 [MIT 许可证](LICENSE)、[第三方声明](THIRD_PARTY_NOTICES.md)和作者归属均予以保留。
+`main` 每周集成 DeepSeek Harness 官方 `master`。工作流以 `.github/next-upstream-base` 中记录的上游 SHA 为基准，对当前社区 `main` 和固定的官方目标提交做三方集成。验证通过后，工作流以一个单父提交推进 `main`，记录新的上游 SHA，并为该提交触发 Windows 发布。[每周同步工作流](.github/workflows/next-upstream-sync.yml)
 
-[下载 Windows x64 版 DSH Next](https://github.com/xue-ding-e/DSH-Next/releases)。在最新的 Next 发行版中选择 `win-x64-unsigned.exe` 安装包。推送到 `main` 会触发 Windows 发布流程，生成安装包、校验和与更新清单。
+通过 SSH 推送到上游镜像 `upstream-main` 时，使用 DSH-Next 仓库专用的 deploy key。将私钥保存为 GitHub Actions 环境 `next-upstream-mirror` 的 secret `NEXT_MIRROR_DEPLOY_KEY`，并将该环境的部署分支限制为 `main`。
+
+同步受阻且有恢复制品时，工作流会为对应的上游范围创建或复用 GitHub issue。Issue 记录各提交 SHA、失败原因及保存制品的工作流运行。维护者从该 issue 接手。在完整克隆中运行 `node scripts/next-upstream-sync.mjs --help` 可查看恢复命令。触发发布后的失败由维护者从 Windows 发布运行接手。
+
+[source-import 标签](https://github.com/xue-ding-e/DSH-Next/tree/source-import)记录首次源码导入。DSH-Next 保留原始 [MIT 许可证](LICENSE)、[第三方声明](THIRD_PARTY_NOTICES.md)和作者署名。
+
+推送到 `main` 会触发 Windows 发布工作流，同步也可指定已验证的提交来触发发布。工作流在 GitHub Releases 公开发布安装包、校验和与更新清单。请选择最新 Next 发行版中的 `win-x64-unsigned.exe`。[下载 Windows x64 版 DSH Next](https://github.com/xue-ding-e/DSH-Next/releases)
 
 Next 桌面端内置会话信箱、会话与文件树拖放引用，以及会话目录管理。从会话标题栏打开**管理目录**，可编辑当前会话的目录选择，或保存该工作区新会话的默认值。Windows ACL 后端支持确认参考目录，此对话框中的额外写入申请会被拒绝。[个人扩展一键安装](#personal-extensions)用于添加独立维护的可选插件。
 
